@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-// import { createClient } from '@supabase/supabase-js'; // <--- DESCOMENTAR PARA PRODUCCIÓN
+import { createClient } from '@supabase/supabase-js';
 import { 
   Calendar, FileText, Users, Settings, Menu, X, CheckCircle, Clock, 
   AlertCircle, Download, LogOut, Plus, ExternalLink, Youtube, Lock, 
@@ -7,80 +7,14 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// 1. CONFIGURACIÓN PARA PRODUCCIÓN (GitHub/Vercel)
+// CONFIGURACIÓN SUPABASE
 // ==========================================
-// Para usar la base de datos real, descomenta estas lineas y comenta la sección "MOCK" de abajo.
-
-/*
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-*/
 
 // ==========================================
-// 2. MOCK SUPABASE CLIENT (Solo para Vista Previa)
-// ==========================================
-// Este código simula la base de datos para que la app no falle en este entorno de prueba.
-// ELIMINAR O COMENTAR ESTA SECCIÓN AL SUBIR A PRODUCCIÓN.
-
-const createMockClient = () => {
-  // Datos iniciales simulados
-  let db = {
-    activities: [],
-    avales: [
-      { id: 101, created_at: new Date().toISOString(), applicant_name: 'Asoc. Psiquiatría', activity_name: 'Congreso 2025', status: 'Pendiente' }
-    ],
-    profiles: [
-       { id: 1, name: "Dra. Rebeca Ramírez", role: "Coordinadora", active: true }
-    ],
-    internal_documents: [],
-    tasks: []
-  };
-
-  return {
-    auth: {
-      getSession: async () => ({ data: { session: null } }),
-      onAuthStateChange: (cb) => { return { data: { subscription: { unsubscribe: () => {} } } }; },
-      signInWithPassword: async ({email, password}) => {
-        if(email === 'admin@caeduc.gt' && password === 'admin') {
-           return { data: { session: { user: { email } } }, error: null };
-        }
-        return { data: { session: null }, error: { message: "Credenciales inválidas (Prueba: admin@caeduc.gt / admin)" } };
-      },
-      signOut: async () => {},
-    },
-    from: (table) => ({
-      select: () => ({
-        order: () => Promise.resolve({ data: db[table] || [], error: null }),
-        then: (cb) => cb({ data: db[table] || [], error: null }) // Fallback simple
-      }),
-      insert: (rows) => {
-        const newRows = rows.map(r => ({ ...r, id: Date.now(), created_at: new Date().toISOString() }));
-        if(!db[table]) db[table] = [];
-        db[table] = [...newRows, ...db[table]]; // Add to beginning
-        return Promise.resolve({ data: newRows, error: null });
-      },
-      update: (updates) => ({
-        eq: (field, value) => {
-          if(db[table]) {
-             db[table] = db[table].map(row => row[field] === value ? { ...row, ...updates } : row);
-          }
-          return Promise.resolve({ data: [], error: null });
-        }
-      })
-    }),
-    storage: {
-      from: () => ({
-        upload: () => Promise.resolve({ data: { path: 'mock_path_file.pdf' } })
-      })
-    }
-  };
-};
-
-const supabase = createMockClient(); // Usamos el cliente simulado por defecto aquí
-
-// ==========================================
-// FIN CONFIGURACIÓN
+// CONFIGURACIÓN
 // ==========================================
 
 const ROLES = [
@@ -169,15 +103,10 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, setCurrentMod
 
       <Modal isOpen={showAdmin} onClose={() => setShowAdmin(false)} title="Acceso Comisión" size="sm">
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(email, password); }} className="space-y-4">
-          <input type="email" placeholder="Email (admin@caeduc.gt)" className="w-full p-2 border rounded" value={email} onChange={e => setEmail(e.target.value)} />
-          <input type="password" placeholder="Contraseña (admin)" className="w-full p-2 border rounded" value={password} onChange={e => setPassword(e.target.value)} />
+          <input type="email" placeholder="Email" className="w-full p-2 border rounded" value={email} onChange={e => setEmail(e.target.value)} required />
+          <input type="password" placeholder="Contraseña" className="w-full p-2 border rounded" value={password} onChange={e => setPassword(e.target.value)} required />
           {authError && <p className="text-red-500 text-sm">{authError}</p>}
-          <div className="text-xs text-blue-500 mb-2 p-2 bg-blue-50 rounded">
-            <strong>Credenciales Demo:</strong><br/>
-            Usuario: admin@caeduc.gt<br/>
-            Clave: admin
-          </div>
-          <button type="submit" disabled={loading} className="w-full bg-blue-800 text-white py-2 rounded font-bold">
+          <button type="submit" disabled={loading} className="w-full bg-blue-800 text-white py-2 rounded font-bold hover:bg-blue-900">
             {loading ? 'Entrando...' : 'Iniciar Sesión'}
           </button>
         </form>
@@ -237,6 +166,7 @@ export default function CAEDUCApp() {
 
   const handleLogin = async (email, password) => {
     setLoading(true);
+    setAuthError(null);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setAuthError(error.message);
     else {
@@ -255,11 +185,13 @@ export default function CAEDUCApp() {
   };
 
   const createActivity = async (formData) => {
-    const { data, error } = await supabase.from('activities').insert([formData]).select(); // select needed for mock return
-    if (error) return alert("Error al crear");
+    const { data, error } = await supabase.from('activities').insert([formData]).select();
+    if (error) {
+      alert("Error al crear actividad: " + error.message);
+      return;
+    }
     
-    // In real supabase insert returns array, mock returns array
-    const newActivity = data ? data[0] : { id: Date.now() }; 
+    const newActivity = data[0];
     
     // Generar tareas automáticas
     let tasksToInsert = [];
@@ -277,14 +209,24 @@ export default function CAEDUCApp() {
       });
     });
 
-    await supabase.from('tasks').insert(tasksToInsert);
+    if (tasksToInsert.length > 0) {
+      await supabase.from('tasks').insert(tasksToInsert);
+    }
+    
     fetchData(); 
   };
 
   const submitAval = async (data, file1, file2) => {
     let formUrl = null;
     if(file1) {
-      const { data: f1 } = await supabase.storage.from('avales-files').upload(`forms/${Date.now()}_${file1.name}`, file1);
+      const { data: f1, error: uploadError } = await supabase.storage
+        .from('avales-files')
+        .upload(`forms/${Date.now()}_${file1.name}`, file1);
+      
+      if(uploadError) {
+        alert("Error subiendo archivo: " + uploadError.message);
+        return;
+      }
       if(f1) formUrl = f1.path;
     }
 
@@ -304,12 +246,23 @@ export default function CAEDUCApp() {
   };
 
   const registerDoc = async (docData) => {
-    await supabase.from('internal_documents').insert([docData]);
+    const { error } = await supabase.from('internal_documents').insert([docData]);
+    if (error) {
+      alert("Error registrando documento: " + error.message);
+      return;
+    }
     fetchData();
   };
 
-  const updateAvalStatus = async (id, status, reason) => {
-    await supabase.from('avales').update({ status, rejection_reason: reason }).eq('id', id);
+  const updateAvalStatus = async (id, status, reason = null) => {
+    const { error } = await supabase.from('avales')
+      .update({ status, rejection_reason: reason })
+      .eq('id', id);
+    
+    if (error) {
+      alert("Error actualizando estado: " + error.message);
+      return;
+    }
     fetchData();
   };
 
@@ -385,11 +338,18 @@ const PlanificacionView = ({ activities, createActivity, members, onRegisterDoc 
   const [selectedAct, setSelectedAct] = useState(null);
   const [formData, setFormData] = useState({ title: '', type: 'Diplomado', date: '', hours: 0 });
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    createActivity(formData);
+    setShowModal(false);
+    setFormData({ title: '', type: 'Diplomado', date: '', hours: 0 });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
         <h2 className="text-2xl font-bold">Planificación</h2>
-        <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded flex gap-2"><Plus /> Nueva</button>
+        <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded flex gap-2 hover:bg-blue-700"><Plus /> Nueva</button>
       </div>
       <div className="grid gap-4">
         {activities.map(act => (
@@ -409,13 +369,31 @@ const PlanificacionView = ({ activities, createActivity, members, onRegisterDoc 
       </div>
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nueva Actividad">
-        <form onSubmit={(e) => { e.preventDefault(); createActivity(formData); setShowModal(false); }} className="space-y-4">
-          <input required placeholder="Título" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, title: e.target.value})} />
-          <input required type="date" className="w-full border p-2 rounded" onChange={e => setFormData({...formData, date: e.target.value})} />
-          <select className="w-full border p-2 rounded" onChange={e => setFormData({...formData, type: e.target.value})}>
-             <option>Diplomado</option><option>Taller</option><option>Conferencia</option>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input 
+            required 
+            placeholder="Título" 
+            className="w-full border p-2 rounded" 
+            value={formData.title}
+            onChange={e => setFormData({...formData, title: e.target.value})} 
+          />
+          <input 
+            required 
+            type="date" 
+            className="w-full border p-2 rounded" 
+            value={formData.date}
+            onChange={e => setFormData({...formData, date: e.target.value})} 
+          />
+          <select 
+            className="w-full border p-2 rounded" 
+            value={formData.type}
+            onChange={e => setFormData({...formData, type: e.target.value})}
+          >
+             <option>Diplomado</option>
+             <option>Taller</option>
+             <option>Conferencia</option>
           </select>
-          <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded">Guardar</button>
+          <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Guardar</button>
         </form>
       </Modal>
 
@@ -447,15 +425,39 @@ const ExternalAvalesView = ({ submitAval, onBack }) => {
   const [data, setData] = useState({ applicantName: '', activityName: '', email: '' });
   const [file, setFile] = useState(null);
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    submitAval(data, file);
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <button onClick={onBack} className="text-gray-500 hover:text-gray-800">← Volver</button>
       <Card>
         <h2 className="text-xl font-bold mb-4">Solicitud de Aval</h2>
-        <form onSubmit={(e) => { e.preventDefault(); submitAval(data, file); }} className="space-y-4">
-           <input required placeholder="Nombre Solicitante / Institución" className="w-full border p-2 rounded" onChange={e => setData({...data, applicantName: e.target.value})} />
-           <input required placeholder="Nombre Actividad" className="w-full border p-2 rounded" onChange={e => setData({...data, activityName: e.target.value})} />
-           <input required type="email" placeholder="Email Contacto" className="w-full border p-2 rounded" onChange={e => setData({...data, email: e.target.value})} />
+        <form onSubmit={handleSubmit} className="space-y-4">
+           <input 
+             required 
+             placeholder="Nombre Solicitante / Institución" 
+             className="w-full border p-2 rounded" 
+             value={data.applicantName}
+             onChange={e => setData({...data, applicantName: e.target.value})} 
+           />
+           <input 
+             required 
+             placeholder="Nombre Actividad" 
+             className="w-full border p-2 rounded" 
+             value={data.activityName}
+             onChange={e => setData({...data, activityName: e.target.value})} 
+           />
+           <input 
+             required 
+             type="email" 
+             placeholder="Email Contacto" 
+             className="w-full border p-2 rounded" 
+             value={data.email}
+             onChange={e => setData({...data, email: e.target.value})} 
+           />
            <div>
              <label className="block text-sm font-bold mb-1">Formulario Lleno</label>
              <input type="file" onChange={e => setFile(e.target.files[0])} className="w-full" />
@@ -507,6 +509,7 @@ const ReportesView = ({ avales, docs }) => (
                <Badge status={a.status} />
              </div>
            ))}
+           {avales.length === 0 && <p className="text-gray-400 text-center py-8">No hay avales registrados</p>}
         </div>
       </Card>
       <Card>
@@ -514,10 +517,11 @@ const ReportesView = ({ avales, docs }) => (
         <div className="h-64 overflow-y-auto text-sm border-t pt-2">
            {docs.map(d => (
              <div key={d.id} className="border-b py-2">
-               <span className="font-semibold">{d.type.toUpperCase()}</span> - {d.activity_name}
+               <span className="font-semibold">{d.type?.toUpperCase()}</span> - {d.activity_name}
                <br/><span className="text-gray-400 text-xs">{d.created_at?.substring(0,10) || "Fecha Reciente"}</span>
              </div>
            ))}
+           {docs.length === 0 && <p className="text-gray-400 text-center py-8">No hay documentos generados</p>}
         </div>
       </Card>
     </div>
