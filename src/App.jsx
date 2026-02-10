@@ -770,6 +770,7 @@ export default function CAEDUCApp() {
     const { error } = await supabase.from('avales').insert([{
       applicant_name: data.applicantName,
       activity_name: data.activityName,
+      activity_date: data.activityDate,
       email: data.email,
       form_url: formUrl,
       status: 'Pendiente'
@@ -980,7 +981,7 @@ const PlanificacionView = ({ activities, createActivity, members, onRegisterDoc 
 };
 
 const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
-  const [data, setData] = useState({ applicantName: '', activityName: '', email: '' });
+  const [data, setData] = useState({ applicantName: '', activityName: '', activityDate: '', email: '' });
   const [file, setFile] = useState(null);
 
   const formFilePath = appSettings?.aval_form_file_path || '';
@@ -1025,6 +1026,10 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
            <input required placeholder="Nombre Solicitante / Institución" className="w-full border p-2 rounded" value={data.applicantName} onChange={e => setData({...data, applicantName: e.target.value})} />
            <input required placeholder="Nombre Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e => setData({...data, activityName: e.target.value})} />
+           <div>
+             <label className="block text-sm font-bold mb-1">Fecha de la Actividad</label>
+             <input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data, activityDate: e.target.value})} />
+           </div>
            <input required type="email" placeholder="Email Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data, email: e.target.value})} />
            <div>
              <label className="block text-sm font-bold mb-1">Formulario Lleno (adjuntar)</label>
@@ -1061,7 +1066,28 @@ const AvalesAdminView = ({ avales, updateStatus }) => (
           <div>
             <h3 className="font-bold text-lg">{req.applicant_name}</h3>
             <p className="text-gray-600">{req.activity_name}</p>
-            <span className="text-blue-500 text-xs cursor-pointer">Ver Archivos Adjuntos</span>
+            <div className="flex items-center gap-3 mt-1">
+              {req.activity_date && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Calendar size={12} /> {req.activity_date}
+                </span>
+              )}
+              {req.email && (
+                <span className="text-xs text-gray-500">{req.email}</span>
+              )}
+            </div>
+            {req.form_url ? (
+              <a 
+                href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:text-blue-800 hover:underline font-medium"
+              >
+                <Download size={12} /> Descargar PDF Adjunto
+              </a>
+            ) : (
+              <p className="text-xs text-gray-400 mt-2">Sin archivo adjunto</p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <Badge status={req.status} />
