@@ -93,7 +93,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
     <div className="flex flex-col items-center justify-center min-h-[90vh] bg-gray-50 p-6 relative">
       <Card className="max-w-lg w-full border-t-8 border-t-green-600 hover:shadow-2xl transition-all">
         <div className="flex flex-col items-center text-center space-y-5 py-8">
-          <div className="bg-green-100 p-6 rounded-full"><ExternalLink size={56} className="text-green-600" /></div>
+          <img src="/logo-CAEDUC.png" alt="CAEDUC Logo" className="w-32 h-32 object-contain" />
           <div>
             <h2 className="text-3xl font-bold text-gray-800 mb-2">Solicitud de Avales</h2>
             <p className="text-gray-600 px-4">Portal oficial para solicitudes externas — CAEDUC</p>
