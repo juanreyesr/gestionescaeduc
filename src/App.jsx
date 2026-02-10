@@ -1028,7 +1028,22 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
            <input required type="email" placeholder="Email Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data, email: e.target.value})} />
            <div>
              <label className="block text-sm font-bold mb-1">Formulario Lleno (adjuntar)</label>
-             <input type="file" onChange={e => setFile(e.target.files[0])} className="w-full" />
+             <input 
+               type="file" 
+               accept=".pdf"
+               onChange={e => {
+                 const selected = e.target.files[0];
+                 if (selected && selected.type !== 'application/pdf') {
+                   alert('Solo se admiten archivos completos en formato PDF.');
+                   e.target.value = '';
+                   setFile(null);
+                   return;
+                 }
+                 setFile(selected);
+               }} 
+               className="w-full" 
+             />
+             <p className="text-xs text-gray-500 mt-1">Solo se admiten archivos completos en formato PDF.</p>
            </div>
            <button type="submit" className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700">Enviar Solicitud</button>
         </form>
