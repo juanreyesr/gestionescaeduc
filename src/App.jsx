@@ -5,7 +5,8 @@ import {
   AlertCircle, Download, LogOut, Plus, ExternalLink, Youtube, Lock, 
   FileSignature, Upload, Save, AlertTriangle, FileSpreadsheet,
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
-  Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield
+  Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
+  Printer, FileDown
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -35,6 +36,217 @@ const TASK_TEMPLATES = {
   "Subcoordinador": [{ title: "Seguimiento ejecución", desc: "Supervisión (Art. 7).", evidenceRequired: false }],
   "Prosecretaria": [{ title: "Apoyo actas y difusión", desc: "Colaboración (Art. 9).", evidenceRequired: false }]
 };
+
+const ACTIVITY_TYPES = [
+  "Certificación", "Diplomado", "Taller", "Conferencia", "Seminario",
+  "Congreso", "Curso", "Simposio", "Foro", "Jornada", "Otro"
+];
+
+const MODALITIES = ["Virtual", "Presencial", "Híbrida"];
+
+// ==========================================
+// GENERAR CARTA DE APROBACIÓN PDF (HTML)
+// ==========================================
+const generateApprovalLetterHTML = (aval) => {
+  const formatApprovalDate = (dateStr) => {
+    if (!dateStr) return '—';
+    const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const d = new Date(dateStr + 'T12:00:00');
+    return `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+  };
+
+  const formatRequestDate = (dateStr) => {
+    if (!dateStr) return '—';
+    const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const d = new Date(dateStr);
+    return `${String(d.getDate()).padStart(2,'0')} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+  };
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Aprobación de Aval - ${aval.correlativo || ''}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
+    .page { width: 8.5in; min-height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; }
+    
+    /* Decorative elements */
+    .deco-left { position: absolute; left: 0; top: 200px; width: 18px; height: 300px; }
+    .deco-left div { width: 8px; margin-bottom: 4px; border-radius: 4px; }
+    .deco-left div:nth-child(1) { height: 60px; background: #E91E63; }
+    .deco-left div:nth-child(2) { height: 60px; background: #9C27B0; }
+    .deco-left div:nth-child(3) { height: 60px; background: #2196F3; }
+    .deco-left div:nth-child(4) { height: 60px; background: #4CAF50; }
+    
+    .deco-curve { position: absolute; right: 0; top: 0; width: 200px; height: 100%; overflow: hidden; pointer-events: none; }
+    .deco-curve::before { content: ''; position: absolute; right: -100px; top: 100px; width: 300px; height: 300px; border-radius: 50%; border: 40px solid rgba(200,200,200,0.15); }
+    .deco-curve::after { content: ''; position: absolute; right: -50px; bottom: 150px; width: 250px; height: 250px; border-radius: 50%; border: 30px solid rgba(200,200,200,0.12); }
+    
+    .content { padding: 50px 70px 40px 70px; position: relative; z-index: 1; }
+    
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
+    .logo-area { display: flex; align-items: center; gap: 8px; }
+    .logo-text { font-size: 22px; font-weight: 800; color: #1a5276; line-height: 1.2; }
+    .logo-text .green { color: #27ae60; }
+    .logo-text .sub { font-size: 16px; font-weight: 600; }
+    
+    .title { text-align: center; font-size: 24px; font-weight: 800; color: #1a5276; letter-spacing: 2px; margin: 20px 0 30px 0; }
+    
+    .date-line { text-align: right; color: #E91E63; font-weight: 600; margin-bottom: 25px; font-size: 14px; }
+    
+    .addressee { margin-bottom: 25px; font-size: 14px; line-height: 1.6; }
+    .addressee .name { color: #E91E63; font-weight: 600; }
+    .addressee .inst { color: #E91E63; font-weight: 600; }
+    
+    .body-text { font-size: 13.5px; line-height: 1.8; text-align: justify; margin-bottom: 15px; }
+    .body-text .highlight { color: #E91E63; font-weight: 700; }
+    
+    .details { margin: 15px 0 20px 0; font-size: 13.5px; line-height: 2; }
+    .details .label { font-weight: 600; color: #333; }
+    .details .value { color: #E91E63; font-weight: 600; }
+    
+    .thanks { font-size: 13.5px; line-height: 1.8; text-align: justify; margin: 20px 0; }
+    
+    .closing { margin-top: 15px; font-size: 13.5px; }
+    
+    .signatures { display: flex; justify-content: space-between; margin-top: 50px; }
+    .sig-block { text-align: center; }
+    .sig-line { width: 200px; border-top: 1px solid #333; padding-top: 5px; }
+    .sig-name { font-weight: 700; font-size: 13px; }
+    .sig-role { font-size: 12px; color: #555; }
+    
+    .footer { position: absolute; bottom: 0; left: 0; right: 0; border-top: 2px solid #eee; padding: 15px 30px; display: flex; justify-content: space-between; font-size: 8.5px; color: #777; background: white; }
+    .footer-col { text-align: center; flex: 1; padding: 0 5px; }
+    .footer-col strong { display: block; color: #1a5276; font-size: 9px; margin-bottom: 2px; }
+    .footer-bottom { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 9px; color: #1a5276; font-weight: 600; }
+    
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page { margin: 0; box-shadow: none; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="text-align:center;padding:15px;background:#1a5276;color:white;">
+    <button onclick="window.print()" style="background:#E91E63;color:white;border:none;padding:10px 30px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:10px;">
+      📥 Descargar / Imprimir PDF
+    </button>
+    <button onclick="window.close()" style="background:#555;color:white;border:none;padding:10px 20px;font-size:14px;border-radius:8px;cursor:pointer;">
+      Cerrar
+    </button>
+  </div>
+  
+  <div class="page">
+    <div class="deco-left"><div></div><div></div><div></div><div></div></div>
+    <div class="deco-curve"></div>
+    
+    <div class="content">
+      <div class="header">
+        <div class="logo-area">
+          <div class="logo-text">
+            Colegio de<br>
+            <span class="green">Psicólogos</span><br>
+            <span class="sub">de Guatemala</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="title">APROBACIÓN DE AVAL</div>
+      
+      <div class="date-line">Guatemala, ${formatApprovalDate(aval.approval_date)}</div>
+      
+      <div class="addressee">
+        Estimado(a) <span class="name">${aval.applicant_name || '—'}</span><br>
+        <span class="inst">${aval.institution || ''}</span>
+      </div>
+      
+      <div class="body-text">
+        Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.
+      </div>
+      
+      <div class="body-text">
+        Por medio de la presente carta se extiende la aprobación a su solicitud recibida el
+        <span class="highlight">${formatRequestDate(aval.created_at)}</span>, con el Aval 
+        <span class="highlight">${aval.correlativo || '—'}</span>. En resumen el Aval refleja la cobertura de:
+      </div>
+      
+      <div class="details">
+        <div><span class="label">Actividad:</span> <span class="value">${aval.activity_type || '—'}</span></div>
+        <div><span class="label">Duración:</span> <span class="value">${aval.duration || '—'}</span></div>
+        <div><span class="label">Modalidad:</span> <span class="value">${aval.modality || '—'}</span></div>
+        <div><span class="label">Fecha y hora:</span> <span class="value">${aval.schedule || aval.activity_date || '—'}</span></div>
+        <div><span class="label">Lugar/Plataforma:</span> <span class="value">${aval.platform || '—'}</span></div>
+        <div><span class="label">Tema:</span> <span class="value">${aval.topic || aval.activity_name || '—'}</span></div>
+        <div><span class="label">Dirigido a:</span> <span class="value">${aval.target_audience || '—'}</span></div>
+      </div>
+      
+      <div class="thanks">
+        Agradecemos y valoramos el trabajo y esfuerzo constante que implementa en la 
+        promoción del crecimiento continuo de los profesionales. Así mismo, solicitamos incluir el 
+        número de AVAL en el material correspondiente a la actividad aprobada.
+      </div>
+      
+      <div class="closing">Sin otro particular, nos despedimos.</div>
+      
+      <div class="signatures">
+        <div class="sig-block">
+          <div class="sig-line">
+            <div class="sig-name">Dra. Rebecca Ramírez de Chajón</div>
+            <div class="sig-role">Coordinadora – CAEDUC</div>
+          </div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-line">
+            <div class="sig-name">Mgtr. Luisa Mazariegos</div>
+            <div class="sig-role">Secretaria - CAEDUC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <div class="footer-col">
+        <strong>Sede central</strong>
+        3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>
+        +(502) 2218 - 3400<br>
+        info@colegiodepsicologos.org.gt
+      </div>
+      <div class="footer-col">
+        <strong>Sub Sede Cobán</strong>
+        Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>
+        +(502) 7764-7109<br>
+        infocoban@colegiodepsicologos.org.gt
+      </div>
+      <div class="footer-col">
+        <strong>Sub Sede Zacapa</strong>
+        4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>
+        +(502) 7941-0587<br>
+        infozacapa@colegiodepsicologos.org.gt
+      </div>
+      <div class="footer-col">
+        <strong>Sub Sede Quetzaltenango</strong>
+        Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>
+        +(502) 7767-3314<br>
+        infoquetzaltenango@colegiodepsicologos.org.gt
+      </div>
+    </div>
+    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+  </div>
+</body>
+</html>`;
+};
+
+const openApprovalLetter = (aval) => {
+  const html = generateApprovalLetterHTML(aval);
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else alert('Permite las ventanas emergentes para descargar la carta.');
+};
+
 
 // ==========================================
 // COMPONENTES UI
@@ -136,12 +348,17 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
 // VISTA PÚBLICA: FORMULARIO SOLICITUD
 // ==========================================
 const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
-  const [data, setData] = useState({ applicantName: '', activityName: '', activityDate: '', email: '' });
+  const [data, setData] = useState({
+    applicantName: '', institution: '', activityName: '', activityDate: '', email: '',
+    activityType: '', duration: '', modality: '', schedule: '', platform: '', topic: '', targetAudience: ''
+  });
   const [file, setFile] = useState(null);
   const [submittedNumber, setSubmittedNumber] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const formFilePath = appSettings?.aval_form_file_path || '';
   const formFileUrl = formFilePath ? `${supabaseUrl}/storage/v1/object/public/aval-form-template/${formFilePath}` : null;
+  const reglamentoPath = appSettings?.reglamento_file_path || '';
+  const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -176,39 +393,102 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <BackButton onClick={onBack} />
-      {formFileUrl && (
-        <Card className="border-l-4 border-l-blue-500">
-          <div className="flex items-center gap-4">
-            <div className="bg-blue-100 p-3 rounded-lg shrink-0"><Download size={24} className="text-blue-600" /></div>
-            <div className="flex-1">
-              <p className="font-bold text-gray-800">Formulario de Solicitud</p>
-              <p className="text-sm text-gray-500">Descarga, llena y adjunta el formulario oficial.</p>
+
+      {/* Descarga de formulario y reglamento */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {formFileUrl && (
+          <Card className="border-l-4 border-l-blue-500">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-100 p-3 rounded-lg shrink-0"><Download size={24} className="text-blue-600" /></div>
+              <div className="flex-1">
+                <p className="font-bold text-gray-800">Formulario de Solicitud</p>
+                <p className="text-sm text-gray-500">Descarga, llena y adjunta.</p>
+              </div>
+              <a href={formFileUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shrink-0 text-sm">
+                <Download size={16} /> Descargar
+              </a>
             </div>
-            <a href={formFileUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shrink-0">
-              <Download size={16} /> Descargar
-            </a>
-          </div>
-        </Card>
-      )}
+          </Card>
+        )}
+        {reglamentoUrl && (
+          <Card className="border-l-4 border-l-purple-500">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-100 p-3 rounded-lg shrink-0"><BookOpen size={24} className="text-purple-600" /></div>
+              <div className="flex-1">
+                <p className="font-bold text-gray-800">Reglamento de Avales</p>
+                <p className="text-sm text-gray-500">Consulta el reglamento vigente.</p>
+              </div>
+              <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 font-medium shrink-0 text-sm">
+                <Download size={16} /> Descargar
+              </a>
+            </div>
+          </Card>
+        )}
+      </div>
+
       <Card>
         <h2 className="text-xl font-bold mb-4">Solicitud de Aval</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input required placeholder="Nombre Solicitante / Institución" className="w-full border p-2 rounded" value={data.applicantName} onChange={e => setData({...data, applicantName: e.target.value})} />
-          <input required placeholder="Nombre Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e => setData({...data, activityName: e.target.value})} />
-          <div>
-            <label className="block text-sm font-bold mb-1">Fecha de la Actividad</label>
-            <input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data, activityDate: e.target.value})} />
+          {/* Datos del solicitante */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Datos del Solicitante</h3>
+            <input required placeholder="Nombre completo del Solicitante" className="w-full border p-2 rounded" value={data.applicantName} onChange={e => setData({...data, applicantName: e.target.value})} />
+            <input required placeholder="Institución (o escriba 'Solicitud propia')" className="w-full border p-2 rounded" value={data.institution} onChange={e => setData({...data, institution: e.target.value})} />
+            <input required type="email" placeholder="Email de Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data, email: e.target.value})} />
           </div>
-          <input required type="email" placeholder="Email Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data, email: e.target.value})} />
-          <div>
-            <label className="block text-sm font-bold mb-1">Formulario Lleno (adjuntar)</label>
-            <input type="file" accept=".pdf" onChange={e => {
-              const sel = e.target.files[0];
-              if (sel && sel.type !== 'application/pdf') { alert('Solo se admiten archivos completos en formato PDF.'); e.target.value = ''; setFile(null); return; }
-              setFile(sel);
-            }} className="w-full" />
-            <p className="text-xs text-gray-500 mt-1">Solo se admiten archivos completos en formato PDF.</p>
+
+          {/* Datos de la actividad */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Datos de la Actividad</h3>
+            <input required placeholder="Nombre / Tema de la Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e => setData({...data, activityName: e.target.value})} />
+            <input placeholder="Tema específico (ej: Psicología que escribe: 'Terapia Neurosensorial')" className="w-full border p-2 rounded" value={data.topic} onChange={e => setData({...data, topic: e.target.value})} />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-bold mb-1">Tipo de Actividad *</label>
+                <select required className="w-full border p-2 rounded" value={data.activityType} onChange={e => setData({...data, activityType: e.target.value})}>
+                  <option value="">Seleccionar...</option>
+                  {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1">Modalidad *</label>
+                <select required className="w-full border p-2 rounded" value={data.modality} onChange={e => setData({...data, modality: e.target.value})}>
+                  <option value="">Seleccionar...</option>
+                  {MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-bold mb-1">Duración *</label>
+                <input required placeholder="Ej: 12 horas" className="w-full border p-2 rounded" value={data.duration} onChange={e => setData({...data, duration: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1">Fecha de la Actividad *</label>
+                <input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data, activityDate: e.target.value})} />
+              </div>
+            </div>
+            <input required placeholder="Fecha y Hora específica (ej: 1er trimestre 2026 / 18:00 - 21:00 horas)" className="w-full border p-2 rounded" value={data.schedule} onChange={e => setData({...data, schedule: e.target.value})} />
+            <input required placeholder="Lugar o Plataforma (ej: Zoom, Auditorio Central, etc.)" className="w-full border p-2 rounded" value={data.platform} onChange={e => setData({...data, platform: e.target.value})} />
+            <input required placeholder="Dirigido a (ej: Graduados en Psicología Clínica y Educativa)" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e => setData({...data, targetAudience: e.target.value})} />
           </div>
+
+          {/* Archivo adjunto */}
+          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+            <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Documento Adjunto</h3>
+            <div>
+              <label className="block text-sm font-bold mb-1">Formulario Lleno (adjuntar)</label>
+              <input type="file" accept=".pdf" onChange={e => {
+                const sel = e.target.files[0];
+                if (sel && sel.type !== 'application/pdf') { alert('Solo se admiten archivos en formato PDF.'); e.target.value = ''; setFile(null); return; }
+                setFile(sel);
+              }} className="w-full" />
+              <p className="text-red-600 font-black text-lg mt-2 leading-snug">
+                ⚠️ Solo se admiten archivos completos en formato PDF.
+              </p>
+            </div>
+          </div>
+
           <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 disabled:opacity-50">
             {submitting ? 'Enviando...' : 'Enviar Solicitud'}
           </button>
@@ -232,7 +512,7 @@ const ConsultarEstadoView = ({ onBack }) => {
     e.preventDefault();
     setSearching(true); setNotFound(false); setResult(null);
     const { data, error } = await supabase.from('avales')
-      .select('request_number, applicant_name, activity_name, activity_date, status, is_deleted')
+      .select('*')
       .eq('request_number', parseInt(requestNum)).single();
     if (error || !data) setNotFound(true);
     else if (data.is_deleted) setResult({ ...data, status: 'Eliminado' });
@@ -292,6 +572,47 @@ const ConsultarEstadoView = ({ onBack }) => {
                   <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div>
                   <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div>
                 </div>
+
+                {/* Si fue APROBADO: mostrar correlativo y botón de descarga */}
+                {result.status === 'Aprobado' && (
+                  <div className="border-t pt-3 space-y-3">
+                    {result.correlativo && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+                        <p className="text-sm text-green-600 font-medium">Número de Aval (Correlativo)</p>
+                        <p className="text-2xl font-black text-green-700">{result.correlativo}</p>
+                      </div>
+                    )}
+                    {result.approval_reason && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p className="text-sm text-green-600 font-medium">Observaciones:</p>
+                        <p className="text-green-800 text-sm">{result.approval_reason}</p>
+                      </div>
+                    )}
+                    <button onClick={() => openApprovalLetter(result)}
+                      className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2">
+                      <FileDown size={20} /> Descargar Carta de Aprobación de Aval
+                    </button>
+                  </div>
+                )}
+
+                {/* Si fue RECHAZADO: mostrar razón */}
+                {result.status === 'Rechazado' && result.approval_reason && (
+                  <div className="border-t pt-3">
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p>
+                      <p className="text-red-800 text-sm">{result.approval_reason}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Si fue ELIMINADO */}
+                {result.status === 'Eliminado' && (
+                  <div className="border-t pt-3">
+                    <div className="bg-gray-100 border border-gray-300 rounded-lg p-3">
+                      <p className="text-sm text-gray-600 font-medium">Esta solicitud fue eliminada.</p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex gap-3">
                 <button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button>
@@ -318,7 +639,7 @@ const VerificarAvalView = ({ onBack }) => {
     e.preventDefault();
     setSearching(true); setNotFound(false); setResult(null);
     const { data, error } = await supabase.from('avales')
-      .select('correlativo, activity_name, activity_date, status, applicant_name, is_deleted')
+      .select('*')
       .eq('correlativo', correlativo.trim()).eq('is_deleted', false).single();
     if (error || !data) setNotFound(true);
     else setResult(data);
@@ -381,6 +702,12 @@ const VerificarAvalView = ({ onBack }) => {
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div>
                 <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div>
               </div>
+              {result.status === 'Aprobado' && (
+                <button onClick={() => openApprovalLetter(result)}
+                  className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2">
+                  <FileDown size={20} /> Descargar Carta de Aprobación
+                </button>
+              )}
               <div className="flex gap-3">
                 <button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button>
                 <button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button>
@@ -397,17 +724,18 @@ const VerificarAvalView = ({ onBack }) => {
 // ==========================================
 // ADMIN: CONFIGURACIÓN
 // ==========================================
-const AdminConfigView = ({ appSettings, onUpdateSetting, members }) => {
+const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember }) => {
   const [activeTab, setActiveTab] = useState('users');
   const tabs = [
     { id: 'users', label: 'Usuarios', icon: <UserPlus size={18} /> },
     { id: 'form_file', label: 'Formulario Aval', icon: <File size={18} /> },
+    { id: 'reglamento', label: 'Reglamento', icon: <BookOpen size={18} /> },
     { id: 'tutorial', label: 'Tutorial YouTube', icon: <Youtube size={18} /> },
   ];
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">Configuración del Sistema</h2>
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-wrap">
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all flex-1 justify-center ${activeTab === tab.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
@@ -415,17 +743,21 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members }) => {
           </button>
         ))}
       </div>
-      {activeTab === 'users' && <AdminUsersTab members={members} />}
+      {activeTab === 'users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember} />}
       {activeTab === 'form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
+      {activeTab === 'reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
       {activeTab === 'tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
     </div>
   );
 };
 
-const AdminUsersTab = ({ members }) => {
+const AdminUsersTab = ({ members, onUpdateMember }) => {
   const [showModal, setShowModal] = useState(false);
+  const [editModal, setEditModal] = useState(null);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: ROLES[0] });
+  const [editData, setEditData] = useState({ name: '', role: '', email: '' });
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [msg, setMsg] = useState(null);
 
@@ -443,6 +775,22 @@ const AdminUsersTab = ({ members }) => {
     setCreating(false);
   };
 
+  const openEdit = (m) => {
+    setEditData({ id: m.id, name: m.name || '', role: m.role || ROLES[0], email: m.email || '' });
+    setEditModal(true);
+    setMsg(null);
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault(); setSaving(true); setMsg(null);
+    try {
+      await onUpdateMember(editData.id, { name: editData.name, role: editData.role, email: editData.email });
+      setMsg({ type: 'success', text: 'Usuario actualizado.' });
+      setEditModal(null);
+    } catch (err) { setMsg({ type: 'error', text: err.message }); }
+    setSaving(false);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -458,11 +806,18 @@ const AdminUsersTab = ({ members }) => {
                 <div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm">{m.name?.charAt(0)?.toUpperCase() || '?'}</div>
                 <div><p className="font-semibold">{m.name || 'Sin nombre'}</p><p className="text-xs text-gray-500">{m.email || ''}</p></div>
               </div>
-              <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">{m.role || 'Sin rol'}</span>
+              <div className="flex items-center gap-2">
+                <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">{m.role || 'Sin rol'}</span>
+                <button onClick={() => openEdit(m)} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
+                  <Edit3 size={14} /> Editar
+                </button>
+              </div>
             </div>
           </Card>
         )) : <div className="text-gray-400 text-center py-8">No hay miembros.</div>}
       </div>
+
+      {/* Modal Crear */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Crear Usuario" size="sm">
         <form onSubmit={handleCreate} className="space-y-4">
           <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
@@ -473,6 +828,25 @@ const AdminUsersTab = ({ members }) => {
           </div>
           <select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select>
           <button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating ? 'Creando...' : 'Crear'}</button>
+        </form>
+      </Modal>
+
+      {/* Modal Editar */}
+      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title="Editar Usuario" size="sm">
+        <form onSubmit={handleEdit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-bold mb-1">Nombre completo</label>
+            <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-bold mb-1">Email</label>
+            <input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-bold mb-1">Rol</label>
+            <select className="w-full border p-2.5 rounded-lg" value={editData.role} onChange={e => setEditData({...editData, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select>
+          </div>
+          <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar Cambios'}</button>
         </form>
       </Modal>
     </div>
@@ -529,6 +903,68 @@ const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
             <label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium">
               <Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Formulario'}
               <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" />
+            </label>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+};
+
+// ==========================================
+// ADMIN: REGLAMENTO DE AVALES
+// ==========================================
+const AdminReglamentoTab = ({ appSettings, onUpdateSetting }) => {
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const fp = appSettings?.reglamento_file_path || '';
+  const fUrl = fp ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${fp}` : null;
+
+  const handleUpload = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    setUploading(true); setMsg(null);
+    try {
+      const fn = `reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`;
+      if (fp) await supabase.storage.from('reglamento-avales').remove([fp]);
+      const { data, error } = await supabase.storage.from('reglamento-avales').upload(fn, f, { upsert: true });
+      if (error) { setMsg({ type: 'error', text: error.message }); } else { await onUpdateSetting('reglamento_file_path', data.path); setMsg({ type: 'success', text: 'Reglamento subido correctamente.' }); }
+    } catch (err) { setMsg({ type: 'error', text: err.message }); }
+    setUploading(false);
+  };
+
+  const handleRemove = async () => {
+    if (!fp || !confirm('¿Eliminar el reglamento?')) return;
+    await supabase.storage.from('reglamento-avales').remove([fp]);
+    await onUpdateSetting('reglamento_file_path', '');
+    setMsg({ type: 'success', text: 'Reglamento eliminado.' });
+  };
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-lg font-bold text-gray-700">Reglamento de Avales</h3>
+      <p className="text-sm text-gray-500">Este documento estará disponible para descarga pública en el portal de solicitudes.</p>
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
+      <Card>
+        {fUrl ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <BookOpen size={24} className="text-purple-600 shrink-0" />
+              <div className="flex-1 min-w-0"><p className="font-medium text-purple-800">Reglamento activo</p></div>
+              <a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700"><Download size={14} className="inline mr-1" />Ver</a>
+              <button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button>
+            </div>
+            <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50">
+              <Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar reglamento'}</span>
+              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" />
+            </label>
+          </div>
+        ) : (
+          <div className="text-center space-y-4">
+            <BookOpen size={28} className="text-gray-400 mx-auto" />
+            <p className="font-medium text-gray-700">No hay reglamento cargado</p>
+            <label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium">
+              <Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Reglamento'}
+              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" />
             </label>
           </div>
         )}
@@ -594,14 +1030,30 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
     if (!reason.trim()) { alert('La justificación es obligatoria.'); return; }
     setSaving(true);
     const updates = { status: actionModal.action, approval_reason: reason };
-    if (actionModal.action === 'Aprobado' && correlativoInput.trim()) updates.correlativo = correlativoInput.trim();
+    if (actionModal.action === 'Aprobado') {
+      updates.approval_date = new Date().toISOString().split('T')[0]; // Fecha automática
+      if (correlativoInput.trim()) updates.correlativo = correlativoInput.trim();
+    }
     await updateAval(actionModal.id, updates);
     setActionModal(null); setSaving(false);
   };
 
-  const openEdit = (a) => { setEditData({ id: a.id, status: a.status, approval_reason: a.approval_reason || '', correlativo: a.correlativo || '' }); setEditModal(true); };
+  const openEdit = (a) => {
+    setEditData({
+      id: a.id, status: a.status, approval_reason: a.approval_reason || '',
+      correlativo: a.correlativo || '', approval_date: a.approval_date || ''
+    });
+    setEditModal(true);
+  };
 
-  const handleEdit = async () => { setSaving(true); await updateAval(editData.id, { status: editData.status, approval_reason: editData.approval_reason, correlativo: editData.correlativo }); setEditModal(null); setSaving(false); };
+  const handleEdit = async () => {
+    setSaving(true);
+    await updateAval(editData.id, {
+      status: editData.status, approval_reason: editData.approval_reason,
+      correlativo: editData.correlativo, approval_date: editData.approval_date || null
+    });
+    setEditModal(null); setSaving(false);
+  };
 
   const handleDelete = async () => {
     if (!deleteReason.trim()) { alert('Debes indicar la razón de eliminación.'); return; }
@@ -620,14 +1072,18 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
                 <span className="text-xs text-gray-400">#{req.request_number}</span>
               </div>
               <p className="text-gray-600">{req.activity_name}</p>
+              {req.institution && <p className="text-sm text-gray-500">{req.institution}</p>}
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 {req.activity_date && <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12} /> {req.activity_date}</span>}
                 {req.email && <span className="text-xs text-gray-500">{req.email}</span>}
                 {req.correlativo && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">Correlativo: {req.correlativo}</span>}
+                {req.activity_type && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.activity_type}</span>}
+                {req.modality && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.modality}</span>}
+                {req.duration && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.duration}</span>}
               </div>
               {req.approval_reason && <p className="text-xs text-gray-500 mt-1 italic">Nota: {req.approval_reason}</p>}
               {req.form_url ? (
-                <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:underline font-medium"><Download size={12} /> Descargar PDF</a>
+                <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:underline font-medium"><Download size={12} /> Descargar PDF adjunto</a>
               ) : <p className="text-xs text-gray-400 mt-2">Sin archivo adjunto</p>}
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
@@ -637,6 +1093,11 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
                   <button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button>
                   <button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button>
                 </div>
+              )}
+              {req.status === 'Aprobado' && (
+                <button onClick={() => openApprovalLetter(req)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium">
+                  <FileDown size={12} /> Carta de Aprobación
+                </button>
               )}
               <div className="flex gap-2">
                 <button onClick={() => openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12} /> Editar</button>
@@ -658,12 +1119,12 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
           </div>
           {actionModal?.action === 'Aprobado' && (
             <div>
-              <label className="block text-sm font-bold mb-1">Número de Correlativo del Aval</label>
-              <input placeholder="Ej: CAEDUC-2026-001" className="w-full border p-2 rounded" value={correlativoInput} onChange={e => setCorrelativoInput(e.target.value)} />
-              <p className="text-xs text-gray-500 mt-1">Puedes asignarlo ahora o editarlo después.</p>
+              <label className="block text-sm font-bold mb-1">Número de Correlativo del Aval *</label>
+              <input required placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={correlativoInput} onChange={e => setCorrelativoInput(e.target.value)} />
+              <p className="text-xs text-gray-500 mt-1">La fecha de aprobación se registra automáticamente (hoy).</p>
             </div>
           )}
-          <button onClick={handleAction} disabled={saving || !reason.trim()} className={`w-full py-2 rounded font-bold text-white disabled:opacity-50 ${actionModal?.action === 'Aprobado' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+          <button onClick={handleAction} disabled={saving || !reason.trim() || (actionModal?.action === 'Aprobado' && !correlativoInput.trim())} className={`w-full py-2 rounded font-bold text-white disabled:opacity-50 ${actionModal?.action === 'Aprobado' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
             {saving ? 'Guardando...' : (actionModal?.action === 'Aprobado' ? 'Confirmar Aprobación' : 'Confirmar Rechazo')}
           </button>
         </div>
@@ -684,7 +1145,11 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
           </div>
           <div>
             <label className="block text-sm font-bold mb-1">Correlativo del Aval</label>
-            <input placeholder="Ej: CAEDUC-2026-001" className="w-full border p-2 rounded" value={editData.correlativo} onChange={e => setEditData({...editData, correlativo: e.target.value})} />
+            <input placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={editData.correlativo} onChange={e => setEditData({...editData, correlativo: e.target.value})} />
+          </div>
+          <div>
+            <label className="block text-sm font-bold mb-1">Fecha de Aprobación</label>
+            <input type="date" className="w-full border p-2 rounded" value={editData.approval_date} onChange={e => setEditData({...editData, approval_date: e.target.value})} />
           </div>
           <button onClick={handleEdit} disabled={saving} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar Cambios'}</button>
         </div>
@@ -732,8 +1197,8 @@ const ReportesView = ({ avales, docs }) => {
   };
 
   const generateCSV = (data) => {
-    const h = ['Actividad', 'Solicitante', 'Fecha', 'Estado', 'Correlativo', 'Notas', 'Razón Eliminación'];
-    const rows = data.map(a => [a.activity_name||'', a.applicant_name||'', a.activity_date||'', a.is_deleted?'Eliminado':(a.status||''), a.correlativo||'', a.approval_reason||'', a.deletion_reason||'']);
+    const h = ['Actividad', 'Solicitante', 'Institución', 'Fecha', 'Estado', 'Correlativo', 'Tipo', 'Modalidad', 'Duración', 'Notas', 'Razón Eliminación'];
+    const rows = data.map(a => [a.activity_name||'', a.applicant_name||'', a.institution||'', a.activity_date||'', a.is_deleted?'Eliminado':(a.status||''), a.correlativo||'', a.activity_type||'', a.modality||'', a.duration||'', a.approval_reason||'', a.deletion_reason||'']);
     const csv = [h, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `reporte_avales_${dateFrom}_${dateTo}.csv`; a.click();
@@ -743,9 +1208,11 @@ const ReportesView = ({ avales, docs }) => {
     const rows = data.map(a => `<tr>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td>
+      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#ca8a04'}">${a.is_deleted?'Eliminado':(a.status||'')}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td>
+      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.deletion_reason||'—'}</td>
     </tr>`).join('');
@@ -756,13 +1223,15 @@ const ReportesView = ({ avales, docs }) => {
       <p style="color:#666;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | Pendientes: ${data.filter(a=>a.status==='Pendiente'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p>
       <table style="width:100%;border-collapse:collapse;margin-top:10px;">
         <thead><tr style="background:#1e3a5f;color:white;">
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Actividad</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Solicitante</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Fecha</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Estado</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Correlativo</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Notas</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:11px;text-align:left;">Razón Eliminación</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th>
+          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th>
         </tr></thead><tbody>${rows}</tbody>
       </table>
       <p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p>
@@ -957,7 +1426,20 @@ export default function CAEDUCApp() {
       if (f1) formUrl = f1.path;
     }
     const { data: inserted, error } = await supabase.from('avales').insert([{
-      applicant_name: formData.applicantName, activity_name: formData.activityName, activity_date: formData.activityDate, email: formData.email, form_url: formUrl, status: 'Pendiente'
+      applicant_name: formData.applicantName,
+      institution: formData.institution,
+      activity_name: formData.activityName,
+      activity_date: formData.activityDate,
+      email: formData.email,
+      activity_type: formData.activityType,
+      duration: formData.duration,
+      modality: formData.modality,
+      schedule: formData.schedule,
+      platform: formData.platform,
+      topic: formData.topic,
+      target_audience: formData.targetAudience,
+      form_url: formUrl,
+      status: 'Pendiente'
     }]).select('request_number');
     if (error) { alert(error.message); return null; }
     return inserted?.[0]?.request_number || null;
@@ -966,6 +1448,7 @@ export default function CAEDUCApp() {
   const registerDoc = async (d) => { const { error } = await supabase.from('internal_documents').insert([d]); if (error) alert(error.message); else fetchData(); };
   const updateAval = async (id, updates) => { const { error } = await supabase.from('avales').update(updates).eq('id', id); if (error) alert(error.message); else fetchData(); };
   const deleteAval = async (id, reason) => { const { error } = await supabase.from('avales').update({ is_deleted: true, deletion_reason: reason }).eq('id', id); if (error) alert(error.message); else fetchData(); };
+  const updateMember = async (id, updates) => { const { error } = await supabase.from('profiles').update(updates).eq('id', id); if (error) throw error; else await fetchData(); };
   const updateSetting = async (key, value) => {
     const { error } = await supabase.from('app_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
     if (error) { const { error: ie } = await supabase.from('app_settings').insert([{ key, value }]); if (ie) throw ie; }
@@ -985,7 +1468,7 @@ export default function CAEDUCApp() {
             {(currentModule === 'planificacion' || currentModule === 'dashboard') && <PlanificacionView activities={activities} createActivity={createActivity} members={members} onRegisterDoc={registerDoc} />}
             {currentModule === 'avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} />}
             {currentModule === 'reportes' && <ReportesView avales={avales} docs={internalDocs} />}
-            {currentModule === 'admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} />}
+            {currentModule === 'admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember} />}
           </>
         )}
       </main>
