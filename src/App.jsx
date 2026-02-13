@@ -300,6 +300,8 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const youtubeUrl = appSettings?.youtube_tutorial_url || '';
+  const reglamentoPath = appSettings?.reglamento_file_path || '';
+  const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[90vh] bg-gray-50 p-6 relative">
@@ -319,6 +321,12 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
           <button onClick={() => setUserMode('verificar_aval')} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-6 py-3 rounded-lg hover:bg-indigo-100 font-semibold w-full justify-center border border-indigo-200 transition-colors">
             <Shield size={20} /> Verificar Validez de Aval
           </button>
+          {reglamentoUrl && (
+            <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 bg-purple-50 text-purple-700 px-6 py-3 rounded-lg hover:bg-purple-100 font-semibold w-full justify-center border border-purple-200 transition-colors">
+              <BookOpen size={20} /> Descargar Reglamento de Avales
+            </a>
+          )}
           {youtubeUrl && (
             <a href={youtubeUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-2 bg-red-50 text-red-600 px-6 py-3 rounded-lg hover:bg-red-100 font-semibold w-full justify-center border border-red-200 transition-colors">
@@ -702,12 +710,6 @@ const VerificarAvalView = ({ onBack }) => {
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div>
                 <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div>
               </div>
-              {result.status === 'Aprobado' && (
-                <button onClick={() => openApprovalLetter(result)}
-                  className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2">
-                  <FileDown size={20} /> Descargar Carta de Aprobación
-                </button>
-              )}
               <div className="flex gap-3">
                 <button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button>
                 <button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button>
@@ -1031,7 +1033,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
     setSaving(true);
     const updates = { status: actionModal.action, approval_reason: reason };
     if (actionModal.action === 'Aprobado') {
-      updates.approval_date = new Date().toISOString().split('T')[0]; // Fecha automática
+      updates.approval_date = new Date().toISOString().split('T')[0];
       if (correlativoInput.trim()) updates.correlativo = correlativoInput.trim();
     }
     await updateAval(actionModal.id, updates);
@@ -1088,7 +1090,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <Badge status={req.status} />
-              {req.status === 'Pendiente' && (
+              {req.status === 'En Proceso' && (
                 <div className="flex gap-2">
                   <button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button>
                   <button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button>
@@ -1136,7 +1138,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
           <div>
             <label className="block text-sm font-bold mb-1">Estado</label>
             <select className="w-full border p-2 rounded" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value})}>
-              <option value="Pendiente">Pendiente</option><option value="Aprobado">Aprobado</option><option value="Rechazado">Rechazado</option>
+              <option value="En Proceso">En Proceso</option><option value="Aprobado">Aprobado</option><option value="Rechazado">Rechazado</option>
             </select>
           </div>
           <div>
@@ -1210,7 +1212,7 @@ const ReportesView = ({ avales, docs }) => {
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#ca8a04'}">${a.is_deleted?'Eliminado':(a.status||'')}</td>
+      <td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td>
       <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td>
@@ -1220,7 +1222,7 @@ const ReportesView = ({ avales, docs }) => {
     const html = `<html><head><title>Reporte CAEDUC</title></head><body style="font-family:Arial;padding:30px;">
       <h1 style="color:#1e3a5f;">Reporte de Avales — CAEDUC</h1>
       <p style="color:#666;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p>
-      <p style="color:#666;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | Pendientes: ${data.filter(a=>a.status==='Pendiente'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p>
+      <p style="color:#666;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | En Proceso: ${data.filter(a=>a.status==='En Proceso'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p>
       <table style="width:100%;border-collapse:collapse;margin-top:10px;">
         <thead><tr style="background:#1e3a5f;color:white;">
           <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th>
@@ -1251,7 +1253,7 @@ const ReportesView = ({ avales, docs }) => {
         <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{avales.length}</p><p className="text-sm text-gray-500">Total</p></div></Card>
         <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{active.filter(a=>a.status==='Aprobado').length}</p><p className="text-sm text-gray-500">Aprobadas</p></div></Card>
         <Card><div className="text-center"><p className="text-3xl font-bold text-red-600">{active.filter(a=>a.status==='Rechazado').length}</p><p className="text-sm text-gray-500">Rechazadas</p></div></Card>
-        <Card><div className="text-center"><p className="text-3xl font-bold text-yellow-600">{active.filter(a=>a.status==='Pendiente').length}</p><p className="text-sm text-gray-500">Pendientes</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-blue-500">{active.filter(a=>a.status==='En Proceso').length}</p><p className="text-sm text-gray-500">En Proceso</p></div></Card>
       </div>
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
@@ -1439,7 +1441,7 @@ export default function CAEDUCApp() {
       topic: formData.topic,
       target_audience: formData.targetAudience,
       form_url: formUrl,
-      status: 'Pendiente'
+      status: 'En Proceso'
     }]).select('request_number');
     if (error) { alert(error.message); return null; }
     return inserted?.[0]?.request_number || null;
