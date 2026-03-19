@@ -6,7 +6,7 @@ import {
   FileSignature, Upload, Save, AlertTriangle, FileSpreadsheet,
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
-  Printer, FileDown
+  Printer, FileDown, Send, Archive, FilePlus, Copy
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -44,6 +44,15 @@ const ACTIVITY_TYPES = [
 
 const MODALITIES = ["Virtual", "Presencial", "Híbrida"];
 
+const MOTIVOS_OFICIO = [
+  "Aprobación y asignación de recursos para realizar actividad",
+  "Solicitud de salón y equipo audiovisual",
+  "Solicitud de materiales e insumos",
+  "Informe de actividad realizada",
+  "Solicitud de difusión institucional",
+  "Otro (personalizado)"
+];
+
 // ==========================================
 // GENERAR CARTA DE APROBACIÓN PDF (HTML)
 // ==========================================
@@ -72,108 +81,62 @@ const generateApprovalLetterHTML = (aval) => {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
     .page { width: 8.5in; min-height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; }
-    
-    /* Decorative elements */
     .deco-left { position: absolute; left: 0; top: 200px; width: 18px; height: 300px; }
     .deco-left div { width: 8px; margin-bottom: 4px; border-radius: 4px; }
     .deco-left div:nth-child(1) { height: 60px; background: #E91E63; }
     .deco-left div:nth-child(2) { height: 60px; background: #9C27B0; }
     .deco-left div:nth-child(3) { height: 60px; background: #2196F3; }
     .deco-left div:nth-child(4) { height: 60px; background: #4CAF50; }
-    
     .deco-curve { position: absolute; right: 0; top: 0; width: 200px; height: 100%; overflow: hidden; pointer-events: none; }
     .deco-curve::before { content: ''; position: absolute; right: -100px; top: 100px; width: 300px; height: 300px; border-radius: 50%; border: 40px solid rgba(200,200,200,0.15); }
     .deco-curve::after { content: ''; position: absolute; right: -50px; bottom: 150px; width: 250px; height: 250px; border-radius: 50%; border: 30px solid rgba(200,200,200,0.12); }
-    
     .content { padding: 50px 70px 40px 70px; position: relative; z-index: 1; }
-    
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
     .logo-area { display: flex; align-items: center; gap: 8px; }
     .logo-text { font-size: 22px; font-weight: 800; color: #1a5276; line-height: 1.2; }
     .logo-text .green { color: #27ae60; }
     .logo-text .sub { font-size: 16px; font-weight: 600; }
-    
     .title { text-align: center; font-size: 24px; font-weight: 800; color: #1a5276; letter-spacing: 2px; margin: 20px 0 30px 0; }
-    
     .date-line { text-align: right; color: #E91E63; font-weight: 600; margin-bottom: 25px; font-size: 14px; }
-    
     .addressee { margin-bottom: 25px; font-size: 14px; line-height: 1.6; }
     .addressee .name { color: #E91E63; font-weight: 600; }
     .addressee .inst { color: #E91E63; font-weight: 600; }
-    
     .body-text { font-size: 13.5px; line-height: 1.8; text-align: justify; margin-bottom: 15px; }
     .body-text .highlight { color: #E91E63; font-weight: 700; }
-    
     .details { margin: 15px 0 20px 0; font-size: 13.5px; line-height: 2; }
     .details .label { font-weight: 600; color: #333; }
     .details .value { color: #E91E63; font-weight: 600; }
-    
     .thanks { font-size: 13.5px; line-height: 1.8; text-align: justify; margin: 20px 0; }
-    
     .closing { margin-top: 15px; font-size: 13.5px; }
-    
     .signatures { display: flex; justify-content: space-between; margin-top: 50px; }
     .sig-block { text-align: center; }
     .sig-line { width: 200px; border-top: 1px solid #333; padding-top: 5px; }
     .sig-name { font-weight: 700; font-size: 13px; }
     .sig-role { font-size: 12px; color: #555; }
-    
     .footer { position: absolute; bottom: 0; left: 0; right: 0; border-top: 2px solid #eee; padding: 15px 30px; display: flex; justify-content: space-between; font-size: 8.5px; color: #777; background: white; }
     .footer-col { text-align: center; flex: 1; padding: 0 5px; }
     .footer-col strong { display: block; color: #1a5276; font-size: 9px; margin-bottom: 2px; }
     .footer-bottom { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 9px; color: #1a5276; font-weight: 600; }
-    
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .page { margin: 0; box-shadow: none; }
-      .no-print { display: none !important; }
-    }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .page { margin: 0; box-shadow: none; } .no-print { display: none !important; } }
   </style>
 </head>
 <body>
   <div class="no-print" style="text-align:center;padding:15px;background:#1a5276;color:white;">
-    <button onclick="window.print()" style="background:#E91E63;color:white;border:none;padding:10px 30px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:10px;">
-      📥 Descargar / Imprimir PDF
-    </button>
-    <button onclick="window.close()" style="background:#555;color:white;border:none;padding:10px 20px;font-size:14px;border-radius:8px;cursor:pointer;">
-      Cerrar
-    </button>
+    <button onclick="window.print()" style="background:#E91E63;color:white;border:none;padding:10px 30px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:10px;">📥 Descargar / Imprimir PDF</button>
+    <button onclick="window.close()" style="background:#555;color:white;border:none;padding:10px 20px;font-size:14px;border-radius:8px;cursor:pointer;">Cerrar</button>
   </div>
-  
   <div class="page">
     <div class="deco-left"><div></div><div></div><div></div><div></div></div>
     <div class="deco-curve"></div>
-    
     <div class="content">
       <div class="header">
-        <div class="logo-area">
-          <div class="logo-text">
-            Colegio de<br>
-            <span class="green">Psicólogos</span><br>
-            <span class="sub">de Guatemala</span>
-          </div>
-        </div>
+        <div class="logo-area"><div class="logo-text">Colegio de<br><span class="green">Psicólogos</span><br><span class="sub">de Guatemala</span></div></div>
       </div>
-      
       <div class="title">APROBACIÓN DE AVAL</div>
-      
       <div class="date-line">Guatemala, ${formatApprovalDate(aval.approval_date)}</div>
-      
-      <div class="addressee">
-        Estimado(a) <span class="name">${aval.applicant_name || '—'}</span><br>
-        <span class="inst">${aval.institution || ''}</span>
-      </div>
-      
-      <div class="body-text">
-        Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.
-      </div>
-      
-      <div class="body-text">
-        Por medio de la presente carta se extiende la aprobación a su solicitud recibida el
-        <span class="highlight">${formatRequestDate(aval.created_at)}</span>, con el Aval 
-        <span class="highlight">${aval.correlativo || '—'}</span>. En resumen el Aval refleja la cobertura de:
-      </div>
-      
+      <div class="addressee">Estimado(a) <span class="name">${aval.applicant_name || '—'}</span><br><span class="inst">${aval.institution || ''}</span></div>
+      <div class="body-text">Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.</div>
+      <div class="body-text">Por medio de la presente carta se extiende la aprobación a su solicitud recibida el <span class="highlight">${formatRequestDate(aval.created_at)}</span>, con el Aval <span class="highlight">${aval.correlativo || '—'}</span>. En resumen el Aval refleja la cobertura de:</div>
       <div class="details">
         <div><span class="label">Actividad:</span> <span class="value">${aval.activity_type || '—'}</span></div>
         <div><span class="label">Duración:</span> <span class="value">${aval.duration || '—'}</span></div>
@@ -183,56 +146,18 @@ const generateApprovalLetterHTML = (aval) => {
         <div><span class="label">Tema:</span> <span class="value">${aval.topic || aval.activity_name || '—'}</span></div>
         <div><span class="label">Dirigido a:</span> <span class="value">${aval.target_audience || '—'}</span></div>
       </div>
-      
-      <div class="thanks">
-        Agradecemos y valoramos el trabajo y esfuerzo constante que implementa en la 
-        promoción del crecimiento continuo de los profesionales. Así mismo, solicitamos incluir el 
-        número de AVAL en el material correspondiente a la actividad aprobada.
-      </div>
-      
+      <div class="thanks">Agradecemos y valoramos el trabajo y esfuerzo constante que implementa en la promoción del crecimiento continuo de los profesionales. Así mismo, solicitamos incluir el número de AVAL en el material correspondiente a la actividad aprobada.</div>
       <div class="closing">Sin otro particular, nos despedimos.</div>
-      
       <div class="signatures">
-        <div class="sig-block">
-          <div class="sig-line">
-            <div class="sig-name">Dra. Rebecca Ramírez de Chajón</div>
-            <div class="sig-role">Coordinadora – CAEDUC</div>
-          </div>
-        </div>
-        <div class="sig-block">
-          <div class="sig-line">
-            <div class="sig-name">Mgtr. Luisa Mazariegos</div>
-            <div class="sig-role">Secretaria - CAEDUC</div>
-          </div>
-        </div>
+        <div class="sig-block"><div class="sig-line"><div class="sig-name">Dra. Rebecca Ramírez de Chajón</div><div class="sig-role">Coordinadora – CAEDUC</div></div></div>
+        <div class="sig-block"><div class="sig-line"><div class="sig-name">Mgtr. Luisa Mazariegos</div><div class="sig-role">Secretaria - CAEDUC</div></div></div>
       </div>
     </div>
-    
     <div class="footer">
-      <div class="footer-col">
-        <strong>Sede central</strong>
-        3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>
-        +(502) 2218 - 3400<br>
-        info@colegiodepsicologos.org.gt
-      </div>
-      <div class="footer-col">
-        <strong>Sub Sede Cobán</strong>
-        Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>
-        +(502) 7764-7109<br>
-        infocoban@colegiodepsicologos.org.gt
-      </div>
-      <div class="footer-col">
-        <strong>Sub Sede Zacapa</strong>
-        4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>
-        +(502) 7941-0587<br>
-        infozacapa@colegiodepsicologos.org.gt
-      </div>
-      <div class="footer-col">
-        <strong>Sub Sede Quetzaltenango</strong>
-        Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>
-        +(502) 7767-3314<br>
-        infoquetzaltenango@colegiodepsicologos.org.gt
-      </div>
+      <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>+(502) 2218 - 3400<br>info@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Cobán</strong>Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>+(502) 7764-7109<br>infocoban@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>+(502) 7941-0587<br>infozacapa@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>+(502) 7767-3314<br>infoquetzaltenango@colegiodepsicologos.org.gt</div>
     </div>
     <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
   </div>
@@ -245,6 +170,289 @@ const openApprovalLetter = (aval) => {
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
   else alert('Permite las ventanas emergentes para descargar la carta.');
+};
+
+
+// ==========================================
+// GENERAR OFICIO / SOLICITUD HTML
+// ==========================================
+const formatOficioDate = (dateStr) => {
+  if (!dateStr) return '—';
+  const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const d = new Date(dateStr + 'T12:00:00');
+  return `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
+};
+
+const generateOficioHTML = (oficio) => {
+  const isRecursos = oficio.motivo?.includes('recursos') || oficio.motivo?.includes('Aprobación');
+
+  // Build the body paragraphs
+  let cuerpoHTML = '';
+  if (oficio.cuerpo_personalizado) {
+    // If user provided custom text, use it (preserve line breaks)
+    cuerpoHTML = oficio.cuerpo_personalizado.split('\n').filter(l => l.trim()).map(p => 
+      `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">${p}</p>`
+    ).join('');
+  } else if (isRecursos && oficio.actividad_nombre) {
+    cuerpoHTML = `
+      <p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">
+        Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) solicita 
+        respetuosamente la aprobación y la asignación de recursos para realizar la ${oficio.actividad_tipo ? oficio.actividad_tipo.toLowerCase() : 'actividad'} ${oficio.actividad_modalidad ? oficio.actividad_modalidad.toLowerCase() : ''} 
+        titulada <strong>"${oficio.actividad_nombre}"</strong>.${oficio.actividad_descripcion ? ' ' + oficio.actividad_descripcion : ''}
+      </p>
+    `;
+  } else {
+    cuerpoHTML = `
+      <p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">
+        Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) se dirige a ustedes para: <strong>${oficio.motivo || '—'}</strong>.
+      </p>
+    `;
+  }
+
+  // Justification section (page 2 content integrated if present)
+  let justificacionHTML = '';
+  if (oficio.justificacion) {
+    justificacionHTML = `
+      <div style="margin-top:18px;">
+        <p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Justificación técnica y aporte gremial</p>
+        ${oficio.justificacion.split('\n').filter(l => l.trim()).map(p => 
+          `<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">${p}</p>`
+        ).join('')}
+      </div>
+    `;
+  }
+
+  // Activity details block
+  let detallesHTML = '';
+  if (oficio.actividad_nombre) {
+    detallesHTML = `
+      <div style="margin:14px 0;font-size:12.5px;line-height:2.2;">
+        ${oficio.actividad_tipo ? `<div><span style="font-weight:600;">Tipo de actividad:</span> ${oficio.actividad_tipo}</div>` : ''}
+        ${oficio.actividad_modalidad ? `<div><span style="font-weight:600;">Modalidad:</span> ${oficio.actividad_modalidad}</div>` : ''}
+        ${oficio.actividad_duracion ? `<div><span style="font-weight:600;">Duración estimada:</span> ${oficio.actividad_duracion}</div>` : ''}
+        ${oficio.actividad_fecha ? `<div><span style="font-weight:600;">Fecha de la actividad:</span> ${oficio.actividad_fecha}</div>` : ''}
+        ${oficio.actividad_sede ? `<div><span style="font-weight:600;">Sede / Plataforma:</span> ${oficio.actividad_sede}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // Resources block
+  let recursosHTML = '';
+  if (oficio.monto) {
+    recursosHTML = `
+      <div style="margin-top:18px;">
+        <p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Recursos solicitados</p>
+        <p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">
+          Honorarios del profesional invitado: <strong>${oficio.monto}</strong>${oficio.monto_detalle ? '. ' + oficio.monto_detalle : '.'}
+        </p>
+        <p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">
+          Pormenores logísticos esenciales: salón y audio, materiales de apoyo (digitales/impresos básicos), 
+          registro y control de asistencia, apoyo de protocolo y difusión institucional.
+        </p>
+      </div>
+    `;
+  }
+
+  // Solicitud puntual
+  let solicitudPuntualHTML = '';
+  if (oficio.solicitud_puntual) {
+    solicitudPuntualHTML = `
+      <div style="margin-top:18px;">
+        <p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Solicitud puntual a la Junta Directiva</p>
+        ${oficio.solicitud_puntual.split('\n').filter(l => l.trim()).map(p =>
+          `<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:8px;">• ${p}</p>`
+        ).join('')}
+      </div>
+    `;
+  }
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Oficio ${oficio.numero_oficio || ''}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
+    .page { width: 8.5in; min-height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+    
+    /* Decorative left bars */
+    .deco-left { position: absolute; left: 0; top: 200px; width: 18px; height: 300px; }
+    .deco-left div { width: 8px; margin-bottom: 4px; border-radius: 4px; }
+    .deco-left div:nth-child(1) { height: 60px; background: #E91E63; }
+    .deco-left div:nth-child(2) { height: 60px; background: #9C27B0; }
+    .deco-left div:nth-child(3) { height: 60px; background: #2196F3; }
+    .deco-left div:nth-child(4) { height: 60px; background: #4CAF50; }
+    
+    /* Decorative curves */
+    .deco-curve { position: absolute; right: 0; top: 0; width: 200px; height: 100%; overflow: hidden; pointer-events: none; opacity: 0.7; }
+    .deco-curve::before { content: ''; position: absolute; right: -100px; top: 100px; width: 300px; height: 300px; border-radius: 50%; border: 40px solid rgba(200,200,200,0.15); }
+    .deco-curve::after { content: ''; position: absolute; right: -50px; bottom: 150px; width: 250px; height: 250px; border-radius: 50%; border: 30px solid rgba(200,200,200,0.12); }
+    
+    .content { padding: 45px 65px 120px 65px; position: relative; z-index: 1; }
+    
+    .header { display: flex; justify-content: flex-start; align-items: flex-start; margin-bottom: 10px; }
+    .logo-text { font-size: 20px; font-weight: 800; color: #1a5276; line-height: 1.2; }
+    .logo-text .green { color: #27ae60; }
+    .logo-text .sub { font-size: 15px; font-weight: 600; }
+
+    .oficio-ref { text-align: right; font-size: 13px; color: #555; margin-bottom: 4px; }
+    .oficio-date { text-align: right; font-size: 13px; color: #555; margin-bottom: 25px; }
+
+    .addressee { margin-bottom: 20px; font-size: 13px; line-height: 1.7; }
+    .saludo { font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+
+    .firma-section { margin-top: 40px; text-align: center; }
+    .firma-line { font-size: 13px; font-weight: 600; margin-top: 4px; }
+    .firma-role { font-size: 12px; color: #555; }
+    .firma-inst { font-size: 12px; color: #555; }
+    
+    /* Sello visual */
+    .sello { 
+      display: inline-block; width: 90px; height: 90px; border: 3px solid #1a5276; border-radius: 50%; 
+      text-align: center; line-height: 1.1; padding: 12px 6px; font-size: 7.5px; font-weight: 700; 
+      color: #1a5276; margin-left: 20px; vertical-align: middle; position: relative;
+    }
+    .sello::before { content: ''; position: absolute; inset: 4px; border: 1.5px solid #1a5276; border-radius: 50%; }
+    .sello .sello-top { font-size: 6.5px; letter-spacing: 1.5px; text-transform: uppercase; display: block; margin-top: 8px; }
+    .sello .sello-mid { font-size: 7px; font-weight: 800; color: #E91E63; display: block; margin: 4px 0; }
+    .sello .sello-bot { font-size: 6px; letter-spacing: 1px; text-transform: uppercase; display: block; }
+
+    .cc { font-size: 11px; color: #777; margin-top: 15px; }
+
+    .footer { position: absolute; bottom: 0; left: 0; right: 0; border-top: 3px solid #E91E63; padding: 12px 30px 8px; display: flex; justify-content: space-between; font-size: 8px; color: #777; background: white; }
+    .footer-col { text-align: center; flex: 1; padding: 0 4px; }
+    .footer-col strong { display: block; color: #1a5276; font-size: 8.5px; margin-bottom: 2px; }
+    .footer-bottom { position: absolute; bottom: 3px; left: 0; right: 0; text-align: center; font-size: 8.5px; color: #1a5276; font-weight: 600; background: #E91E63; color: white; padding: 3px 0; }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page { margin: 0; box-shadow: none; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="text-align:center;padding:15px;background:#1a5276;color:white;position:sticky;top:0;z-index:99;">
+    <button onclick="window.print()" style="background:#E91E63;color:white;border:none;padding:10px 30px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:10px;">
+      📥 Descargar / Imprimir PDF
+    </button>
+    <button onclick="window.close()" style="background:#555;color:white;border:none;padding:10px 20px;font-size:14px;border-radius:8px;cursor:pointer;">
+      Cerrar
+    </button>
+  </div>
+  
+  <!-- PÁGINA 1: OFICIO -->
+  <div class="page">
+    <div class="deco-left"><div></div><div></div><div></div><div></div></div>
+    <div class="deco-curve"></div>
+    
+    <div class="content">
+      <div class="header">
+        <div class="logo-text">
+          Colegio de<br>
+          <span class="green">Psicólogos</span><br>
+          <span class="sub">de Guatemala</span>
+        </div>
+      </div>
+      
+      <div class="oficio-ref"><strong>${oficio.numero_oficio || 'Of. ___.CAEDUC'}</strong></div>
+      <div class="oficio-date">Guatemala ${formatOficioDate(oficio.fecha)}</div>
+      
+      <div class="addressee">
+        ${(oficio.dirigido_a || '').split(',').map(line => line.trim()).filter(Boolean).join('<br>')}
+        <br>Presente
+      </div>
+      
+      <div class="saludo">Honorables miembros de la Junta Directiva:</div>
+      
+      ${cuerpoHTML}
+      ${detallesHTML}
+      
+      <p style="font-size:13px;line-height:1.8;text-align:justify;margin-top:16px;">
+        Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.
+      </p>
+      
+      <p style="font-size:13px;margin-top:14px;">Sin otro particular, me suscribo.</p>
+      
+      <p style="font-size:13px;margin-top:20px;text-align:center;">Cordialmente,</p>
+      
+      <div class="firma-section">
+        <div style="display:inline-flex;align-items:center;gap:15px;margin-top:35px;">
+          <div style="text-align:center;">
+            <div style="width:220px;border-top:1px solid #333;padding-top:6px;">
+              <div class="firma-line">M.A Juan José Reyes Rodríguez</div>
+              <div class="firma-role">Coordinador</div>
+              <div class="firma-inst">Comisión de Acreditación Educación continua</div>
+              <div class="firma-inst">Colegio de Psicólogos de Guatemala</div>
+            </div>
+          </div>
+          <div class="sello">
+            <span class="sello-top">Colegio de Psicólogos</span>
+            <span class="sello-mid">COMISIÓN DE<br>ACREDITACIÓN<br>Y EDUCACIÓN<br>CONTINUA</span>
+            <span class="sello-bot">de Guatemala</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="cc">C.C: Archivo/ CAEDUC</div>
+    </div>
+    
+    <div class="footer">
+      <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>+(502) 2218 - 3400<br>info@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Cobán</strong>Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>+(502) 7764-7109<br>infocoban@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>+(502) 7941-0587<br>infozacapa@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>+(502) 7767-3314<br>infoquetzaltenango@colegiodepsicologos.org.gt</div>
+    </div>
+    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+  </div>
+  
+  ${(oficio.justificacion || oficio.solicitud_puntual || oficio.monto) ? `
+  <!-- PÁGINA 2: JUSTIFICACIÓN Y RECURSOS -->
+  <div class="page">
+    <div class="content" style="padding-top:50px;">
+      <div class="header">
+        <div class="logo-text" style="font-size:16px;">
+          Colegio de<br>
+          <span class="green">Psicólogos</span><br>
+          <span class="sub" style="font-size:13px;">de Guatemala</span>
+        </div>
+      </div>
+      
+      <h2 style="font-size:16px;font-weight:800;color:#1a5276;text-align:center;margin:20px 0 8px;">Justificación técnica y aporte gremial</h2>
+      <h3 style="font-size:14px;font-weight:700;color:#333;text-align:center;margin-bottom:25px;">${oficio.actividad_nombre || ''}</h3>
+      
+      ${justificacionHTML}
+      ${recursosHTML}
+      ${solicitudPuntualHTML}
+
+      <p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-top:20px;">
+        Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, 
+        perfil del ponente y cronograma operativo. Confiamos en que esta iniciativa fortalecerá la práctica 
+        profesional, elevará estándares de calidad y beneficiará directamente a nuestros colegiados y a la 
+        población a la que servimos.
+      </p>
+    </div>
+    <div class="footer">
+      <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>+(502) 2218 - 3400<br>info@colegiodepsicologos.org.gt</div>
+      <div class="footer-col"><strong>Sub Sede Cobán</strong>Centro Comercial Plaza Magdalena<br>+(502) 7764-7109</div>
+      <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div>
+      <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div>
+    </div>
+    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+  </div>
+  ` : ''}
+</body>
+</html>`;
+};
+
+const openOficioLetter = (oficio) => {
+  const html = generateOficioHTML(oficio);
+  const w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else alert('Permite las ventanas emergentes para ver el oficio.');
 };
 
 
@@ -280,7 +488,10 @@ const Badge = ({ status }) => {
     'Aprobado': 'bg-green-100 text-green-800',
     'Rechazado': 'bg-red-100 text-red-800',
     'Eliminado': 'bg-gray-200 text-gray-600',
-    'Finalizado': 'bg-gray-100 text-gray-800'
+    'Finalizado': 'bg-gray-100 text-gray-800',
+    'Borrador': 'bg-yellow-100 text-yellow-800',
+    'Enviado': 'bg-green-100 text-green-800',
+    'Archivado': 'bg-gray-200 text-gray-600'
   };
   return <span className={`px-2 py-1 rounded-full text-xs font-bold ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
 };
@@ -401,20 +612,13 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <BackButton onClick={onBack} />
-
-      {/* Descarga de formulario y reglamento */}
       <div className="grid gap-4 md:grid-cols-2">
         {formFileUrl && (
           <Card className="border-l-4 border-l-blue-500">
             <div className="flex items-center gap-3">
               <div className="bg-blue-100 p-3 rounded-lg shrink-0"><Download size={24} className="text-blue-600" /></div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-800">Formulario de Solicitud</p>
-                <p className="text-sm text-gray-500">Descarga, llena y adjunta.</p>
-              </div>
-              <a href={formFileUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shrink-0 text-sm">
-                <Download size={16} /> Descargar
-              </a>
+              <div className="flex-1"><p className="font-bold text-gray-800">Formulario de Solicitud</p><p className="text-sm text-gray-500">Descarga, llena y adjunta.</p></div>
+              <a href={formFileUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shrink-0 text-sm"><Download size={16} /> Descargar</a>
             </div>
           </Card>
         )}
@@ -422,84 +626,46 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
           <Card className="border-l-4 border-l-purple-500">
             <div className="flex items-center gap-3">
               <div className="bg-purple-100 p-3 rounded-lg shrink-0"><BookOpen size={24} className="text-purple-600" /></div>
-              <div className="flex-1">
-                <p className="font-bold text-gray-800">Reglamento de Avales</p>
-                <p className="text-sm text-gray-500">Consulta el reglamento vigente.</p>
-              </div>
-              <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 font-medium shrink-0 text-sm">
-                <Download size={16} /> Descargar
-              </a>
+              <div className="flex-1"><p className="font-bold text-gray-800">Reglamento de Avales</p><p className="text-sm text-gray-500">Consulta el reglamento vigente.</p></div>
+              <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 font-medium shrink-0 text-sm"><Download size={16} /> Descargar</a>
             </div>
           </Card>
         )}
       </div>
-
       <Card>
         <h2 className="text-xl font-bold mb-4">Solicitud de Aval</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Datos del solicitante */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Datos del Solicitante</h3>
             <input required placeholder="Nombre completo del Solicitante" className="w-full border p-2 rounded" value={data.applicantName} onChange={e => setData({...data, applicantName: e.target.value})} />
             <input required placeholder="Institución (o escriba 'Solicitud propia')" className="w-full border p-2 rounded" value={data.institution} onChange={e => setData({...data, institution: e.target.value})} />
             <input required type="email" placeholder="Email de Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data, email: e.target.value})} />
           </div>
-
-          {/* Datos de la actividad */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Datos de la Actividad</h3>
             <input required placeholder="Nombre / Tema de la Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e => setData({...data, activityName: e.target.value})} />
-            <input placeholder="Tema específico (ej: Psicología que escribe: 'Terapia Neurosensorial')" className="w-full border p-2 rounded" value={data.topic} onChange={e => setData({...data, topic: e.target.value})} />
+            <input placeholder="Tema específico" className="w-full border p-2 rounded" value={data.topic} onChange={e => setData({...data, topic: e.target.value})} />
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-bold mb-1">Tipo de Actividad *</label>
-                <select required className="w-full border p-2 rounded" value={data.activityType} onChange={e => setData({...data, activityType: e.target.value})}>
-                  <option value="">Seleccionar...</option>
-                  {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-bold mb-1">Modalidad *</label>
-                <select required className="w-full border p-2 rounded" value={data.modality} onChange={e => setData({...data, modality: e.target.value})}>
-                  <option value="">Seleccionar...</option>
-                  {MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
+              <div><label className="block text-sm font-bold mb-1">Tipo de Actividad *</label><select required className="w-full border p-2 rounded" value={data.activityType} onChange={e => setData({...data, activityType: e.target.value})}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+              <div><label className="block text-sm font-bold mb-1">Modalidad *</label><select required className="w-full border p-2 rounded" value={data.modality} onChange={e => setData({...data, modality: e.target.value})}><option value="">Seleccionar...</option>{MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-bold mb-1">Duración *</label>
-                <input required placeholder="Ej: 12 horas" className="w-full border p-2 rounded" value={data.duration} onChange={e => setData({...data, duration: e.target.value})} />
-              </div>
-              <div>
-                <label className="block text-sm font-bold mb-1">Fecha de la Actividad *</label>
-                <input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data, activityDate: e.target.value})} />
-              </div>
+              <div><label className="block text-sm font-bold mb-1">Duración *</label><input required placeholder="Ej: 12 horas" className="w-full border p-2 rounded" value={data.duration} onChange={e => setData({...data, duration: e.target.value})} /></div>
+              <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad *</label><input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data, activityDate: e.target.value})} /></div>
             </div>
-            <input required placeholder="Fecha y Hora específica (ej: 1er trimestre 2026 / 18:00 - 21:00 horas)" className="w-full border p-2 rounded" value={data.schedule} onChange={e => setData({...data, schedule: e.target.value})} />
-            <input required placeholder="Lugar o Plataforma (ej: Zoom, Auditorio Central, etc.)" className="w-full border p-2 rounded" value={data.platform} onChange={e => setData({...data, platform: e.target.value})} />
-            <input required placeholder="Dirigido a (ej: Graduados en Psicología Clínica y Educativa)" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e => setData({...data, targetAudience: e.target.value})} />
+            <input required placeholder="Fecha y Hora específica" className="w-full border p-2 rounded" value={data.schedule} onChange={e => setData({...data, schedule: e.target.value})} />
+            <input required placeholder="Lugar o Plataforma" className="w-full border p-2 rounded" value={data.platform} onChange={e => setData({...data, platform: e.target.value})} />
+            <input required placeholder="Dirigido a" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e => setData({...data, targetAudience: e.target.value})} />
           </div>
-
-          {/* Archivo adjunto */}
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Documento Adjunto</h3>
             <div>
               <label className="block text-sm font-bold mb-1">Formulario Lleno (adjuntar)</label>
-              <input type="file" accept=".pdf" onChange={e => {
-                const sel = e.target.files[0];
-                if (sel && sel.type !== 'application/pdf') { alert('Solo se admiten archivos en formato PDF.'); e.target.value = ''; setFile(null); return; }
-                setFile(sel);
-              }} className="w-full" />
-              <p className="text-red-600 font-black text-lg mt-2 leading-snug">
-                ⚠️ Solo se admiten archivos completos en formato PDF.
-              </p>
+              <input type="file" accept=".pdf" onChange={e => { const sel = e.target.files[0]; if (sel && sel.type !== 'application/pdf') { alert('Solo se admiten archivos en formato PDF.'); e.target.value = ''; setFile(null); return; } setFile(sel); }} className="w-full" />
+              <p className="text-red-600 font-black text-lg mt-2 leading-snug">⚠️ Solo se admiten archivos completos en formato PDF.</p>
             </div>
           </div>
-
-          <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 disabled:opacity-50">
-            {submitting ? 'Enviando...' : 'Enviar Solicitud'}
-          </button>
+          <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 disabled:opacity-50">{submitting ? 'Enviando...' : 'Enviar Solicitud'}</button>
         </form>
       </Card>
     </div>
@@ -519,15 +685,12 @@ const ConsultarEstadoView = ({ onBack }) => {
   const handleSearch = async (e) => {
     e.preventDefault();
     setSearching(true); setNotFound(false); setResult(null);
-    const { data, error } = await supabase.from('avales')
-      .select('*')
-      .eq('request_number', parseInt(requestNum)).single();
+    const { data, error } = await supabase.from('avales').select('*').eq('request_number', parseInt(requestNum)).single();
     if (error || !data) setNotFound(true);
     else if (data.is_deleted) setResult({ ...data, status: 'Eliminado' });
     else setResult(data);
     setSearching(false);
   };
-
   const handleReset = () => { setResult(null); setNotFound(false); setRequestNum(''); };
 
   return (
@@ -535,97 +698,40 @@ const ConsultarEstadoView = ({ onBack }) => {
       <BackButton onClick={onBack} />
       <Card className="border-t-4 border-t-blue-500">
         <div className="space-y-4">
-          <div className="text-center">
-            <Search size={40} className="text-blue-600 mx-auto mb-2" />
-            <h2 className="text-2xl font-bold text-gray-800">Consultar Estado de Solicitud</h2>
-            <p className="text-gray-500 text-sm">Ingresa el número de solicitud que recibiste.</p>
-          </div>
-
+          <div className="text-center"><Search size={40} className="text-blue-600 mx-auto mb-2" /><h2 className="text-2xl font-bold text-gray-800">Consultar Estado de Solicitud</h2><p className="text-gray-500 text-sm">Ingresa el número de solicitud que recibiste.</p></div>
           {!result && !notFound && (
             <form onSubmit={handleSearch} className="space-y-4">
-              <div className="relative">
-                <Hash size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input required type="number" min="1" placeholder="Número de solicitud" className="w-full border p-3 pl-10 rounded-lg text-lg" value={requestNum} onChange={e => setRequestNum(e.target.value)} />
-              </div>
-              <button type="submit" disabled={searching} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">
-                {searching ? 'Buscando...' : 'Consultar'}
-              </button>
+              <div className="relative"><Hash size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input required type="number" min="1" placeholder="Número de solicitud" className="w-full border p-3 pl-10 rounded-lg text-lg" value={requestNum} onChange={e => setRequestNum(e.target.value)} /></div>
+              <button type="submit" disabled={searching} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{searching ? 'Buscando...' : 'Consultar'}</button>
             </form>
           )}
-
           {notFound && (
             <div className="text-center space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <AlertCircle size={32} className="text-red-500 mx-auto mb-2" />
-                <p className="text-red-700 font-medium">No se encontró solicitud #{requestNum}</p>
-                <p className="text-red-500 text-sm">Verifica que el número sea correcto.</p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button>
-                <button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button>
-              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2" /><p className="text-red-700 font-medium">No se encontró solicitud #{requestNum}</p></div>
+              <div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div>
             </div>
           )}
-
           {result && (
             <div className="space-y-4">
               <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Solicitud</span>
-                  <span className="font-bold text-lg">#{result.request_number}</span>
-                </div>
+                <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Solicitud</span><span className="font-bold text-lg">#{result.request_number}</span></div>
                 <div className="border-t pt-3 space-y-2">
                   <div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div>
                   <div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div>
                   <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div>
                   <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div>
                 </div>
-
-                {/* Si fue APROBADO: mostrar correlativo y botón de descarga */}
                 {result.status === 'Aprobado' && (
                   <div className="border-t pt-3 space-y-3">
-                    {result.correlativo && (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                        <p className="text-sm text-green-600 font-medium">Número de Aval (Correlativo)</p>
-                        <p className="text-2xl font-black text-green-700">{result.correlativo}</p>
-                      </div>
-                    )}
-                    {result.approval_reason && (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                        <p className="text-sm text-green-600 font-medium">Observaciones:</p>
-                        <p className="text-green-800 text-sm">{result.approval_reason}</p>
-                      </div>
-                    )}
-                    <button onClick={() => openApprovalLetter(result)}
-                      className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2">
-                      <FileDown size={20} /> Descargar Carta de Aprobación de Aval
-                    </button>
+                    {result.correlativo && (<div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval (Correlativo)</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div>)}
+                    {result.approval_reason && (<div className="bg-green-50 border border-green-200 rounded-lg p-3"><p className="text-sm text-green-600 font-medium">Observaciones:</p><p className="text-green-800 text-sm">{result.approval_reason}</p></div>)}
+                    <button onClick={() => openApprovalLetter(result)} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={20} /> Descargar Carta de Aprobación de Aval</button>
                   </div>
                 )}
-
-                {/* Si fue RECHAZADO: mostrar razón */}
-                {result.status === 'Rechazado' && result.approval_reason && (
-                  <div className="border-t pt-3">
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p>
-                      <p className="text-red-800 text-sm">{result.approval_reason}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Si fue ELIMINADO */}
-                {result.status === 'Eliminado' && (
-                  <div className="border-t pt-3">
-                    <div className="bg-gray-100 border border-gray-300 rounded-lg p-3">
-                      <p className="text-sm text-gray-600 font-medium">Esta solicitud fue eliminada.</p>
-                    </div>
-                  </div>
-                )}
+                {result.status === 'Rechazado' && result.approval_reason && (<div className="border-t pt-3"><div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p><p className="text-red-800 text-sm">{result.approval_reason}</p></div></div>)}
+                {result.status === 'Eliminado' && (<div className="border-t pt-3"><div className="bg-gray-100 border border-gray-300 rounded-lg p-3"><p className="text-sm text-gray-600 font-medium">Esta solicitud fue eliminada.</p></div></div>)}
               </div>
-              <div className="flex gap-3">
-                <button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button>
-                <button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button>
-              </div>
+              <div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div>
             </div>
           )}
         </div>
@@ -646,14 +752,11 @@ const VerificarAvalView = ({ onBack }) => {
   const handleSearch = async (e) => {
     e.preventDefault();
     setSearching(true); setNotFound(false); setResult(null);
-    const { data, error } = await supabase.from('avales')
-      .select('*')
-      .eq('correlativo', correlativo.trim()).eq('is_deleted', false).single();
+    const { data, error } = await supabase.from('avales').select('*').eq('correlativo', correlativo.trim()).eq('is_deleted', false).single();
     if (error || !data) setNotFound(true);
     else setResult(data);
     setSearching(false);
   };
-
   const handleReset = () => { setResult(null); setNotFound(false); setCorrelativo(''); };
 
   return (
@@ -661,48 +764,22 @@ const VerificarAvalView = ({ onBack }) => {
       <BackButton onClick={onBack} />
       <Card className="border-t-4 border-t-indigo-500">
         <div className="space-y-4">
-          <div className="text-center">
-            <Shield size={40} className="text-indigo-600 mx-auto mb-2" />
-            <h2 className="text-2xl font-bold text-gray-800">Verificar Validez de Aval</h2>
-            <p className="text-gray-500 text-sm">Ingresa el número de correlativo del aval para verificar su validez.</p>
-          </div>
-
+          <div className="text-center"><Shield size={40} className="text-indigo-600 mx-auto mb-2" /><h2 className="text-2xl font-bold text-gray-800">Verificar Validez de Aval</h2><p className="text-gray-500 text-sm">Ingresa el número de correlativo del aval.</p></div>
           {!result && !notFound && (
             <form onSubmit={handleSearch} className="space-y-4">
               <input required placeholder="Número de correlativo del aval" className="w-full border p-3 rounded-lg text-lg text-center" value={correlativo} onChange={e => setCorrelativo(e.target.value)} />
-              <button type="submit" disabled={searching} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">
-                {searching ? 'Verificando...' : 'Verificar Aval'}
-              </button>
+              <button type="submit" disabled={searching} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">{searching ? 'Verificando...' : 'Verificar Aval'}</button>
             </form>
           )}
-
           {notFound && (
             <div className="text-center space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <AlertCircle size={32} className="text-red-500 mx-auto mb-2" />
-                <p className="text-red-700 font-medium">No se encontró un aval válido con correlativo: {correlativo}</p>
-                <p className="text-red-500 text-sm">Verifica el número o contacta a la comisión.</p>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button>
-                <button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button>
-              </div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2" /><p className="text-red-700 font-medium">No se encontró un aval válido con correlativo: {correlativo}</p></div>
+              <div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div>
             </div>
           )}
-
           {result && (
             <div className="space-y-4">
-              {result.status === 'Aprobado' ? (
-                <div className="bg-green-50 border border-green-300 rounded-lg p-4 text-center">
-                  <CheckCircle size={40} className="text-green-600 mx-auto mb-2" />
-                  <p className="text-green-800 font-bold text-lg">Aval Válido ✓</p>
-                </div>
-              ) : (
-                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-center">
-                  <AlertTriangle size={40} className="text-yellow-600 mx-auto mb-2" />
-                  <p className="text-yellow-800 font-bold text-lg">Aval en estado: {result.status}</p>
-                </div>
-              )}
+              {result.status === 'Aprobado' ? (<div className="bg-green-50 border border-green-300 rounded-lg p-4 text-center"><CheckCircle size={40} className="text-green-600 mx-auto mb-2" /><p className="text-green-800 font-bold text-lg">Aval Válido ✓</p></div>) : (<div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-center"><AlertTriangle size={40} className="text-yellow-600 mx-auto mb-2" /><p className="text-yellow-800 font-bold text-lg">Aval en estado: {result.status}</p></div>)}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Correlativo</span><span className="font-bold">{result.correlativo}</span></div>
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div>
@@ -710,14 +787,348 @@ const VerificarAvalView = ({ onBack }) => {
                 <div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div>
                 <div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div>
               </div>
-              <div className="flex gap-3">
-                <button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button>
-                <button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button>
-              </div>
+              <div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div>
             </div>
           )}
         </div>
       </Card>
+    </div>
+  );
+};
+
+
+// ==========================================
+// ADMIN: OFICIOS / SOLICITUDES INTERNAS
+// ==========================================
+const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOficio }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [editingOficio, setEditingOficio] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleNew = () => { setEditingOficio(null); setShowForm(true); };
+  const handleEdit = (o) => { setEditingOficio(o); setShowForm(true); };
+
+  const handleSave = async (data) => {
+    if (editingOficio) {
+      await onUpdateOficio(editingOficio.id, data);
+    } else {
+      await onCreateOficio(data);
+    }
+    setShowForm(false);
+    setEditingOficio(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteModal) return;
+    setDeleting(true);
+    await onDeleteOficio(deleteModal.id);
+    setDeleteModal(null);
+    setDeleting(false);
+  };
+
+  const handleStatusChange = async (oficio, newStatus) => {
+    await onUpdateOficio(oficio.id, { ...oficio, estado: newStatus });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2>
+          <p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p>
+        </div>
+        <button onClick={handleNew} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium shadow-sm">
+          <FilePlus size={20} /> Nuevo Oficio
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{oficios.length}</p><p className="text-sm text-gray-500">Total Oficios</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-yellow-600">{oficios.filter(o => o.estado === 'Borrador').length}</p><p className="text-sm text-gray-500">Borradores</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{oficios.filter(o => o.estado === 'Enviado').length}</p><p className="text-sm text-gray-500">Enviados</p></div></Card>
+      </div>
+
+      {/* List */}
+      <div className="space-y-3">
+        {oficios.map(o => (
+          <Card key={o.id} className="hover:shadow-lg transition-shadow">
+            <div className="flex justify-between items-start gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-lg text-gray-800">{o.numero_oficio}</h3>
+                  <Badge status={o.estado} />
+                </div>
+                <p className="text-gray-600 mt-1">{o.motivo}</p>
+                {o.actividad_nombre && <p className="text-sm text-blue-600 font-medium mt-0.5">Actividad: {o.actividad_nombre}</p>}
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12} /> {o.fecha}</span>
+                  <span className="text-xs text-gray-400">Dirigido a: {(o.dirigido_a || '').substring(0, 50)}...</span>
+                  {o.monto && <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium">{o.monto}</span>}
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <button onClick={() => openOficioLetter(o)} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
+                  <Eye size={14} /> Ver / Descargar
+                </button>
+                <button onClick={() => handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium">
+                  <Edit3 size={14} /> Editar
+                </button>
+                <div className="flex gap-1">
+                  {o.estado === 'Borrador' && (
+                    <button onClick={() => handleStatusChange(o, 'Enviado')} className="bg-green-50 text-green-600 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1">
+                      <Send size={12} /> Marcar Enviado
+                    </button>
+                  )}
+                  {o.estado === 'Enviado' && (
+                    <button onClick={() => handleStatusChange(o, 'Archivado')} className="bg-gray-50 text-gray-500 px-2 py-1 rounded text-xs hover:bg-gray-100 flex items-center gap-1">
+                      <Archive size={12} /> Archivar
+                    </button>
+                  )}
+                  <button onClick={() => setDeleteModal(o)} className="bg-red-50 text-red-500 px-2 py-1 rounded text-xs hover:bg-red-100 flex items-center gap-1">
+                    <Trash2 size={12} /> Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+        {oficios.length === 0 && (
+          <div className="text-center py-16">
+            <FileSignature size={48} className="text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-400 text-lg">No hay oficios generados aún.</p>
+            <p className="text-gray-400 text-sm">Haz clic en "Nuevo Oficio" para crear el primero.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Form Modal */}
+      {showForm && (
+        <OficioFormModal
+          isOpen={showForm}
+          onClose={() => { setShowForm(false); setEditingOficio(null); }}
+          onSave={handleSave}
+          initialData={editingOficio}
+          existingCount={oficios.length}
+        />
+      )}
+
+      {/* Delete Modal */}
+      <Modal isOpen={!!deleteModal} onClose={() => setDeleteModal(null)} title="Eliminar Oficio" size="sm">
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-700 font-medium">¿Seguro que deseas eliminar el oficio "{deleteModal?.numero_oficio}"?</p>
+            <p className="text-red-500 text-sm mt-1">Esta acción no se puede deshacer.</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Cancelar</button>
+            <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting ? 'Eliminando...' : 'Eliminar'}</button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
+
+// ==========================================
+// FORMULARIO CREAR/EDITAR OFICIO
+// ==========================================
+const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount }) => {
+  const today = new Date().toISOString().split('T')[0];
+  const suggestedNum = `Of. ${String((existingCount || 0) + 1).padStart(3, '0')}.CAEDUC`;
+
+  const [step, setStep] = useState(1); // 1=form, 2=preview/edit
+  const [saving, setSaving] = useState(false);
+  const [data, setData] = useState({
+    numero_oficio: initialData?.numero_oficio || suggestedNum,
+    fecha: initialData?.fecha || today,
+    dirigido_a: initialData?.dirigido_a || 'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala',
+    motivo: initialData?.motivo || MOTIVOS_OFICIO[0],
+    motivo_custom: '',
+    actividad_nombre: initialData?.actividad_nombre || '',
+    actividad_tipo: initialData?.actividad_tipo || '',
+    actividad_fecha: initialData?.actividad_fecha || '',
+    actividad_duracion: initialData?.actividad_duracion || '',
+    actividad_modalidad: initialData?.actividad_modalidad || '',
+    actividad_sede: initialData?.actividad_sede || '',
+    actividad_descripcion: initialData?.actividad_descripcion || '',
+    monto: initialData?.monto || '',
+    monto_detalle: initialData?.monto_detalle || '',
+    justificacion: initialData?.justificacion || '',
+    solicitud_puntual: initialData?.solicitud_puntual || '',
+    cuerpo_personalizado: initialData?.cuerpo_personalizado || '',
+    estado: initialData?.estado || 'Borrador'
+  });
+
+  const isRecursos = data.motivo.includes('recursos') || data.motivo.includes('Aprobación');
+  const isCustomMotivo = data.motivo === 'Otro (personalizado)';
+
+  const handlePreview = (e) => {
+    e.preventDefault();
+    setStep(2);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const saveData = { ...data };
+    if (isCustomMotivo && data.motivo_custom) saveData.motivo = data.motivo_custom;
+    delete saveData.motivo_custom;
+    await onSave(saveData);
+    setSaving(false);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
+        <div className="flex justify-between items-center p-6 border-b">
+          <div>
+            <h3 className="text-xl font-bold text-gray-800">{initialData ? 'Editar Oficio' : 'Nuevo Oficio'}</h3>
+            <p className="text-sm text-gray-500">{step === 1 ? 'Paso 1: Datos del oficio' : 'Paso 2: Vista previa y edición'}</p>
+          </div>
+          <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
+        </div>
+
+        <div className="p-6 max-h-[80vh] overflow-y-auto">
+          {step === 1 && (
+            <form onSubmit={handlePreview} className="space-y-5">
+
+              {/* Encabezado del oficio */}
+              <div className="bg-blue-50 rounded-lg p-4 space-y-3 border border-blue-100">
+                <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide flex items-center gap-2"><FileSignature size={16} /> Encabezado del Oficio</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-bold mb-1">Número de Oficio *</label>
+                    <input required className="w-full border p-2.5 rounded-lg" value={data.numero_oficio} onChange={e => setData({...data, numero_oficio: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold mb-1">Fecha del Oficio *</label>
+                    <input required type="date" className="w-full border p-2.5 rounded-lg" value={data.fecha} onChange={e => setData({...data, fecha: e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-1">Dirigido a *</label>
+                  <textarea required rows={2} className="w-full border p-2.5 rounded-lg" value={data.dirigido_a} onChange={e => setData({...data, dirigido_a: e.target.value})} placeholder="Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala" />
+                  <p className="text-xs text-gray-400 mt-1">Cada línea separada por coma se mostrará en línea separada.</p>
+                </div>
+              </div>
+
+              {/* Motivo */}
+              <div className="bg-amber-50 rounded-lg p-4 space-y-3 border border-amber-100">
+                <h4 className="font-bold text-amber-800 text-sm uppercase tracking-wide">Motivo del Oficio</h4>
+                <select required className="w-full border p-2.5 rounded-lg font-medium" value={data.motivo} onChange={e => setData({...data, motivo: e.target.value})}>
+                  {MOTIVOS_OFICIO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                {isCustomMotivo && (
+                  <input required placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg" value={data.motivo_custom} onChange={e => setData({...data, motivo_custom: e.target.value})} />
+                )}
+              </div>
+
+              {/* Datos de actividad (si aplica) */}
+              {isRecursos && (
+                <div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
+                  <h4 className="font-bold text-green-800 text-sm uppercase tracking-wide flex items-center gap-2"><Calendar size={16} /> Datos de la Actividad</h4>
+                  <input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={data.actividad_nombre} onChange={e => setData({...data, actividad_nombre: e.target.value})} />
+                  <textarea rows={3} placeholder="Descripción de la actividad (objetivos, temas, propuesta...)" className="w-full border p-2.5 rounded-lg" value={data.actividad_descripcion} onChange={e => setData({...data, actividad_descripcion: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-sm font-bold mb-1">Tipo de Actividad</label><select className="w-full border p-2.5 rounded-lg" value={data.actividad_tipo} onChange={e => setData({...data, actividad_tipo: e.target.value})}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                    <div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={data.actividad_modalidad} onChange={e => setData({...data, actividad_modalidad: e.target.value})}><option value="">Seleccionar...</option>{MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={data.actividad_duracion} onChange={e => setData({...data, actividad_duracion: e.target.value})} /></div>
+                    <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad</label><input placeholder="Ej: 29 de octubre del presente año" className="w-full border p-2.5 rounded-lg" value={data.actividad_fecha} onChange={e => setData({...data, actividad_fecha: e.target.value})} /></div>
+                  </div>
+                  <input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={data.actividad_sede} onChange={e => setData({...data, actividad_sede: e.target.value})} />
+                </div>
+              )}
+
+              {/* Monto (si es solicitud de recursos) */}
+              {isRecursos && (
+                <div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100">
+                  <h4 className="font-bold text-rose-800 text-sm uppercase tracking-wide">Recursos Solicitados</h4>
+                  <input placeholder="Monto solicitado (ej: US$400 o Q3,000.00) *" className="w-full border p-2.5 rounded-lg" value={data.monto} onChange={e => setData({...data, monto: e.target.value})} />
+                  <textarea rows={2} placeholder="Detalle de recursos (ej: cuatrocientos dólares, o su equivalente en quetzales al tipo de cambio vigente)" className="w-full border p-2.5 rounded-lg" value={data.monto_detalle} onChange={e => setData({...data, monto_detalle: e.target.value})} />
+                </div>
+              )}
+
+              {/* Justificación */}
+              <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
+                <h4 className="font-bold text-purple-800 text-sm uppercase tracking-wide">Justificación Técnica (opcional, genera página 2)</h4>
+                <textarea rows={4} placeholder="Justificación técnica y aporte gremial. Si completas esta sección, se generará una segunda página con la justificación detallada." className="w-full border p-2.5 rounded-lg" value={data.justificacion} onChange={e => setData({...data, justificacion: e.target.value})} />
+              </div>
+
+              {/* Solicitud puntual */}
+              <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100">
+                <h4 className="font-bold text-indigo-800 text-sm uppercase tracking-wide">Solicitud Puntual a la Junta (opcional)</h4>
+                <textarea rows={3} placeholder="Escribe cada punto en una línea separada. Ej:&#10;Aprobación de la actividad&#10;Autorización para contratación del profesional&#10;Asignación presupuestaria de US$400" className="w-full border p-2.5 rounded-lg" value={data.solicitud_puntual} onChange={e => setData({...data, solicitud_puntual: e.target.value})} />
+              </div>
+
+              {/* Cuerpo personalizado */}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
+                <h4 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Cuerpo Personalizado (opcional)</h4>
+                <p className="text-xs text-gray-500">Si deseas redactar manualmente el cuerpo del oficio (reemplaza el texto generado automáticamente):</p>
+                <textarea rows={4} placeholder="Déjalo vacío para usar el texto generado automáticamente según los datos de arriba..." className="w-full border p-2.5 rounded-lg" value={data.cuerpo_personalizado} onChange={e => setData({...data, cuerpo_personalizado: e.target.value})} />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200">Cancelar</button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
+                  <Eye size={18} /> Vista Previa del Oficio →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-4">
+              {/* Preview info */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800 font-medium text-sm">Vista previa del oficio. Puedes volver atrás para editar cualquier campo, o guardar y descargar directamente.</p>
+              </div>
+
+              {/* Mini preview card */}
+              <div className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 space-y-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-lg text-gray-800">{data.numero_oficio}</p>
+                    <p className="text-sm text-gray-500">Guatemala {formatOficioDate(data.fecha)}</p>
+                  </div>
+                  <Badge status={data.estado} />
+                </div>
+                <div className="border-t pt-2 space-y-1 text-sm">
+                  <p><span className="font-semibold text-gray-600">Dirigido a:</span> {data.dirigido_a}</p>
+                  <p><span className="font-semibold text-gray-600">Motivo:</span> {data.motivo === 'Otro (personalizado)' ? data.motivo_custom : data.motivo}</p>
+                  {data.actividad_nombre && <p><span className="font-semibold text-gray-600">Actividad:</span> {data.actividad_nombre}</p>}
+                  {data.monto && <p><span className="font-semibold text-gray-600">Monto:</span> {data.monto}</p>}
+                  {data.actividad_fecha && <p><span className="font-semibold text-gray-600">Fecha actividad:</span> {data.actividad_fecha}</p>}
+                  {data.justificacion && <p className="text-xs text-purple-600">✓ Incluye justificación técnica (página 2)</p>}
+                  {data.solicitud_puntual && <p className="text-xs text-indigo-600">✓ Incluye solicitud puntual a la Junta</p>}
+                </div>
+                <p className="text-xs text-gray-400 pt-1">Firma: M.A Juan José Reyes Rodríguez — Coordinador CAEDUC + Sello</p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setStep(1)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2">
+                  <ArrowLeft size={18} /> Volver a Editar
+                </button>
+                <button onClick={() => {
+                  const previewData = { ...data };
+                  if (data.motivo === 'Otro (personalizado)' && data.motivo_custom) previewData.motivo = data.motivo_custom;
+                  openOficioLetter(previewData);
+                }} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
+                  <Eye size={18} /> Ver Oficio Completo
+                </button>
+                <button onClick={handleSave} disabled={saving} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                  <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Oficio'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -777,19 +1188,10 @@ const AdminUsersTab = ({ members, onUpdateMember }) => {
     setCreating(false);
   };
 
-  const openEdit = (m) => {
-    setEditData({ id: m.id, name: m.name || '', role: m.role || ROLES[0], email: m.email || '' });
-    setEditModal(true);
-    setMsg(null);
-  };
-
+  const openEdit = (m) => { setEditData({ id: m.id, name: m.name || '', role: m.role || ROLES[0], email: m.email || '' }); setEditModal(true); setMsg(null); };
   const handleEdit = async (e) => {
     e.preventDefault(); setSaving(true); setMsg(null);
-    try {
-      await onUpdateMember(editData.id, { name: editData.name, role: editData.role, email: editData.email });
-      setMsg({ type: 'success', text: 'Usuario actualizado.' });
-      setEditModal(null);
-    } catch (err) { setMsg({ type: 'error', text: err.message }); }
+    try { await onUpdateMember(editData.id, { name: editData.name, role: editData.role, email: editData.email }); setMsg({ type: 'success', text: 'Usuario actualizado.' }); setEditModal(null); } catch (err) { setMsg({ type: 'error', text: err.message }); }
     setSaving(false);
   };
 
@@ -810,44 +1212,26 @@ const AdminUsersTab = ({ members, onUpdateMember }) => {
               </div>
               <div className="flex items-center gap-2">
                 <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">{m.role || 'Sin rol'}</span>
-                <button onClick={() => openEdit(m)} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
-                  <Edit3 size={14} /> Editar
-                </button>
+                <button onClick={() => openEdit(m)} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Edit3 size={14} /> Editar</button>
               </div>
             </div>
           </Card>
         )) : <div className="text-gray-400 text-center py-8">No hay miembros.</div>}
       </div>
-
-      {/* Modal Crear */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Crear Usuario" size="sm">
         <form onSubmit={handleCreate} className="space-y-4">
           <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
           <input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
-          <div className="relative">
-            <input required type={showPw ? 'text' : 'password'} placeholder="Contraseña (min 6)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
-            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <EyeOff size={18} /> : <Eye size={18} />}</button>
-          </div>
+          <div className="relative"><input required type={showPw ? 'text' : 'password'} placeholder="Contraseña (min 6)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} /><button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
           <select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select>
           <button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating ? 'Creando...' : 'Crear'}</button>
         </form>
       </Modal>
-
-      {/* Modal Editar */}
       <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title="Editar Usuario" size="sm">
         <form onSubmit={handleEdit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-bold mb-1">Nombre completo</label>
-            <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Email</label>
-            <input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Rol</label>
-            <select className="w-full border p-2.5 rounded-lg" value={editData.role} onChange={e => setEditData({...editData, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select>
-          </div>
+          <div><label className="block text-sm font-bold mb-1">Nombre completo</label><input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} /></div>
+          <div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} /></div>
+          <div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role} onChange={e => setEditData({...editData, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select></div>
           <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar Cambios'}</button>
         </form>
       </Modal>
@@ -860,26 +1244,8 @@ const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
   const [msg, setMsg] = useState(null);
   const fp = appSettings?.aval_form_file_path || '';
   const fUrl = fp ? `${supabaseUrl}/storage/v1/object/public/aval-form-template/${fp}` : null;
-
-  const handleUpload = async (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    setUploading(true); setMsg(null);
-    try {
-      const fn = `formulario_aval_${Date.now()}.${f.name.split('.').pop()}`;
-      if (fp) await supabase.storage.from('aval-form-template').remove([fp]);
-      const { data, error } = await supabase.storage.from('aval-form-template').upload(fn, f, { upsert: true });
-      if (error) { setMsg({ type: 'error', text: error.message }); } else { await onUpdateSetting('aval_form_file_path', data.path); setMsg({ type: 'success', text: 'Archivo subido.' }); }
-    } catch (err) { setMsg({ type: 'error', text: err.message }); }
-    setUploading(false);
-  };
-
-  const handleRemove = async () => {
-    if (!fp || !confirm('¿Eliminar?')) return;
-    await supabase.storage.from('aval-form-template').remove([fp]);
-    await onUpdateSetting('aval_form_file_path', '');
-    setMsg({ type: 'success', text: 'Eliminado.' });
-  };
-
+  const handleUpload = async (e) => { const f = e.target.files[0]; if (!f) return; setUploading(true); setMsg(null); try { const fn = `formulario_aval_${Date.now()}.${f.name.split('.').pop()}`; if (fp) await supabase.storage.from('aval-form-template').remove([fp]); const { data, error } = await supabase.storage.from('aval-form-template').upload(fn, f, { upsert: true }); if (error) { setMsg({ type: 'error', text: error.message }); } else { await onUpdateSetting('aval_form_file_path', data.path); setMsg({ type: 'success', text: 'Archivo subido.' }); } } catch (err) { setMsg({ type: 'error', text: err.message }); } setUploading(false); };
+  const handleRemove = async () => { if (!fp || !confirm('¿Eliminar?')) return; await supabase.storage.from('aval-form-template').remove([fp]); await onUpdateSetting('aval_form_file_path', ''); setMsg({ type: 'success', text: 'Eliminado.' }); };
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-bold text-gray-700">Formulario de Solicitud de Aval</h3>
@@ -887,60 +1253,22 @@ const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
       <Card>
         {fUrl ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <FileText size={24} className="text-green-600 shrink-0" />
-              <div className="flex-1 min-w-0"><p className="font-medium text-green-800">Archivo activo</p></div>
-              <a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700"><Download size={14} className="inline mr-1" />Ver</a>
-              <button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button>
-            </div>
-            <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50">
-              <Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar'}</span>
-              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" />
-            </label>
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"><FileText size={24} className="text-green-600 shrink-0" /><div className="flex-1 min-w-0"><p className="font-medium text-green-800">Archivo activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700"><Download size={14} className="inline mr-1" />Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button></div>
+            <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50"><Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" /></label>
           </div>
-        ) : (
-          <div className="text-center space-y-4">
-            <Upload size={28} className="text-gray-400 mx-auto" />
-            <p className="font-medium text-gray-700">No hay formulario cargado</p>
-            <label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium">
-              <Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Formulario'}
-              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" />
-            </label>
-          </div>
-        )}
+        ) : (<div className="text-center space-y-4"><Upload size={28} className="text-gray-400 mx-auto" /><p className="font-medium text-gray-700">No hay formulario cargado</p><label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium"><Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Formulario'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" /></label></div>)}
       </Card>
     </div>
   );
 };
 
-// ==========================================
-// ADMIN: REGLAMENTO DE AVALES
-// ==========================================
 const AdminReglamentoTab = ({ appSettings, onUpdateSetting }) => {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState(null);
   const fp = appSettings?.reglamento_file_path || '';
   const fUrl = fp ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${fp}` : null;
-
-  const handleUpload = async (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    setUploading(true); setMsg(null);
-    try {
-      const fn = `reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`;
-      if (fp) await supabase.storage.from('reglamento-avales').remove([fp]);
-      const { data, error } = await supabase.storage.from('reglamento-avales').upload(fn, f, { upsert: true });
-      if (error) { setMsg({ type: 'error', text: error.message }); } else { await onUpdateSetting('reglamento_file_path', data.path); setMsg({ type: 'success', text: 'Reglamento subido correctamente.' }); }
-    } catch (err) { setMsg({ type: 'error', text: err.message }); }
-    setUploading(false);
-  };
-
-  const handleRemove = async () => {
-    if (!fp || !confirm('¿Eliminar el reglamento?')) return;
-    await supabase.storage.from('reglamento-avales').remove([fp]);
-    await onUpdateSetting('reglamento_file_path', '');
-    setMsg({ type: 'success', text: 'Reglamento eliminado.' });
-  };
-
+  const handleUpload = async (e) => { const f = e.target.files[0]; if (!f) return; setUploading(true); setMsg(null); try { const fn = `reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`; if (fp) await supabase.storage.from('reglamento-avales').remove([fp]); const { data, error } = await supabase.storage.from('reglamento-avales').upload(fn, f, { upsert: true }); if (error) { setMsg({ type: 'error', text: error.message }); } else { await onUpdateSetting('reglamento_file_path', data.path); setMsg({ type: 'success', text: 'Reglamento subido correctamente.' }); } } catch (err) { setMsg({ type: 'error', text: err.message }); } setUploading(false); };
+  const handleRemove = async () => { if (!fp || !confirm('¿Eliminar el reglamento?')) return; await supabase.storage.from('reglamento-avales').remove([fp]); await onUpdateSetting('reglamento_file_path', ''); setMsg({ type: 'success', text: 'Reglamento eliminado.' }); };
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-bold text-gray-700">Reglamento de Avales</h3>
@@ -949,27 +1277,10 @@ const AdminReglamentoTab = ({ appSettings, onUpdateSetting }) => {
       <Card>
         {fUrl ? (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <BookOpen size={24} className="text-purple-600 shrink-0" />
-              <div className="flex-1 min-w-0"><p className="font-medium text-purple-800">Reglamento activo</p></div>
-              <a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700"><Download size={14} className="inline mr-1" />Ver</a>
-              <button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button>
-            </div>
-            <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50">
-              <Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar reglamento'}</span>
-              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" />
-            </label>
+            <div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg"><BookOpen size={24} className="text-purple-600 shrink-0" /><div className="flex-1 min-w-0"><p className="font-medium text-purple-800">Reglamento activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700"><Download size={14} className="inline mr-1" />Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button></div>
+            <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50"><Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar reglamento'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" /></label>
           </div>
-        ) : (
-          <div className="text-center space-y-4">
-            <BookOpen size={28} className="text-gray-400 mx-auto" />
-            <p className="font-medium text-gray-700">No hay reglamento cargado</p>
-            <label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium">
-              <Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Reglamento'}
-              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" />
-            </label>
-          </div>
-        )}
+        ) : (<div className="text-center space-y-4"><BookOpen size={28} className="text-gray-400 mx-auto" /><p className="font-medium text-gray-700">No hay reglamento cargado</p><label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium"><Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Reglamento'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" /></label></div>)}
       </Card>
     </div>
   );
@@ -980,27 +1291,17 @@ const AdminTutorialTab = ({ appSettings, onUpdateSetting }) => {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   useEffect(() => { setUrl(appSettings?.youtube_tutorial_url || ''); }, [appSettings?.youtube_tutorial_url]);
-
-  const getEmbed = (raw) => {
-    if (!raw) return null; let vid = null;
-    try { const u = new URL(raw); if (u.hostname.includes('youtu.be')) vid = u.pathname.slice(1); else if (u.searchParams.get('v')) vid = u.searchParams.get('v'); else if (u.pathname.includes('/embed/')) vid = u.pathname.split('/embed/')[1]; } catch { return null; }
-    return vid ? `https://www.youtube.com/embed/${vid}` : null;
-  };
-
+  const getEmbed = (raw) => { if (!raw) return null; let vid = null; try { const u = new URL(raw); if (u.hostname.includes('youtu.be')) vid = u.pathname.slice(1); else if (u.searchParams.get('v')) vid = u.searchParams.get('v'); else if (u.pathname.includes('/embed/')) vid = u.pathname.split('/embed/')[1]; } catch { return null; } return vid ? `https://www.youtube.com/embed/${vid}` : null; };
   const handleSave = async () => { setSaving(true); setMsg(null); try { await onUpdateSetting('youtube_tutorial_url', url.trim()); setMsg({ type: 'success', text: 'Guardado.' }); } catch (err) { setMsg({ type: 'error', text: err.message }); } setSaving(false); };
   const handleRemove = async () => { setSaving(true); try { await onUpdateSetting('youtube_tutorial_url', ''); setUrl(''); setMsg({ type: 'success', text: 'Eliminado.' }); } catch (err) { setMsg({ type: 'error', text: err.message }); } setSaving(false); };
   const embed = getEmbed(url);
-
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-bold text-gray-700">Tutorial de YouTube</h3>
       {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
       <Card>
         <div className="space-y-4">
-          <div className="flex gap-2">
-            <div className="relative flex-1"><Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="url" placeholder="https://www.youtube.com/watch?v=..." className="w-full border p-2.5 pl-9 rounded-lg" value={url} onChange={e => setUrl(e.target.value)} /></div>
-            <button onClick={handleSave} disabled={saving} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium shrink-0"><Save size={16} />{saving ? '...' : 'Guardar'}</button>
-          </div>
+          <div className="flex gap-2"><div className="relative flex-1"><Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="url" placeholder="https://www.youtube.com/watch?v=..." className="w-full border p-2.5 pl-9 rounded-lg" value={url} onChange={e => setUrl(e.target.value)} /></div><button onClick={handleSave} disabled={saving} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium shrink-0"><Save size={16} />{saving ? '...' : 'Guardar'}</button></div>
           {embed && <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ paddingTop: '56.25%' }}><iframe src={embed} className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>}
           {url && !embed && <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700"><AlertTriangle size={16} className="inline mr-1" />URL no válido.</div>}
           {url && <button onClick={handleRemove} className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"><Trash2 size={14} /> Quitar</button>}
@@ -1027,40 +1328,18 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
   const visibleAvales = avales.filter(a => !a.is_deleted);
 
   const openAction = (aval, action) => { setActionModal({ id: aval.id, action, name: aval.applicant_name }); setReason(''); setCorrelativoInput(''); };
-
   const handleAction = async () => {
     if (!reason.trim()) { alert('La justificación es obligatoria.'); return; }
     setSaving(true);
     const updates = { status: actionModal.action, approval_reason: reason };
-    if (actionModal.action === 'Aprobado') {
-      updates.approval_date = new Date().toISOString().split('T')[0];
-      if (correlativoInput.trim()) updates.correlativo = correlativoInput.trim();
-    }
+    if (actionModal.action === 'Aprobado') { updates.approval_date = new Date().toISOString().split('T')[0]; if (correlativoInput.trim()) updates.correlativo = correlativoInput.trim(); }
     await updateAval(actionModal.id, updates);
     setActionModal(null); setSaving(false);
   };
 
-  const openEdit = (a) => {
-    setEditData({
-      id: a.id, status: a.status, approval_reason: a.approval_reason || '',
-      correlativo: a.correlativo || '', approval_date: a.approval_date || ''
-    });
-    setEditModal(true);
-  };
-
-  const handleEdit = async () => {
-    setSaving(true);
-    await updateAval(editData.id, {
-      status: editData.status, approval_reason: editData.approval_reason,
-      correlativo: editData.correlativo, approval_date: editData.approval_date || null
-    });
-    setEditModal(null); setSaving(false);
-  };
-
-  const handleDelete = async () => {
-    if (!deleteReason.trim()) { alert('Debes indicar la razón de eliminación.'); return; }
-    setSaving(true); await deleteAval(deleteModal.id, deleteReason); setDeleteModal(null); setDeleteReason(''); setSaving(false);
-  };
+  const openEdit = (a) => { setEditData({ id: a.id, status: a.status, approval_reason: a.approval_reason || '', correlativo: a.correlativo || '', approval_date: a.approval_date || '' }); setEditModal(true); };
+  const handleEdit = async () => { setSaving(true); await updateAval(editData.id, { status: editData.status, approval_reason: editData.approval_reason, correlativo: editData.correlativo, approval_date: editData.approval_date || null }); setEditModal(null); setSaving(false); };
+  const handleDelete = async () => { if (!deleteReason.trim()) { alert('Debes indicar la razón de eliminación.'); return; } setSaving(true); await deleteAval(deleteModal.id, deleteReason); setDeleteModal(null); setDeleteReason(''); setSaving(false); };
 
   return (
     <div className="space-y-4">
@@ -1069,10 +1348,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
         <Card key={req.id}>
           <div className="flex justify-between items-start gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg">{req.applicant_name}</h3>
-                <span className="text-xs text-gray-400">#{req.request_number}</span>
-              </div>
+              <div className="flex items-center gap-2"><h3 className="font-bold text-lg">{req.applicant_name}</h3><span className="text-xs text-gray-400">#{req.request_number}</span></div>
               <p className="text-gray-600">{req.activity_name}</p>
               {req.institution && <p className="text-sm text-gray-500">{req.institution}</p>}
               <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -1084,23 +1360,12 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
                 {req.duration && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.duration}</span>}
               </div>
               {req.approval_reason && <p className="text-xs text-gray-500 mt-1 italic">Nota: {req.approval_reason}</p>}
-              {req.form_url ? (
-                <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:underline font-medium"><Download size={12} /> Descargar PDF adjunto</a>
-              ) : <p className="text-xs text-gray-400 mt-2">Sin archivo adjunto</p>}
+              {req.form_url ? (<a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:underline font-medium"><Download size={12} /> Descargar PDF adjunto</a>) : <p className="text-xs text-gray-400 mt-2">Sin archivo adjunto</p>}
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <Badge status={req.status} />
-              {req.status === 'En Proceso' && (
-                <div className="flex gap-2">
-                  <button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button>
-                  <button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button>
-                </div>
-              )}
-              {req.status === 'Aprobado' && (
-                <button onClick={() => openApprovalLetter(req)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium">
-                  <FileDown size={12} /> Carta de Aprobación
-                </button>
-              )}
+              {req.status === 'En Proceso' && (<div className="flex gap-2"><button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>)}
+              {req.status === 'Aprobado' && (<button onClick={() => openApprovalLetter(req)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Carta de Aprobación</button>)}
               <div className="flex gap-2">
                 <button onClick={() => openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12} /> Editar</button>
                 <button onClick={() => { setDeleteModal(req); setDeleteReason(''); }} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12} /> Eliminar</button>
@@ -1111,63 +1376,29 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
       ))}
       {visibleAvales.length === 0 && <div className="text-gray-400 text-center py-10">No hay solicitudes.</div>}
 
-      {/* Modal Aprobar/Rechazar */}
       <Modal isOpen={!!actionModal} onClose={() => setActionModal(null)} title={actionModal?.action === 'Aprobado' ? 'Aprobar Solicitud' : 'Rechazar Solicitud'} size="sm">
         <div className="space-y-4">
           <p className="text-gray-600">Solicitud de: <strong>{actionModal?.name}</strong></p>
-          <div>
-            <label className="block text-sm font-bold mb-1">{actionModal?.action === 'Aprobado' ? '¿Por qué se aprueba?' : '¿Por qué se rechaza?'} *</label>
-            <textarea required rows={3} placeholder="Justificación obligatoria..." className="w-full border p-2 rounded" value={reason} onChange={e => setReason(e.target.value)} />
-          </div>
-          {actionModal?.action === 'Aprobado' && (
-            <div>
-              <label className="block text-sm font-bold mb-1">Número de Correlativo del Aval *</label>
-              <input required placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={correlativoInput} onChange={e => setCorrelativoInput(e.target.value)} />
-              <p className="text-xs text-gray-500 mt-1">La fecha de aprobación se registra automáticamente (hoy).</p>
-            </div>
-          )}
-          <button onClick={handleAction} disabled={saving || !reason.trim() || (actionModal?.action === 'Aprobado' && !correlativoInput.trim())} className={`w-full py-2 rounded font-bold text-white disabled:opacity-50 ${actionModal?.action === 'Aprobado' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
-            {saving ? 'Guardando...' : (actionModal?.action === 'Aprobado' ? 'Confirmar Aprobación' : 'Confirmar Rechazo')}
-          </button>
+          <div><label className="block text-sm font-bold mb-1">{actionModal?.action === 'Aprobado' ? '¿Por qué se aprueba?' : '¿Por qué se rechaza?'} *</label><textarea required rows={3} placeholder="Justificación obligatoria..." className="w-full border p-2 rounded" value={reason} onChange={e => setReason(e.target.value)} /></div>
+          {actionModal?.action === 'Aprobado' && (<div><label className="block text-sm font-bold mb-1">Número de Correlativo del Aval *</label><input required placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={correlativoInput} onChange={e => setCorrelativoInput(e.target.value)} /><p className="text-xs text-gray-500 mt-1">La fecha de aprobación se registra automáticamente (hoy).</p></div>)}
+          <button onClick={handleAction} disabled={saving || !reason.trim() || (actionModal?.action === 'Aprobado' && !correlativoInput.trim())} className={`w-full py-2 rounded font-bold text-white disabled:opacity-50 ${actionModal?.action === 'Aprobado' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>{saving ? 'Guardando...' : (actionModal?.action === 'Aprobado' ? 'Confirmar Aprobación' : 'Confirmar Rechazo')}</button>
         </div>
       </Modal>
 
-      {/* Modal Editar */}
       <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title="Editar Solicitud" size="sm">
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-bold mb-1">Estado</label>
-            <select className="w-full border p-2 rounded" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value})}>
-              <option value="En Proceso">En Proceso</option><option value="Aprobado">Aprobado</option><option value="Rechazado">Rechazado</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Razón / Notas</label>
-            <textarea rows={3} placeholder="Justificación..." className="w-full border p-2 rounded" value={editData.approval_reason} onChange={e => setEditData({...editData, approval_reason: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Correlativo del Aval</label>
-            <input placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={editData.correlativo} onChange={e => setEditData({...editData, correlativo: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Fecha de Aprobación</label>
-            <input type="date" className="w-full border p-2 rounded" value={editData.approval_date} onChange={e => setEditData({...editData, approval_date: e.target.value})} />
-          </div>
+          <div><label className="block text-sm font-bold mb-1">Estado</label><select className="w-full border p-2 rounded" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value})}><option value="En Proceso">En Proceso</option><option value="Aprobado">Aprobado</option><option value="Rechazado">Rechazado</option></select></div>
+          <div><label className="block text-sm font-bold mb-1">Razón / Notas</label><textarea rows={3} placeholder="Justificación..." className="w-full border p-2 rounded" value={editData.approval_reason} onChange={e => setEditData({...editData, approval_reason: e.target.value})} /></div>
+          <div><label className="block text-sm font-bold mb-1">Correlativo del Aval</label><input placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={editData.correlativo} onChange={e => setEditData({...editData, correlativo: e.target.value})} /></div>
+          <div><label className="block text-sm font-bold mb-1">Fecha de Aprobación</label><input type="date" className="w-full border p-2 rounded" value={editData.approval_date} onChange={e => setEditData({...editData, approval_date: e.target.value})} /></div>
           <button onClick={handleEdit} disabled={saving} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar Cambios'}</button>
         </div>
       </Modal>
 
-      {/* Modal Eliminar */}
       <Modal isOpen={!!deleteModal} onClose={() => setDeleteModal(null)} title="Eliminar Solicitud" size="sm">
         <div className="space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-red-700 font-medium">¿Eliminar la solicitud de "{deleteModal?.applicant_name}"?</p>
-            <p className="text-red-500 text-sm">Quedará registrada en reportes.</p>
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">¿Por qué se elimina? *</label>
-            <textarea required rows={3} placeholder="Motivo obligatorio..." className="w-full border p-2 rounded" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} />
-          </div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-red-700 font-medium">¿Eliminar la solicitud de "{deleteModal?.applicant_name}"?</p><p className="text-red-500 text-sm">Quedará registrada en reportes.</p></div>
+          <div><label className="block text-sm font-bold mb-1">¿Por qué se elimina? *</label><textarea required rows={3} placeholder="Motivo obligatorio..." className="w-full border p-2 rounded" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} /></div>
           <button onClick={handleDelete} disabled={saving || !deleteReason.trim()} className="w-full bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700 disabled:opacity-50">{saving ? 'Eliminando...' : 'Confirmar Eliminación'}</button>
         </div>
       </Modal>
@@ -1179,7 +1410,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
 // ==========================================
 // ADMIN: REPORTES
 // ==========================================
-const ReportesView = ({ avales, docs }) => {
+const ReportesView = ({ avales, docs, oficios }) => {
   const [showModal, setShowModal] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -1189,10 +1420,7 @@ const ReportesView = ({ avales, docs }) => {
   const generateReport = () => {
     if (!dateFrom || !dateTo) { alert('Selecciona ambas fechas.'); return; }
     setGenerating(true);
-    const filtered = avales.filter(a => {
-      const d = a.activity_date || a.created_at?.substring(0, 10);
-      return d >= dateFrom && d <= dateTo;
-    });
+    const filtered = avales.filter(a => { const d = a.activity_date || a.created_at?.substring(0, 10); return d >= dateFrom && d <= dateTo; });
     if (filtered.length === 0) { alert('No hay solicitudes en ese período.'); setGenerating(false); return; }
     if (reportFormat === 'excel') generateCSV(filtered); else generatePDF(filtered);
     setGenerating(false); setShowModal(false);
@@ -1207,37 +1435,8 @@ const ReportesView = ({ avales, docs }) => {
   };
 
   const generatePDF = (data) => {
-    const rows = data.map(a => `<tr>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td>
-      <td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.deletion_reason||'—'}</td>
-    </tr>`).join('');
-
-    const html = `<html><head><title>Reporte CAEDUC</title></head><body style="font-family:Arial;padding:30px;">
-      <h1 style="color:#1e3a5f;">Reporte de Avales — CAEDUC</h1>
-      <p style="color:#666;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p>
-      <p style="color:#666;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | En Proceso: ${data.filter(a=>a.status==='En Proceso'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p>
-      <table style="width:100%;border-collapse:collapse;margin-top:10px;">
-        <thead><tr style="background:#1e3a5f;color:white;">
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th>
-          <th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th>
-        </tr></thead><tbody>${rows}</tbody>
-      </table>
-      <p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p>
-    </body></html>`;
+    const rows = data.map(a => `<tr><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.deletion_reason||'—'}</td></tr>`).join('');
+    const html = `<html><head><title>Reporte CAEDUC</title></head><body style="font-family:Arial;padding:30px;"><h1 style="color:#1e3a5f;">Reporte de Avales — CAEDUC</h1><p style="color:#666;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p><p style="color:#666;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | En Proceso: ${data.filter(a=>a.status==='En Proceso'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr style="background:#1e3a5f;color:white;"><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p></body></html>`;
     const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print();
   };
 
@@ -1250,29 +1449,24 @@ const ReportesView = ({ avales, docs }) => {
         <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FileSpreadsheet size={18} /> Generar Reporte</button>
       </div>
       <div className="grid grid-cols-4 gap-4">
-        <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{avales.length}</p><p className="text-sm text-gray-500">Total</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{avales.length}</p><p className="text-sm text-gray-500">Total Avales</p></div></Card>
         <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{active.filter(a=>a.status==='Aprobado').length}</p><p className="text-sm text-gray-500">Aprobadas</p></div></Card>
         <Card><div className="text-center"><p className="text-3xl font-bold text-red-600">{active.filter(a=>a.status==='Rechazado').length}</p><p className="text-sm text-gray-500">Rechazadas</p></div></Card>
-        <Card><div className="text-center"><p className="text-3xl font-bold text-blue-500">{active.filter(a=>a.status==='En Proceso').length}</p><p className="text-sm text-gray-500">En Proceso</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-indigo-600">{oficios.length}</p><p className="text-sm text-gray-500">Oficios</p></div></Card>
       </div>
       <div className="grid md:grid-cols-2 gap-4">
         <Card>
           <h3 className="font-bold mb-2 text-indigo-700">Avales ({active.length})</h3>
           <div className="h-64 overflow-y-auto text-sm border-t pt-2">
-            {active.map(a => (
-              <div key={a.id} className="border-b py-2 flex justify-between items-center">
-                <div><span className="font-medium">{a.activity_name}</span><span className="text-gray-400 text-xs ml-2">#{a.request_number}</span>{a.correlativo && <span className="text-indigo-600 text-xs ml-2">[{a.correlativo}]</span>}</div>
-                <Badge status={a.status} />
-              </div>
-            ))}
+            {active.map(a => (<div key={a.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-medium">{a.activity_name}</span><span className="text-gray-400 text-xs ml-2">#{a.request_number}</span>{a.correlativo && <span className="text-indigo-600 text-xs ml-2">[{a.correlativo}]</span>}</div><Badge status={a.status} /></div>))}
             {active.length === 0 && <p className="text-gray-400 text-center py-8">Sin avales</p>}
           </div>
         </Card>
         <Card>
-          <h3 className="font-bold mb-2 text-indigo-700">Documentos ({docs.length})</h3>
+          <h3 className="font-bold mb-2 text-indigo-700">Oficios Generados ({oficios.length})</h3>
           <div className="h-64 overflow-y-auto text-sm border-t pt-2">
-            {docs.map(d => (<div key={d.id} className="border-b py-2"><span className="font-semibold">{d.type?.toUpperCase()}</span> - {d.activity_name}<br/><span className="text-gray-400 text-xs">{d.created_at?.substring(0,10)||'Reciente'}</span></div>))}
-            {docs.length === 0 && <p className="text-gray-400 text-center py-8">Sin documentos</p>}
+            {oficios.map(o => (<div key={o.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-semibold">{o.numero_oficio}</span><span className="text-gray-400 text-xs ml-2">{o.fecha}</span>{o.actividad_nombre && <span className="text-blue-500 text-xs ml-2">{o.actividad_nombre}</span>}</div><Badge status={o.estado} /></div>))}
+            {oficios.length === 0 && <p className="text-gray-400 text-center py-8">Sin oficios</p>}
           </div>
         </Card>
       </div>
@@ -1281,17 +1475,7 @@ const ReportesView = ({ avales, docs }) => {
         <div className="space-y-4">
           <div><label className="block text-sm font-bold mb-1">Fecha Inicio</label><input type="date" className="w-full border p-2 rounded" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></div>
           <div><label className="block text-sm font-bold mb-1">Fecha Fin</label><input type="date" className="w-full border p-2 rounded" value={dateTo} onChange={e => setDateTo(e.target.value)} /></div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Formato</label>
-            <div className="flex gap-3">
-              <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='pdf'?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200'}`}>
-                <input type="radio" name="fmt" value="pdf" checked={reportFormat==='pdf'} onChange={() => setReportFormat('pdf')} className="sr-only" /><FileText size={20} className="mx-auto mb-1" /><span className="text-sm font-medium">PDF</span>
-              </label>
-              <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='excel'?'border-green-500 bg-green-50 text-green-700':'border-gray-200'}`}>
-                <input type="radio" name="fmt" value="excel" checked={reportFormat==='excel'} onChange={() => setReportFormat('excel')} className="sr-only" /><FileSpreadsheet size={20} className="mx-auto mb-1" /><span className="text-sm font-medium">Excel (CSV)</span>
-              </label>
-            </div>
-          </div>
+          <div><label className="block text-sm font-bold mb-1">Formato</label><div className="flex gap-3"><label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='pdf'?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200'}`}><input type="radio" name="fmt" value="pdf" checked={reportFormat==='pdf'} onChange={() => setReportFormat('pdf')} className="sr-only" /><FileText size={20} className="mx-auto mb-1" /><span className="text-sm font-medium">PDF</span></label><label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='excel'?'border-green-500 bg-green-50 text-green-700':'border-gray-200'}`}><input type="radio" name="fmt" value="excel" checked={reportFormat==='excel'} onChange={() => setReportFormat('excel')} className="sr-only" /><FileSpreadsheet size={20} className="mx-auto mb-1" /><span className="text-sm font-medium">Excel (CSV)</span></label></div></div>
           <button onClick={generateReport} disabled={generating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{generating ? 'Generando...' : 'Generar Reporte'}</button>
         </div>
       </Modal>
@@ -1313,9 +1497,7 @@ const PlanificacionView = ({ activities, createActivity, members, onRegisterDoc 
     <div className="space-y-6">
       <div className="flex justify-between"><h2 className="text-2xl font-bold">Planificación</h2><button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded flex gap-2 hover:bg-blue-700"><Plus /> Nueva</button></div>
       <div className="grid gap-4">
-        {activities.map(act => (
-          <Card key={act.id}><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">{act.title}</h3><p className="text-sm text-gray-500">{act.date} | {act.type}</p></div><button className="bg-gray-100 px-3 py-1 rounded hover:bg-gray-200" onClick={() => setSelectedAct(act)}>Generar Carta</button></div></Card>
-        ))}
+        {activities.map(act => (<Card key={act.id}><div className="flex justify-between items-center"><div><h3 className="font-bold text-lg">{act.title}</h3><p className="text-sm text-gray-500">{act.date} | {act.type}</p></div><button className="bg-gray-100 px-3 py-1 rounded hover:bg-gray-200" onClick={() => setSelectedAct(act)}>Generar Carta</button></div></Card>))}
         {activities.length === 0 && <div className="text-gray-400 text-center py-10">No hay actividades.</div>}
       </div>
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nueva Actividad">
@@ -1326,17 +1508,7 @@ const PlanificacionView = ({ activities, createActivity, members, onRegisterDoc 
           <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Guardar</button>
         </form>
       </Modal>
-      {selectedAct && (
-        <Modal isOpen={!!selectedAct} onClose={() => setSelectedAct(null)} title="Generar Documento">
-          <div className="text-center">
-            <p className="mb-4 text-gray-700">Carta para: <strong>{selectedAct.title}</strong></p>
-            <div className="flex justify-center gap-2">
-              <button onClick={() => { onRegisterDoc({ type: 'pago', activity_name: selectedAct.title, author: 'Sistema' }); alert("Carta de Pago registrada."); setSelectedAct(null); }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Solicitud Pago</button>
-              <button onClick={() => { onRegisterDoc({ type: 'suministros', activity_name: selectedAct.title, author: 'Sistema' }); alert("Carta de Suministros registrada."); setSelectedAct(null); }} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Solicitud Suministros</button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {selectedAct && (<Modal isOpen={!!selectedAct} onClose={() => setSelectedAct(null)} title="Generar Documento"><div className="text-center"><p className="mb-4 text-gray-700">Carta para: <strong>{selectedAct.title}</strong></p><div className="flex justify-center gap-2"><button onClick={() => { onRegisterDoc({ type: 'pago', activity_name: selectedAct.title, author: 'Sistema' }); alert("Carta de Pago registrada."); setSelectedAct(null); }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Solicitud Pago</button><button onClick={() => { onRegisterDoc({ type: 'suministros', activity_name: selectedAct.title, author: 'Sistema' }); alert("Carta de Suministros registrada."); setSelectedAct(null); }} className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Solicitud Suministros</button></div></div></Modal>)}
     </div>
   );
 };
@@ -1350,6 +1522,7 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout }) => (
     <nav className="p-2 space-y-2 mt-4">
       <SidebarBtn icon={<CheckCircle />} label="Planificación" active={current==='planificacion'} onClick={() => setModule('planificacion')} isOpen={isOpen} />
       <SidebarBtn icon={<Users />} label="Avales" active={current==='avales'} onClick={() => setModule('avales')} isOpen={isOpen} />
+      <SidebarBtn icon={<FileSignature />} label="Oficios" active={current==='oficios'} onClick={() => setModule('oficios')} isOpen={isOpen} />
       <SidebarBtn icon={<Clock />} label="Reportes" active={current==='reportes'} onClick={() => setModule('reportes')} isOpen={isOpen} />
       <SidebarBtn icon={<Settings />} label="Admin" active={current==='admin_config'} onClick={() => setModule('admin_config')} isOpen={isOpen} />
     </nav>
@@ -1375,6 +1548,7 @@ export default function CAEDUCApp() {
   const [avales, setAvales] = useState([]);
   const [members, setMembers] = useState([]);
   const [internalDocs, setInternalDocs] = useState([]);
+  const [oficios, setOficios] = useState([]);
   const [appSettings, setAppSettings] = useState({});
 
   const fetchPublicSettings = useCallback(async () => {
@@ -1395,8 +1569,10 @@ export default function CAEDUCApp() {
       const { data: avl } = await supabase.from('avales').select('*').order('created_at', { ascending: false });
       const { data: mem } = await supabase.from('profiles').select('*');
       const { data: docs } = await supabase.from('internal_documents').select('*');
+      const { data: ofi } = await supabase.from('oficios').select('*').order('created_at', { ascending: false });
       const { data: settings } = await supabase.from('app_settings').select('key, value');
       if (act) setActivities(act); if (avl) setAvales(avl); if (mem) setMembers(mem); if (docs) setInternalDocs(docs);
+      if (ofi) setOficios(ofi);
       if (settings) { const m = {}; settings.forEach(r => { m[r.key] = r.value; }); setAppSettings(m); }
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -1422,26 +1598,13 @@ export default function CAEDUCApp() {
 
   const submitAval = async (formData, file1) => {
     let formUrl = null;
-    if (file1) {
-      const { data: f1, error: ue } = await supabase.storage.from('avales-files').upload(`forms/${Date.now()}_${file1.name}`, file1);
-      if (ue) { alert("Error archivo: " + ue.message); return null; }
-      if (f1) formUrl = f1.path;
-    }
+    if (file1) { const { data: f1, error: ue } = await supabase.storage.from('avales-files').upload(`forms/${Date.now()}_${file1.name}`, file1); if (ue) { alert("Error archivo: " + ue.message); return null; } if (f1) formUrl = f1.path; }
     const { data: inserted, error } = await supabase.from('avales').insert([{
-      applicant_name: formData.applicantName,
-      institution: formData.institution,
-      activity_name: formData.activityName,
-      activity_date: formData.activityDate,
-      email: formData.email,
-      activity_type: formData.activityType,
-      duration: formData.duration,
-      modality: formData.modality,
-      schedule: formData.schedule,
-      platform: formData.platform,
-      topic: formData.topic,
-      target_audience: formData.targetAudience,
-      form_url: formUrl,
-      status: 'En Proceso'
+      applicant_name: formData.applicantName, institution: formData.institution, activity_name: formData.activityName,
+      activity_date: formData.activityDate, email: formData.email, activity_type: formData.activityType,
+      duration: formData.duration, modality: formData.modality, schedule: formData.schedule,
+      platform: formData.platform, topic: formData.topic, target_audience: formData.targetAudience,
+      form_url: formUrl, status: 'En Proceso'
     }]).select('request_number');
     if (error) { alert(error.message); return null; }
     return inserted?.[0]?.request_number || null;
@@ -1457,6 +1620,26 @@ export default function CAEDUCApp() {
     setAppSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  // ---- OFICIOS CRUD ----
+  const createOficio = async (data) => {
+    const { error } = await supabase.from('oficios').insert([data]);
+    if (error) { alert('Error al crear oficio: ' + error.message); return; }
+    fetchData();
+  };
+
+  const updateOficio = async (id, data) => {
+    const { estado, ...rest } = data;
+    const { error } = await supabase.from('oficios').update({ ...rest, estado, updated_at: new Date().toISOString() }).eq('id', id);
+    if (error) { alert('Error al actualizar: ' + error.message); return; }
+    fetchData();
+  };
+
+  const deleteOficio = async (id) => {
+    const { error } = await supabase.from('oficios').delete().eq('id', id);
+    if (error) { alert('Error al eliminar: ' + error.message); return; }
+    fetchData();
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-100 font-sans text-gray-800">
       {userMode === 'admin' && <Sidebar isOpen={isSidebarOpen} toggle={() => setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={setCurrentModule} logout={handleLogout} />}
@@ -1469,7 +1652,8 @@ export default function CAEDUCApp() {
           <>
             {(currentModule === 'planificacion' || currentModule === 'dashboard') && <PlanificacionView activities={activities} createActivity={createActivity} members={members} onRegisterDoc={registerDoc} />}
             {currentModule === 'avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} />}
-            {currentModule === 'reportes' && <ReportesView avales={avales} docs={internalDocs} />}
+            {currentModule === 'oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} />}
+            {currentModule === 'reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios} />}
             {currentModule === 'admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember} />}
           </>
         )}
