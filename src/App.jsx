@@ -56,7 +56,17 @@ const MOTIVOS_OFICIO = [
 // ==========================================
 // GENERAR CARTA DE APROBACIÓN PDF (HTML)
 // ==========================================
-const generateApprovalLetterHTML = (aval) => {
+const generateApprovalLetterHTML = (aval, settings = {}) => {
+  const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
+  const f1Cargo = settings.firmante1_cargo || 'Coordinador';
+  const f1FirmaPath = settings.firmante1_firma_path || '';
+  const f2Name = settings.firmante2_nombre || 'Mgtr. Luisa Mazariegos';
+  const f2Cargo = settings.firmante2_cargo || 'Secretaria';
+  const f2FirmaPath = settings.firmante2_firma_path || '';
+  const selloPath = settings.sello_path || '';
+  const f1FirmaUrl = f1FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f1FirmaPath}` : '';
+  const f2FirmaUrl = f2FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f2FirmaPath}` : '';
+  const selloUrl = selloPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${selloPath}` : '';
   const formatApprovalDate = (dateStr) => {
     if (!dateStr) return '—';
     const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -153,20 +163,20 @@ const generateApprovalLetterHTML = (aval) => {
       <div class="closing">Sin otro particular, nos despedimos.</div>
       <div class="signatures">
         <div class="sig-block">
-          <img src="${window.location.origin}/firma-coordinador.png" alt="Firma Coordinador" class="sig-img" />
+          ${f1FirmaUrl ? `<img src="${f1FirmaUrl}" alt="Firma" class="sig-img" />` : '<div style="height:70px;"></div>'}
           <div class="sig-line">
-            <div class="sig-name">M. A. Juan J. Reyes</div>
-            <div class="sig-role">Coordinador – CAEDUC</div>
+            <div class="sig-name">${f1Name}</div>
+            <div class="sig-role">${f1Cargo} – CAEDUC</div>
           </div>
         </div>
         <div class="sello-center">
-          <img src="${window.location.origin}/sello.png" alt="Sello CAEDUC" />
+          ${selloUrl ? `<img src="${selloUrl}" alt="Sello CAEDUC" />` : ''}
         </div>
         <div class="sig-block">
-          <img src="${window.location.origin}/firma-secretaria.png" alt="Firma Secretaria" class="sig-img" />
+          ${f2FirmaUrl ? `<img src="${f2FirmaUrl}" alt="Firma" class="sig-img" />` : '<div style="height:70px;"></div>'}
           <div class="sig-line">
-            <div class="sig-name">Mgtr. Luisa Mazariegos</div>
-            <div class="sig-role">Secretaria - CAEDUC</div>
+            <div class="sig-name">${f2Name}</div>
+            <div class="sig-role">${f2Cargo} - CAEDUC</div>
           </div>
         </div>
       </div>
@@ -183,8 +193,8 @@ const generateApprovalLetterHTML = (aval) => {
 </html>`;
 };
 
-const openApprovalLetter = (aval) => {
-  const html = generateApprovalLetterHTML(aval);
+const openApprovalLetter = (aval, settings = {}) => {
+  const html = generateApprovalLetterHTML(aval, settings);
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
   else alert('Permite las ventanas emergentes para descargar la carta.');
@@ -201,7 +211,15 @@ const formatOficioDate = (dateStr) => {
   return `${d.getDate()} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
 };
 
-const generateOficioHTML = (oficio) => {
+const generateOficioHTML = (oficio, settings = {}) => {
+  const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
+  const f1Cargo = settings.firmante1_cargo || 'Coordinador';
+  const f1Inst = settings.firmante1_institucion || 'Comisión de Acreditación Educación continua, Colegio de Psicólogos de Guatemala';
+  const f1FirmaPath = settings.firmante1_firma_path || '';
+  const selloPath = settings.sello_path || '';
+  const f1FirmaUrl = f1FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f1FirmaPath}` : '';
+  const selloUrl = selloPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${selloPath}` : '';
+  const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
   const isRecursos = oficio.motivo?.includes('recursos') || oficio.motivo?.includes('Aprobación');
 
   // Build the body paragraphs
@@ -391,16 +409,15 @@ const generateOficioHTML = (oficio) => {
       <div class="firma-section">
         <div style="display:inline-flex;align-items:flex-end;gap:20px;margin-top:20px;">
           <div style="text-align:center;">
-            <img src="${window.location.origin}/firma-coordinador.png" alt="Firma Coordinador" class="firma-img" />
+            ${f1FirmaUrl ? `<img src="${f1FirmaUrl}" alt="Firma" class="firma-img" />` : '<div style="height:65px;"></div>'}
             <div style="width:220px;border-top:1px solid #333;padding-top:6px;">
-              <div class="firma-line">M. A. Juan J. Reyes</div>
-              <div class="firma-role">Coordinador</div>
-              <div class="firma-inst">Comisión de Acreditación Educación continua</div>
-              <div class="firma-inst">Colegio de Psicólogos de Guatemala</div>
+              <div class="firma-line">${f1Name}</div>
+              <div class="firma-role">${f1Cargo}</div>
+              ${instLines.map(l => `<div class="firma-inst">${l}</div>`).join('')}
             </div>
           </div>
           <div style="text-align:center;margin-bottom:15px;">
-            <img src="${window.location.origin}/sello.png" alt="Sello CAEDUC" class="sello-img" />
+            ${selloUrl ? `<img src="${selloUrl}" alt="Sello CAEDUC" class="sello-img" />` : ''}
           </div>
         </div>
       </div>
@@ -456,8 +473,8 @@ const generateOficioHTML = (oficio) => {
 </html>`;
 };
 
-const openOficioLetter = (oficio) => {
-  const html = generateOficioHTML(oficio);
+const openOficioLetter = (oficio, settings = {}) => {
+  const html = generateOficioHTML(oficio, settings);
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
   else alert('Permite las ventanas emergentes para ver el oficio.');
@@ -684,7 +701,7 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
 // ==========================================
 // VISTA PÚBLICA: CONSULTAR ESTADO
 // ==========================================
-const ConsultarEstadoView = ({ onBack }) => {
+const ConsultarEstadoView = ({ onBack, appSettings }) => {
   const [requestNum, setRequestNum] = useState('');
   const [result, setResult] = useState(null);
   const [searching, setSearching] = useState(false);
@@ -733,7 +750,7 @@ const ConsultarEstadoView = ({ onBack }) => {
                   <div className="border-t pt-3 space-y-3">
                     {result.correlativo && (<div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval (Correlativo)</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div>)}
                     {result.approval_reason && (<div className="bg-green-50 border border-green-200 rounded-lg p-3"><p className="text-sm text-green-600 font-medium">Observaciones:</p><p className="text-green-800 text-sm">{result.approval_reason}</p></div>)}
-                    <button onClick={() => openApprovalLetter(result)} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={20} /> Descargar Carta de Aprobación de Aval</button>
+                    <button onClick={() => openApprovalLetter(result, appSettings)} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={20} /> Descargar Carta de Aprobación de Aval</button>
                   </div>
                 )}
                 {result.status === 'Rechazado' && result.approval_reason && (<div className="border-t pt-3"><div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p><p className="text-red-800 text-sm">{result.approval_reason}</p></div></div>)}
@@ -808,7 +825,7 @@ const VerificarAvalView = ({ onBack }) => {
 // ==========================================
 // ADMIN: OFICIOS / SOLICITUDES INTERNAS
 // ==========================================
-const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOficio }) => {
+const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingOficio, setEditingOficio] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
@@ -877,7 +894,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <button onClick={() => openOficioLetter(o)} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
+                <button onClick={() => openOficioLetter(o, appSettings)} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
                   <Eye size={14} /> Ver / Descargar
                 </button>
                 <button onClick={() => handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium">
@@ -919,6 +936,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
           onSave={handleSave}
           initialData={editingOficio}
           existingCount={oficios.length}
+          appSettings={appSettings}
         />
       )}
 
@@ -943,7 +961,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
 // ==========================================
 // FORMULARIO CREAR/EDITAR OFICIO
 // ==========================================
-const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount }) => {
+const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount, appSettings }) => {
   const today = new Date().toISOString().split('T')[0];
   const suggestedNum = 'Of. ' + String((existingCount || 0) + 1).padStart(3, '0') + '.CAEDUC';
 
@@ -1000,7 +1018,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount }
   const handlePreviewOpen = () => {
     const previewData = { ...fd };
     if (fd.motivo === 'Otro (personalizado)' && fd.motivo_custom) previewData.motivo = fd.motivo_custom;
-    openOficioLetter(previewData);
+    openOficioLetter(previewData, appSettings);
   };
 
   const updateField = (field, value) => {
@@ -1228,6 +1246,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
   const [activeTab, setActiveTab] = useState('users');
   const tabs = [
     { id: 'users', label: 'Usuarios', icon: <UserPlus size={18} /> },
+    { id: 'firmas', label: 'Firmas y Sello', icon: <FileSignature size={18} /> },
     { id: 'form_file', label: 'Formulario Aval', icon: <File size={18} /> },
     { id: 'reglamento', label: 'Reglamento', icon: <BookOpen size={18} /> },
     { id: 'tutorial', label: 'Tutorial YouTube', icon: <Youtube size={18} /> },
@@ -1244,6 +1263,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
         ))}
       </div>
       {activeTab === 'users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember} />}
+      {activeTab === 'firmas' && <AdminFirmasTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
       {activeTab === 'form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
       {activeTab === 'reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
       {activeTab === 'tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
@@ -1326,6 +1346,176 @@ const AdminUsersTab = ({ members, onUpdateMember }) => {
   );
 };
 
+// ==========================================
+// ADMIN: FIRMAS Y SELLO
+// ==========================================
+const FirmaUploader = ({ label, settingKey, appSettings, onUpdateSetting }) => {
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const fp = appSettings?.[settingKey] || '';
+  const imgUrl = fp ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${fp}` : null;
+
+  const handleUpload = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    if (!f.type.startsWith('image/')) { alert('Solo se admiten imágenes (PNG, JPG, etc.)'); return; }
+    setUploading(true); setMsg(null);
+    try {
+      const fn = `${settingKey}_${Date.now()}.${f.name.split('.').pop()}`;
+      if (fp) await supabase.storage.from('firmas-sellos').remove([fp]);
+      const { data, error } = await supabase.storage.from('firmas-sellos').upload(fn, f, { upsert: true });
+      if (error) { setMsg({ type: 'error', text: error.message }); }
+      else { await onUpdateSetting(settingKey, data.path); setMsg({ type: 'success', text: 'Imagen actualizada.' }); }
+    } catch (err) { setMsg({ type: 'error', text: err.message }); }
+    setUploading(false);
+  };
+
+  const handleRemove = async () => {
+    if (!fp || !confirm('¿Eliminar esta imagen?')) return;
+    await supabase.storage.from('firmas-sellos').remove([fp]);
+    await onUpdateSetting(settingKey, '');
+    setMsg({ type: 'success', text: 'Eliminada.' });
+  };
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-bold text-gray-700">{label}</p>
+      {msg && <div className={`p-2 rounded text-xs ${msg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg.text}</div>}
+      {imgUrl ? (
+        <div className="flex items-center gap-3 p-3 bg-gray-50 border rounded-lg">
+          <img src={imgUrl} alt={label} className="h-16 w-auto object-contain border bg-white p-1 rounded" />
+          <div className="flex-1">
+            <p className="text-xs text-green-600 font-medium">Imagen activa</p>
+          </div>
+          <label className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded text-xs cursor-pointer hover:bg-blue-200 font-medium">
+            {uploading ? '...' : 'Cambiar'}
+            <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept="image/*" />
+          </label>
+          <button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200">
+            <Trash2 size={14} className="inline" />
+          </button>
+        </div>
+      ) : (
+        <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-400 hover:bg-blue-50">
+          <Upload size={18} className="text-gray-400" />
+          <span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Subir imagen'}</span>
+          <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept="image/*" />
+        </label>
+      )}
+    </div>
+  );
+};
+
+const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [f1, setF1] = useState({ nombre: '', cargo: '', institucion: '' });
+  const [f2, setF2] = useState({ nombre: '', cargo: '', institucion: '' });
+
+  useEffect(() => {
+    setF1({
+      nombre: appSettings?.firmante1_nombre || 'M. A. Juan J. Reyes',
+      cargo: appSettings?.firmante1_cargo || 'Coordinador',
+      institucion: appSettings?.firmante1_institucion || 'Comisión de Acreditación Educación continua, Colegio de Psicólogos de Guatemala'
+    });
+    setF2({
+      nombre: appSettings?.firmante2_nombre || 'Mgtr. Luisa Mazariegos',
+      cargo: appSettings?.firmante2_cargo || 'Secretaria',
+      institucion: appSettings?.firmante2_institucion || 'CAEDUC'
+    });
+  }, [appSettings]);
+
+  const handleSaveNames = async () => {
+    setSaving(true); setMsg(null);
+    try {
+      await onUpdateSetting('firmante1_nombre', f1.nombre);
+      await onUpdateSetting('firmante1_cargo', f1.cargo);
+      await onUpdateSetting('firmante1_institucion', f1.institucion);
+      await onUpdateSetting('firmante2_nombre', f2.nombre);
+      await onUpdateSetting('firmante2_cargo', f2.cargo);
+      await onUpdateSetting('firmante2_institucion', f2.institucion);
+      setMsg({ type: 'success', text: 'Datos de firmantes guardados correctamente.' });
+    } catch (err) { setMsg({ type: 'error', text: err.message }); }
+    setSaving(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-bold text-gray-700">Firmas, Sello y Datos de Firmantes</h3>
+        <p className="text-sm text-gray-500">Configura quiénes firman las cartas de aprobación de avales y los oficios. Las imágenes y nombres se reflejan automáticamente en todos los documentos generados.</p>
+      </div>
+
+      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
+
+      {/* Firmante 1 */}
+      <Card>
+        <div className="space-y-4">
+          <h4 className="font-bold text-blue-800 flex items-center gap-2"><FileSignature size={18} /> Firmante 1 (Coordinador/a)</h4>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-bold mb-1">Nombre completo</label>
+                <input className="w-full border p-2.5 rounded-lg" value={f1.nombre} onChange={e => setF1({...f1, nombre: e.target.value})} placeholder="M. A. Juan J. Reyes" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1">Cargo</label>
+                <input className="w-full border p-2.5 rounded-lg" value={f1.cargo} onChange={e => setF1({...f1, cargo: e.target.value})} placeholder="Coordinador" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1">Institución (para oficios)</label>
+                <input className="w-full border p-2.5 rounded-lg" value={f1.institucion} onChange={e => setF1({...f1, institucion: e.target.value})} placeholder="Comisión de Acreditación..." />
+              </div>
+            </div>
+            <div>
+              <FirmaUploader label="Imagen de firma" settingKey="firmante1_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Firmante 2 */}
+      <Card>
+        <div className="space-y-4">
+          <h4 className="font-bold text-indigo-800 flex items-center gap-2"><FileSignature size={18} /> Firmante 2 (Secretaria/o)</h4>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-bold mb-1">Nombre completo</label>
+                <input className="w-full border p-2.5 rounded-lg" value={f2.nombre} onChange={e => setF2({...f2, nombre: e.target.value})} placeholder="Mgtr. Luisa Mazariegos" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1">Cargo</label>
+                <input className="w-full border p-2.5 rounded-lg" value={f2.cargo} onChange={e => setF2({...f2, cargo: e.target.value})} placeholder="Secretaria" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold mb-1">Institución</label>
+                <input className="w-full border p-2.5 rounded-lg" value={f2.institucion} onChange={e => setF2({...f2, institucion: e.target.value})} placeholder="CAEDUC" />
+              </div>
+            </div>
+            <div>
+              <FirmaUploader label="Imagen de firma" settingKey="firmante2_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Sello */}
+      <Card>
+        <div className="space-y-4">
+          <h4 className="font-bold text-purple-800 flex items-center gap-2"><Shield size={18} /> Sello de la Comisión</h4>
+          <p className="text-sm text-gray-500">Este sello aparece entre ambas firmas en las cartas de avales, y junto a la firma del coordinador en los oficios.</p>
+          <FirmaUploader label="Imagen del sello" settingKey="sello_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} />
+        </div>
+      </Card>
+
+      <button onClick={handleSaveNames} disabled={saving} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+        <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Nombres y Cargos'}
+      </button>
+    </div>
+  );
+};
+
+
 const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -1402,7 +1592,7 @@ const AdminTutorialTab = ({ appSettings, onUpdateSetting }) => {
 // ==========================================
 // ADMIN: SOLICITUDES RECIBIDAS (AVALES)
 // ==========================================
-const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
+const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
   const [actionModal, setActionModal] = useState(null);
   const [editModal, setEditModal] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
@@ -1452,7 +1642,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval }) => {
             <div className="flex flex-col items-end gap-2 shrink-0">
               <Badge status={req.status} />
               {req.status === 'En Proceso' && (<div className="flex gap-2"><button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>)}
-              {req.status === 'Aprobado' && (<button onClick={() => openApprovalLetter(req)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Carta de Aprobación</button>)}
+              {req.status === 'Aprobado' && (<button onClick={() => openApprovalLetter(req, appSettings)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Carta de Aprobación</button>)}
               <div className="flex gap-2">
                 <button onClick={() => openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12} /> Editar</button>
                 <button onClick={() => { setDeleteModal(req); setDeleteReason(''); }} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12} /> Eliminar</button>
@@ -1733,13 +1923,13 @@ export default function CAEDUCApp() {
       <main className={`flex-1 p-8 transition-all ${userMode === 'admin' ? (isSidebarOpen ? 'ml-64' : 'ml-20') : ''}`}>
         {userMode === 'public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings} />}
         {userMode === 'external' && <ExternalAvalesView submitAval={submitAval} onBack={() => setUserMode('public')} appSettings={appSettings} />}
-        {userMode === 'consultar_estado' && <ConsultarEstadoView onBack={() => setUserMode('public')} />}
+        {userMode === 'consultar_estado' && <ConsultarEstadoView onBack={() => setUserMode('public')} appSettings={appSettings} />}
         {userMode === 'verificar_aval' && <VerificarAvalView onBack={() => setUserMode('public')} />}
         {userMode === 'admin' && (
           <>
             {(currentModule === 'planificacion' || currentModule === 'dashboard') && <PlanificacionView activities={activities} createActivity={createActivity} members={members} onRegisterDoc={registerDoc} />}
-            {currentModule === 'avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} />}
-            {currentModule === 'oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} />}
+            {currentModule === 'avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} />}
+            {currentModule === 'oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} />}
             {currentModule === 'reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios} />}
             {currentModule === 'admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember} />}
           </>
