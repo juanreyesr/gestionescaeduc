@@ -937,196 +937,275 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
 // ==========================================
 const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount }) => {
   const today = new Date().toISOString().split('T')[0];
-  const suggestedNum = `Of. ${String((existingCount || 0) + 1).padStart(3, '0')}.CAEDUC`;
+  const suggestedNum = 'Of. ' + String((existingCount || 0) + 1).padStart(3, '0') + '.CAEDUC';
 
-  const [step, setStep] = useState(1); // 1=form, 2=preview/edit
+  const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [data, setData] = useState({
-    numero_oficio: initialData?.numero_oficio || suggestedNum,
-    fecha: initialData?.fecha || today,
-    dirigido_a: initialData?.dirigido_a || 'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala',
-    motivo: initialData?.motivo || MOTIVOS_OFICIO[0],
-    motivo_custom: '',
-    actividad_nombre: initialData?.actividad_nombre || '',
-    actividad_tipo: initialData?.actividad_tipo || '',
-    actividad_fecha: initialData?.actividad_fecha || '',
-    actividad_duracion: initialData?.actividad_duracion || '',
-    actividad_modalidad: initialData?.actividad_modalidad || '',
-    actividad_sede: initialData?.actividad_sede || '',
-    actividad_descripcion: initialData?.actividad_descripcion || '',
-    monto: initialData?.monto || '',
-    monto_detalle: initialData?.monto_detalle || '',
-    justificacion: initialData?.justificacion || '',
-    solicitud_puntual: initialData?.solicitud_puntual || '',
-    cuerpo_personalizado: initialData?.cuerpo_personalizado || '',
-    estado: initialData?.estado || 'Borrador'
-  });
+  const [fd, setFd] = useState(null);
 
-  const isRecursos = data.motivo.includes('recursos') || data.motivo.includes('Aprobación');
-  const isCustomMotivo = data.motivo === 'Otro (personalizado)';
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep(1);
+      setFd({
+        numero_oficio: initialData ? initialData.numero_oficio : suggestedNum,
+        fecha: initialData ? initialData.fecha : today,
+        dirigido_a: initialData ? initialData.dirigido_a : 'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala',
+        motivo: initialData ? initialData.motivo : MOTIVOS_OFICIO[0],
+        motivo_custom: '',
+        actividad_nombre: initialData ? (initialData.actividad_nombre || '') : '',
+        actividad_tipo: initialData ? (initialData.actividad_tipo || '') : '',
+        actividad_fecha: initialData ? (initialData.actividad_fecha || '') : '',
+        actividad_duracion: initialData ? (initialData.actividad_duracion || '') : '',
+        actividad_modalidad: initialData ? (initialData.actividad_modalidad || '') : '',
+        actividad_sede: initialData ? (initialData.actividad_sede || '') : '',
+        actividad_descripcion: initialData ? (initialData.actividad_descripcion || '') : '',
+        monto: initialData ? (initialData.monto || '') : '',
+        monto_detalle: initialData ? (initialData.monto_detalle || '') : '',
+        justificacion: initialData ? (initialData.justificacion || '') : '',
+        solicitud_puntual: initialData ? (initialData.solicitud_puntual || '') : '',
+        cuerpo_personalizado: initialData ? (initialData.cuerpo_personalizado || '') : '',
+        estado: initialData ? (initialData.estado || 'Borrador') : 'Borrador'
+      });
+    }
+  }, [isOpen, initialData]);
 
-  const handlePreview = (e) => {
+  if (!isOpen || !fd) return null;
+
+  const isRecursos = fd.motivo.includes('recursos') || fd.motivo.includes('Aprobación');
+  const isCustomMotivo = fd.motivo === 'Otro (personalizado)';
+
+  const goToPreview = (e) => {
     e.preventDefault();
-    setStep(2);
+    setCurrentStep(2);
   };
 
-  const handleSave = async () => {
+  const handleSaveOficio = async () => {
     setSaving(true);
-    const saveData = { ...data };
-    if (isCustomMotivo && data.motivo_custom) saveData.motivo = data.motivo_custom;
+    const saveData = { ...fd };
+    if (isCustomMotivo && fd.motivo_custom) saveData.motivo = fd.motivo_custom;
     delete saveData.motivo_custom;
     await onSave(saveData);
     setSaving(false);
   };
 
-  if (!isOpen) return null;
+  const handlePreviewOpen = () => {
+    const previewData = { ...fd };
+    if (fd.motivo === 'Otro (personalizado)' && fd.motivo_custom) previewData.motivo = fd.motivo_custom;
+    openOficioLetter(previewData);
+  };
 
+  const updateField = (field, value) => {
+    setFd(prev => ({ ...prev, [field]: value }));
+  };
+
+  // ---- STEP 2: PREVIEW ----
+  if (currentStep === 2) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
+          <div className="flex justify-between items-center p-6 border-b">
+            <div>
+              <h3 className="text-xl font-bold text-gray-800">{initialData ? 'Editar Oficio' : 'Nuevo Oficio'}</h3>
+              <p className="text-sm text-gray-500">Paso 2: Vista previa y edición</p>
+            </div>
+            <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
+          </div>
+          <div className="p-6 max-h-[80vh] overflow-y-auto">
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800 font-medium text-sm">Vista previa del oficio. Puedes volver atrás para editar cualquier campo, o guardar y descargar directamente.</p>
+              </div>
+
+              <div className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-bold text-lg text-gray-800">{fd.numero_oficio}</p>
+                    <p className="text-sm text-gray-500">Guatemala, {formatOficioDate(fd.fecha)}</p>
+                  </div>
+                  <Badge status={fd.estado} />
+                </div>
+                <div className="border-t pt-3 space-y-2 text-sm">
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-600 shrink-0">Dirigido a:</span>
+                    <span className="text-gray-800">{fd.dirigido_a}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-600 shrink-0">Motivo:</span>
+                    <span className="text-gray-800">{isCustomMotivo ? fd.motivo_custom : fd.motivo}</span>
+                  </div>
+                  {fd.actividad_nombre ? (
+                    <div className="flex gap-2">
+                      <span className="font-semibold text-gray-600 shrink-0">Actividad:</span>
+                      <span className="text-gray-800">{fd.actividad_nombre}</span>
+                    </div>
+                  ) : null}
+                  {fd.actividad_tipo ? (
+                    <div className="flex gap-2">
+                      <span className="font-semibold text-gray-600 shrink-0">Tipo:</span>
+                      <span className="text-gray-800">{fd.actividad_tipo} {fd.actividad_modalidad ? '— ' + fd.actividad_modalidad : ''}</span>
+                    </div>
+                  ) : null}
+                  {fd.actividad_fecha ? (
+                    <div className="flex gap-2">
+                      <span className="font-semibold text-gray-600 shrink-0">Fecha actividad:</span>
+                      <span className="text-gray-800">{fd.actividad_fecha}</span>
+                    </div>
+                  ) : null}
+                  {fd.actividad_duracion ? (
+                    <div className="flex gap-2">
+                      <span className="font-semibold text-gray-600 shrink-0">Duración:</span>
+                      <span className="text-gray-800">{fd.actividad_duracion}</span>
+                    </div>
+                  ) : null}
+                  {fd.monto ? (
+                    <div className="flex gap-2">
+                      <span className="font-semibold text-gray-600 shrink-0">Monto:</span>
+                      <span className="text-green-700 font-bold">{fd.monto}</span>
+                    </div>
+                  ) : null}
+                  {fd.justificacion ? (
+                    <p className="text-xs text-purple-600 font-medium pt-1">✓ Incluye justificación técnica (se genera página 2)</p>
+                  ) : null}
+                  {fd.solicitud_puntual ? (
+                    <p className="text-xs text-indigo-600 font-medium">✓ Incluye solicitud puntual a la Junta Directiva</p>
+                  ) : null}
+                </div>
+                <div className="border-t pt-2">
+                  <p className="text-xs text-gray-400">Firma: M.A Juan José Reyes Rodríguez — Coordinador CAEDUC + Sello de la Comisión</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2"
+                >
+                  <ArrowLeft size={18} /> Volver a Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePreviewOpen}
+                  className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                >
+                  <Eye size={18} /> Ver Oficio Completo
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveOficio}
+                  disabled={saving}
+                  className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Oficio'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- STEP 1: FORM ----
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
         <div className="flex justify-between items-center p-6 border-b">
           <div>
             <h3 className="text-xl font-bold text-gray-800">{initialData ? 'Editar Oficio' : 'Nuevo Oficio'}</h3>
-            <p className="text-sm text-gray-500">{step === 1 ? 'Paso 1: Datos del oficio' : 'Paso 2: Vista previa y edición'}</p>
+            <p className="text-sm text-gray-500">Paso 1: Datos del oficio</p>
           </div>
           <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
         </div>
 
         <div className="p-6 max-h-[80vh] overflow-y-auto">
-          {step === 1 && (
-            <form onSubmit={handlePreview} className="space-y-5">
+          <form onSubmit={goToPreview} className="space-y-5">
 
-              {/* Encabezado del oficio */}
-              <div className="bg-blue-50 rounded-lg p-4 space-y-3 border border-blue-100">
-                <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide flex items-center gap-2"><FileSignature size={16} /> Encabezado del Oficio</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-bold mb-1">Número de Oficio *</label>
-                    <input required className="w-full border p-2.5 rounded-lg" value={data.numero_oficio} onChange={e => setData({...data, numero_oficio: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold mb-1">Fecha del Oficio *</label>
-                    <input required type="date" className="w-full border p-2.5 rounded-lg" value={data.fecha} onChange={e => setData({...data, fecha: e.target.value})} />
-                  </div>
+            {/* Encabezado del oficio */}
+            <div className="bg-blue-50 rounded-lg p-4 space-y-3 border border-blue-100">
+              <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide flex items-center gap-2"><FileSignature size={16} /> Encabezado del Oficio</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-bold mb-1">Número de Oficio *</label>
+                  <input required className="w-full border p-2.5 rounded-lg" value={fd.numero_oficio} onChange={e => updateField('numero_oficio', e.target.value)} />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold mb-1">Dirigido a *</label>
-                  <textarea required rows={2} className="w-full border p-2.5 rounded-lg" value={data.dirigido_a} onChange={e => setData({...data, dirigido_a: e.target.value})} placeholder="Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala" />
-                  <p className="text-xs text-gray-400 mt-1">Cada línea separada por coma se mostrará en línea separada.</p>
+                  <label className="block text-sm font-bold mb-1">Fecha del Oficio *</label>
+                  <input required type="date" className="w-full border p-2.5 rounded-lg" value={fd.fecha} onChange={e => updateField('fecha', e.target.value)} />
                 </div>
               </div>
-
-              {/* Motivo */}
-              <div className="bg-amber-50 rounded-lg p-4 space-y-3 border border-amber-100">
-                <h4 className="font-bold text-amber-800 text-sm uppercase tracking-wide">Motivo del Oficio</h4>
-                <select required className="w-full border p-2.5 rounded-lg font-medium" value={data.motivo} onChange={e => setData({...data, motivo: e.target.value})}>
-                  {MOTIVOS_OFICIO.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                {isCustomMotivo && (
-                  <input required placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg" value={data.motivo_custom} onChange={e => setData({...data, motivo_custom: e.target.value})} />
-                )}
-              </div>
-
-              {/* Datos de actividad (si aplica) */}
-              {isRecursos && (
-                <div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
-                  <h4 className="font-bold text-green-800 text-sm uppercase tracking-wide flex items-center gap-2"><Calendar size={16} /> Datos de la Actividad</h4>
-                  <input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={data.actividad_nombre} onChange={e => setData({...data, actividad_nombre: e.target.value})} />
-                  <textarea rows={3} placeholder="Descripción de la actividad (objetivos, temas, propuesta...)" className="w-full border p-2.5 rounded-lg" value={data.actividad_descripcion} onChange={e => setData({...data, actividad_descripcion: e.target.value})} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><label className="block text-sm font-bold mb-1">Tipo de Actividad</label><select className="w-full border p-2.5 rounded-lg" value={data.actividad_tipo} onChange={e => setData({...data, actividad_tipo: e.target.value})}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                    <div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={data.actividad_modalidad} onChange={e => setData({...data, actividad_modalidad: e.target.value})}><option value="">Seleccionar...</option>{MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={data.actividad_duracion} onChange={e => setData({...data, actividad_duracion: e.target.value})} /></div>
-                    <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad</label><input placeholder="Ej: 29 de octubre del presente año" className="w-full border p-2.5 rounded-lg" value={data.actividad_fecha} onChange={e => setData({...data, actividad_fecha: e.target.value})} /></div>
-                  </div>
-                  <input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={data.actividad_sede} onChange={e => setData({...data, actividad_sede: e.target.value})} />
-                </div>
-              )}
-
-              {/* Monto (si es solicitud de recursos) */}
-              {isRecursos && (
-                <div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100">
-                  <h4 className="font-bold text-rose-800 text-sm uppercase tracking-wide">Recursos Solicitados</h4>
-                  <input placeholder="Monto solicitado (ej: US$400 o Q3,000.00) *" className="w-full border p-2.5 rounded-lg" value={data.monto} onChange={e => setData({...data, monto: e.target.value})} />
-                  <textarea rows={2} placeholder="Detalle de recursos (ej: cuatrocientos dólares, o su equivalente en quetzales al tipo de cambio vigente)" className="w-full border p-2.5 rounded-lg" value={data.monto_detalle} onChange={e => setData({...data, monto_detalle: e.target.value})} />
-                </div>
-              )}
-
-              {/* Justificación */}
-              <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
-                <h4 className="font-bold text-purple-800 text-sm uppercase tracking-wide">Justificación Técnica (opcional, genera página 2)</h4>
-                <textarea rows={4} placeholder="Justificación técnica y aporte gremial. Si completas esta sección, se generará una segunda página con la justificación detallada." className="w-full border p-2.5 rounded-lg" value={data.justificacion} onChange={e => setData({...data, justificacion: e.target.value})} />
-              </div>
-
-              {/* Solicitud puntual */}
-              <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100">
-                <h4 className="font-bold text-indigo-800 text-sm uppercase tracking-wide">Solicitud Puntual a la Junta (opcional)</h4>
-                <textarea rows={3} placeholder="Escribe cada punto en una línea separada. Ej:&#10;Aprobación de la actividad&#10;Autorización para contratación del profesional&#10;Asignación presupuestaria de US$400" className="w-full border p-2.5 rounded-lg" value={data.solicitud_puntual} onChange={e => setData({...data, solicitud_puntual: e.target.value})} />
-              </div>
-
-              {/* Cuerpo personalizado */}
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
-                <h4 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Cuerpo Personalizado (opcional)</h4>
-                <p className="text-xs text-gray-500">Si deseas redactar manualmente el cuerpo del oficio (reemplaza el texto generado automáticamente):</p>
-                <textarea rows={4} placeholder="Déjalo vacío para usar el texto generado automáticamente según los datos de arriba..." className="w-full border p-2.5 rounded-lg" value={data.cuerpo_personalizado} onChange={e => setData({...data, cuerpo_personalizado: e.target.value})} />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200">Cancelar</button>
-                <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
-                  <Eye size={18} /> Vista Previa del Oficio →
-                </button>
-              </div>
-            </form>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4">
-              {/* Preview info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-blue-800 font-medium text-sm">Vista previa del oficio. Puedes volver atrás para editar cualquier campo, o guardar y descargar directamente.</p>
-              </div>
-
-              {/* Mini preview card */}
-              <div className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 space-y-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-bold text-lg text-gray-800">{data.numero_oficio}</p>
-                    <p className="text-sm text-gray-500">Guatemala {formatOficioDate(data.fecha)}</p>
-                  </div>
-                  <Badge status={data.estado} />
-                </div>
-                <div className="border-t pt-2 space-y-1 text-sm">
-                  <p><span className="font-semibold text-gray-600">Dirigido a:</span> {data.dirigido_a}</p>
-                  <p><span className="font-semibold text-gray-600">Motivo:</span> {data.motivo === 'Otro (personalizado)' ? data.motivo_custom : data.motivo}</p>
-                  {data.actividad_nombre && <p><span className="font-semibold text-gray-600">Actividad:</span> {data.actividad_nombre}</p>}
-                  {data.monto && <p><span className="font-semibold text-gray-600">Monto:</span> {data.monto}</p>}
-                  {data.actividad_fecha && <p><span className="font-semibold text-gray-600">Fecha actividad:</span> {data.actividad_fecha}</p>}
-                  {data.justificacion && <p className="text-xs text-purple-600">✓ Incluye justificación técnica (página 2)</p>}
-                  {data.solicitud_puntual && <p className="text-xs text-indigo-600">✓ Incluye solicitud puntual a la Junta</p>}
-                </div>
-                <p className="text-xs text-gray-400 pt-1">Firma: M.A Juan José Reyes Rodríguez — Coordinador CAEDUC + Sello</p>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button onClick={() => setStep(1)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2">
-                  <ArrowLeft size={18} /> Volver a Editar
-                </button>
-                <button onClick={() => {
-                  const previewData = { ...data };
-                  if (data.motivo === 'Otro (personalizado)' && data.motivo_custom) previewData.motivo = data.motivo_custom;
-                  openOficioLetter(previewData);
-                }} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2">
-                  <Eye size={18} /> Ver Oficio Completo
-                </button>
-                <button onClick={handleSave} disabled={saving} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                  <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Oficio'}
-                </button>
+              <div>
+                <label className="block text-sm font-bold mb-1">Dirigido a *</label>
+                <textarea required rows={2} className="w-full border p-2.5 rounded-lg" value={fd.dirigido_a} onChange={e => updateField('dirigido_a', e.target.value)} placeholder="Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala" />
+                <p className="text-xs text-gray-400 mt-1">Cada línea separada por coma se mostrará en línea separada.</p>
               </div>
             </div>
-          )}
+
+            {/* Motivo */}
+            <div className="bg-amber-50 rounded-lg p-4 space-y-3 border border-amber-100">
+              <h4 className="font-bold text-amber-800 text-sm uppercase tracking-wide">Motivo del Oficio</h4>
+              <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e => updateField('motivo', e.target.value)}>
+                {MOTIVOS_OFICIO.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              {isCustomMotivo && (
+                <input required placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg" value={fd.motivo_custom} onChange={e => updateField('motivo_custom', e.target.value)} />
+              )}
+            </div>
+
+            {/* Datos de actividad (si aplica) */}
+            {isRecursos && (
+              <div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
+                <h4 className="font-bold text-green-800 text-sm uppercase tracking-wide flex items-center gap-2"><Calendar size={16} /> Datos de la Actividad</h4>
+                <input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e => updateField('actividad_nombre', e.target.value)} />
+                <textarea rows={3} placeholder="Descripción de la actividad (objetivos, temas, propuesta...)" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e => updateField('actividad_descripcion', e.target.value)} />
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-sm font-bold mb-1">Tipo de Actividad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e => updateField('actividad_tipo', e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                  <div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e => updateField('actividad_modalidad', e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e => updateField('actividad_duracion', e.target.value)} /></div>
+                  <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad</label><input placeholder="Ej: 29 de octubre del presente año" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e => updateField('actividad_fecha', e.target.value)} /></div>
+                </div>
+                <input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e => updateField('actividad_sede', e.target.value)} />
+              </div>
+            )}
+
+            {/* Monto (si es solicitud de recursos) */}
+            {isRecursos && (
+              <div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100">
+                <h4 className="font-bold text-rose-800 text-sm uppercase tracking-wide">Recursos Solicitados</h4>
+                <input placeholder="Monto solicitado (ej: US$400 o Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e => updateField('monto', e.target.value)} />
+                <textarea rows={2} placeholder="Detalle de recursos (ej: cuatrocientos dólares, o su equivalente en quetzales al tipo de cambio vigente)" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e => updateField('monto_detalle', e.target.value)} />
+              </div>
+            )}
+
+            {/* Justificación */}
+            <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
+              <h4 className="font-bold text-purple-800 text-sm uppercase tracking-wide">Justificación Técnica (opcional, genera página 2)</h4>
+              <textarea rows={4} placeholder="Justificación técnica y aporte gremial. Si completas esta sección, se generará una segunda página con la justificación detallada." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e => updateField('justificacion', e.target.value)} />
+            </div>
+
+            {/* Solicitud puntual */}
+            <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100">
+              <h4 className="font-bold text-indigo-800 text-sm uppercase tracking-wide">Solicitud Puntual a la Junta (opcional)</h4>
+              <textarea rows={3} placeholder={"Escribe cada punto en una línea separada. Ej:\nAprobación de la actividad\nAutorización para contratación del profesional\nAsignación presupuestaria de US$400"} className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e => updateField('solicitud_puntual', e.target.value)} />
+            </div>
+
+            {/* Cuerpo personalizado */}
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
+              <h4 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Cuerpo Personalizado (opcional)</h4>
+              <p className="text-xs text-gray-500">Si deseas redactar manualmente el cuerpo del oficio (reemplaza el texto generado automáticamente):</p>
+              <textarea rows={4} placeholder="Déjalo vacío para usar el texto generado automáticamente según los datos de arriba..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e => updateField('cuerpo_personalizado', e.target.value)} />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200">Cancelar</button>
+              <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
+                <Eye size={18} /> Vista Previa del Oficio
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
