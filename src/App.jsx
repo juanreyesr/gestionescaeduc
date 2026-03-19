@@ -54,6 +54,59 @@ const MOTIVOS_OFICIO = [
 ];
 
 // ==========================================
+// UTILIDAD: DESCARGA PDF DIRECTA
+// ==========================================
+const loadHtml2Pdf = () => {
+  return new Promise((resolve, reject) => {
+    if (window.html2pdf) { resolve(window.html2pdf); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
+    script.onload = () => resolve(window.html2pdf);
+    script.onerror = () => reject(new Error('No se pudo cargar html2pdf'));
+    document.head.appendChild(script);
+  });
+};
+
+const downloadPDF = async (htmlContent, filename) => {
+  try {
+    const html2pdf = await loadHtml2Pdf();
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '8.5in';
+    container.style.background = 'white';
+    document.body.appendChild(container);
+    container.innerHTML = htmlContent;
+
+    // Esperar a que carguen las imágenes
+    const images = container.querySelectorAll('img');
+    if (images.length > 0) {
+      await Promise.all([...images].map(img =>
+        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+      ));
+      // Pequeña pausa extra para renderizado
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    await html2pdf().set({
+      margin: 0,
+      filename: filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: false },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(container).save();
+
+    document.body.removeChild(container);
+  } catch (err) {
+    console.error('Error generando PDF:', err);
+    alert('Error al generar el PDF. Intenta de nuevo.');
+  }
+};
+
+
+// ==========================================
 // GENERAR CARTA DE APROBACIÓN PDF (HTML)
 // ==========================================
 const generateApprovalLetterHTML = (aval, settings = {}) => {
@@ -92,7 +145,7 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
     @page { size: letter; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
-    .page { width: 8.5in; min-height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; }
+    .page { width: 8.5in; height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; overflow: hidden; }
     .deco-left { position: absolute; left: 0; top: 200px; width: 18px; height: 300px; }
     .deco-left div { width: 8px; margin-bottom: 4px; border-radius: 4px; }
     .deco-left div:nth-child(1) { height: 60px; background: #E91E63; }
@@ -129,14 +182,10 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
     .footer-col { text-align: center; flex: 1; padding: 0 5px; }
     .footer-col strong { display: block; color: #1a5276; font-size: 9px; margin-bottom: 2px; }
     .footer-bottom { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 9px; color: #1a5276; font-weight: 600; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .page { margin: 0; box-shadow: none; } .no-print { display: none !important; } }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .page { margin: 0; box-shadow: none; } }
   </style>
 </head>
 <body>
-  <div class="no-print" style="text-align:center;padding:15px;background:#1a5276;color:white;">
-    <button onclick="window.print()" style="background:#E91E63;color:white;border:none;padding:10px 30px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:10px;">📥 Descargar / Imprimir PDF</button>
-    <button onclick="window.close()" style="background:#555;color:white;border:none;padding:10px 20px;font-size:14px;border-radius:8px;cursor:pointer;">Cerrar</button>
-  </div>
   <div class="page">
     <div class="deco-left"><div></div><div></div><div></div><div></div></div>
     <div class="deco-curve"></div>
@@ -192,11 +241,10 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
 </html>`;
 };
 
-const openApprovalLetter = (aval, settings = {}) => {
+const openApprovalLetter = async (aval, settings = {}) => {
   const html = generateApprovalLetterHTML(aval, settings);
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
-  else alert('Permite las ventanas emergentes para descargar la carta.');
+  const filename = `Aprobacion_Aval_${aval.correlativo || aval.request_number || 'CAEDUC'}`;
+  await downloadPDF(html, filename);
 };
 
 
@@ -312,7 +360,7 @@ const generateOficioHTML = (oficio, settings = {}) => {
     @page { size: letter; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
-    .page { width: 8.5in; min-height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; page-break-after: always; }
+    .page { width: 8.5in; height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; overflow: hidden; page-break-after: always; }
     .page:last-child { page-break-after: auto; }
     
     /* Decorative left bars */
@@ -356,19 +404,10 @@ const generateOficioHTML = (oficio, settings = {}) => {
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .page { margin: 0; box-shadow: none; }
-      .no-print { display: none !important; }
     }
   </style>
 </head>
 <body>
-  <div class="no-print" style="text-align:center;padding:15px;background:#1a5276;color:white;position:sticky;top:0;z-index:99;">
-    <button onclick="window.print()" style="background:#E91E63;color:white;border:none;padding:10px 30px;font-size:16px;font-weight:bold;border-radius:8px;cursor:pointer;margin-right:10px;">
-      📥 Descargar / Imprimir PDF
-    </button>
-    <button onclick="window.close()" style="background:#555;color:white;border:none;padding:10px 20px;font-size:14px;border-radius:8px;cursor:pointer;">
-      Cerrar
-    </button>
-  </div>
   
   <!-- PÁGINA 1: OFICIO -->
   <div class="page">
@@ -464,11 +503,10 @@ const generateOficioHTML = (oficio, settings = {}) => {
 </html>`;
 };
 
-const openOficioLetter = (oficio, settings = {}) => {
+const openOficioLetter = async (oficio, settings = {}) => {
   const html = generateOficioHTML(oficio, settings);
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
-  else alert('Permite las ventanas emergentes para ver el oficio.');
+  const filename = `Oficio_${(oficio.numero_oficio || 'CAEDUC').replace(/\s+/g, '_')}`;
+  await downloadPDF(html, filename);
 };
 
 
@@ -886,7 +924,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
                 <button onClick={() => openOficioLetter(o, appSettings)} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
-                  <Eye size={14} /> Ver / Descargar
+                  <Download size={14} /> Descargar PDF
                 </button>
                 <button onClick={() => handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium">
                   <Edit3 size={14} /> Editar
@@ -1106,7 +1144,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount, 
                   onClick={handlePreviewOpen}
                   className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
                 >
-                  <Eye size={18} /> Ver Oficio Completo
+                  <Download size={18} /> Descargar PDF del Oficio
                 </button>
                 <button
                   type="button"
@@ -1642,7 +1680,7 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
             <div className="flex flex-col items-end gap-2 shrink-0">
               <Badge status={req.status} />
               {req.status === 'En Proceso' && (<div className="flex gap-2"><button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>)}
-              {req.status === 'Aprobado' && (<button onClick={() => openApprovalLetter(req, appSettings)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Carta de Aprobación</button>)}
+              {req.status === 'Aprobado' && (<button onClick={() => openApprovalLetter(req, appSettings)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Descargar PDF</button>)}
               <div className="flex gap-2">
                 <button onClick={() => openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12} /> Editar</button>
                 <button onClick={() => { setDeleteModal(req); setDeleteReason(''); }} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12} /> Eliminar</button>
@@ -1694,12 +1732,12 @@ const ReportesView = ({ avales, docs, oficios }) => {
   const [reportFormat, setReportFormat] = useState('pdf');
   const [generating, setGenerating] = useState(false);
 
-  const generateReport = () => {
+  const generateReport = async () => {
     if (!dateFrom || !dateTo) { alert('Selecciona ambas fechas.'); return; }
     setGenerating(true);
     const filtered = avales.filter(a => { const d = a.activity_date || a.created_at?.substring(0, 10); return d >= dateFrom && d <= dateTo; });
     if (filtered.length === 0) { alert('No hay solicitudes en ese período.'); setGenerating(false); return; }
-    if (reportFormat === 'excel') generateCSV(filtered); else generatePDF(filtered);
+    if (reportFormat === 'excel') generateCSV(filtered); else await generatePDF(filtered);
     setGenerating(false); setShowModal(false);
   };
 
@@ -1711,10 +1749,10 @@ const ReportesView = ({ avales, docs, oficios }) => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `reporte_avales_${dateFrom}_${dateTo}.csv`; a.click();
   };
 
-  const generatePDF = (data) => {
+  const generatePDF = async (data) => {
     const rows = data.map(a => `<tr><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.deletion_reason||'—'}</td></tr>`).join('');
-    const html = `<html><head><title>Reporte CAEDUC</title></head><body style="font-family:Arial;padding:30px;"><h1 style="color:#1e3a5f;">Reporte de Avales — CAEDUC</h1><p style="color:#666;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p><p style="color:#666;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | En Proceso: ${data.filter(a=>a.status==='En Proceso'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr style="background:#1e3a5f;color:white;"><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p></body></html>`;
-    const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.print();
+    const html = `<div style="font-family:Arial;padding:30px;background:white;width:10in;"><h1 style="color:#1e3a5f;font-size:20px;">Reporte de Avales — CAEDUC</h1><p style="color:#666;font-size:12px;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p><p style="color:#666;font-size:12px;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | En Proceso: ${data.filter(a=>a.status==='En Proceso'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr style="background:#1e3a5f;color:white;"><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p></div>`;
+    await downloadPDF(html, `Reporte_Avales_${dateFrom}_${dateTo}`);
   };
 
   const active = avales.filter(a => !a.is_deleted);
