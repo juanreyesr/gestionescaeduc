@@ -54,8 +54,42 @@ const MOTIVOS_OFICIO = [
 ];
 
 // ==========================================
-// UTILIDAD: DESCARGA PDF DIRECTA
+// UTILIDAD: DESCARGA PDF + VISTA PREVIA
 // ==========================================
+const imgToBase64 = (url) => {
+  return new Promise((resolve) => {
+    if (!url || url.startsWith('data:')) { resolve(url || ''); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        resolve(c.toDataURL('image/png'));
+      } catch { resolve(url); }
+    };
+    img.onerror = () => resolve(url);
+    img.src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now();
+  });
+};
+
+const convertImagesToBase64 = async (html) => {
+  const imgRegex = /src="(https?:\/\/[^"]+)"/g;
+  const urls = new Set();
+  let m;
+  while ((m = imgRegex.exec(html)) !== null) urls.add(m[1]);
+  if (urls.size === 0) return html;
+  const map = {};
+  await Promise.all([...urls].map(async (url) => { map[url] = await imgToBase64(url); }));
+  let result = html;
+  for (const [url, b64] of Object.entries(map)) {
+    if (b64 && b64.startsWith('data:')) result = result.split(url).join(b64);
+  }
+  return result;
+};
+
 const loadHtml2Pdf = () => {
   return new Promise((resolve, reject) => {
     if (window.html2pdf) { resolve(window.html2pdf); return; }
@@ -70,30 +104,27 @@ const loadHtml2Pdf = () => {
 const downloadPDF = async (htmlContent, filename) => {
   try {
     const html2pdf = await loadHtml2Pdf();
+    // Convertir imágenes externas a base64 para evitar CORS
+    const safeHtml = await convertImagesToBase64(htmlContent);
+
     const container = document.createElement('div');
-    container.style.position = 'fixed';
+    container.style.position = 'absolute';
     container.style.left = '-9999px';
     container.style.top = '0';
     container.style.width = '8.5in';
     container.style.background = 'white';
+    container.style.zIndex = '-1';
     document.body.appendChild(container);
-    container.innerHTML = htmlContent;
+    container.innerHTML = safeHtml;
 
-    // Esperar a que carguen las imágenes
-    const images = container.querySelectorAll('img');
-    if (images.length > 0) {
-      await Promise.all([...images].map(img =>
-        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
-      ));
-      // Pequeña pausa extra para renderizado
-      await new Promise(r => setTimeout(r, 300));
-    }
+    // Esperar renderizado
+    await new Promise(r => setTimeout(r, 500));
 
     await html2pdf().set({
       margin: 0,
       filename: filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf',
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: false },
+      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] }
     }).from(container).save();
@@ -102,6 +133,16 @@ const downloadPDF = async (htmlContent, filename) => {
   } catch (err) {
     console.error('Error generando PDF:', err);
     alert('Error al generar el PDF. Intenta de nuevo.');
+  }
+};
+
+const previewHTML = (htmlContent) => {
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(htmlContent);
+    w.document.close();
+  } else {
+    alert('Permite las ventanas emergentes para ver la vista previa.');
   }
 };
 
@@ -241,10 +282,14 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
 </html>`;
 };
 
-const openApprovalLetter = async (aval, settings = {}) => {
+const openApprovalLetter = async (aval, settings = {}, mode = 'download') => {
   const html = generateApprovalLetterHTML(aval, settings);
-  const filename = `Aprobacion_Aval_${aval.correlativo || aval.request_number || 'CAEDUC'}`;
-  await downloadPDF(html, filename);
+  if (mode === 'preview') {
+    previewHTML(html);
+  } else {
+    const filename = `Aprobacion_Aval_${aval.correlativo || aval.request_number || 'CAEDUC'}`;
+    await downloadPDF(html, filename);
+  }
 };
 
 
@@ -503,10 +548,14 @@ const generateOficioHTML = (oficio, settings = {}) => {
 </html>`;
 };
 
-const openOficioLetter = async (oficio, settings = {}) => {
+const openOficioLetter = async (oficio, settings = {}, mode = 'download') => {
   const html = generateOficioHTML(oficio, settings);
-  const filename = `Oficio_${(oficio.numero_oficio || 'CAEDUC').replace(/\s+/g, '_')}`;
-  await downloadPDF(html, filename);
+  if (mode === 'preview') {
+    previewHTML(html);
+  } else {
+    const filename = `Oficio_${(oficio.numero_oficio || 'CAEDUC').replace(/\s+/g, '_')}`;
+    await downloadPDF(html, filename);
+  }
 };
 
 
@@ -779,7 +828,10 @@ const ConsultarEstadoView = ({ onBack, appSettings }) => {
                   <div className="border-t pt-3 space-y-3">
                     {result.correlativo && (<div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval (Correlativo)</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div>)}
                     {result.approval_reason && (<div className="bg-green-50 border border-green-200 rounded-lg p-3"><p className="text-sm text-green-600 font-medium">Observaciones:</p><p className="text-green-800 text-sm">{result.approval_reason}</p></div>)}
-                    <button onClick={() => openApprovalLetter(result, appSettings)} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={20} /> Descargar Carta de Aprobación de Aval</button>
+                    <div className="flex gap-2">
+                      <button onClick={() => openApprovalLetter(result, appSettings, 'preview')} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 flex items-center justify-center gap-2 border border-blue-200"><Eye size={18} /> Vista Previa</button>
+                      <button onClick={() => openApprovalLetter(result, appSettings, 'download')} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={18} /> Descargar PDF</button>
+                    </div>
                   </div>
                 )}
                 {result.status === 'Rechazado' && result.approval_reason && (<div className="border-t pt-3"><div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p><p className="text-red-800 text-sm">{result.approval_reason}</p></div></div>)}
@@ -923,9 +975,14 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <button onClick={() => openOficioLetter(o, appSettings)} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
-                  <Download size={14} /> Descargar PDF
-                </button>
+                <div className="flex gap-1">
+                  <button onClick={() => openOficioLetter(o, appSettings, 'preview')} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
+                    <Eye size={14} /> Vista Previa
+                  </button>
+                  <button onClick={() => openOficioLetter(o, appSettings, 'download')} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-indigo-700 flex items-center gap-1 font-medium">
+                    <Download size={14} /> Descargar PDF
+                  </button>
+                </div>
                 <button onClick={() => handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium">
                   <Edit3 size={14} /> Editar
                 </button>
@@ -1047,7 +1104,13 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount, 
   const handlePreviewOpen = () => {
     const previewData = { ...fd };
     if (fd.motivo === 'Otro (personalizado)' && fd.motivo_custom) previewData.motivo = fd.motivo_custom;
-    openOficioLetter(previewData, appSettings);
+    openOficioLetter(previewData, appSettings, 'preview');
+  };
+
+  const handleDownloadPdf = () => {
+    const previewData = { ...fd };
+    if (fd.motivo === 'Otro (personalizado)' && fd.motivo_custom) previewData.motivo = fd.motivo_custom;
+    openOficioLetter(previewData, appSettings, 'download');
   };
 
   const updateField = (field, value) => {
@@ -1131,29 +1194,40 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount, 
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(1)}
-                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft size={18} /> Volver a Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePreviewOpen}
-                  className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
-                >
-                  <Download size={18} /> Descargar PDF del Oficio
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveOficio}
-                  disabled={saving}
-                  className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Oficio'}
-                </button>
+              <div className="space-y-2 pt-2">
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2"
+                  >
+                    <ArrowLeft size={18} /> Volver a Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePreviewOpen}
+                    className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 flex items-center justify-center gap-2 border border-blue-200"
+                  >
+                    <Eye size={18} /> Vista Previa
+                  </button>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleDownloadPdf}
+                    className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                  >
+                    <Download size={18} /> Descargar PDF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveOficio}
+                    disabled={saving}
+                    className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <Save size={18} /> {saving ? 'Guardando...' : 'Guardar Oficio'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1680,7 +1754,12 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
             <div className="flex flex-col items-end gap-2 shrink-0">
               <Badge status={req.status} />
               {req.status === 'En Proceso' && (<div className="flex gap-2"><button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>)}
-              {req.status === 'Aprobado' && (<button onClick={() => openApprovalLetter(req, appSettings)} className="bg-green-50 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Descargar PDF</button>)}
+              {req.status === 'Aprobado' && (
+                <div className="flex gap-1">
+                  <button onClick={() => openApprovalLetter(req, appSettings, 'preview')} className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Eye size={12} /> Vista Previa</button>
+                  <button onClick={() => openApprovalLetter(req, appSettings, 'download')} className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Descargar PDF</button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button onClick={() => openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12} /> Editar</button>
                 <button onClick={() => { setDeleteModal(req); setDeleteReason(''); }} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12} /> Eliminar</button>
