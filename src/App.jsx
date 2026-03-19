@@ -108,11 +108,14 @@ const generateApprovalLetterHTML = (aval) => {
     .details .value { color: #E91E63; font-weight: 600; }
     .thanks { font-size: 13.5px; line-height: 1.8; text-align: justify; margin: 20px 0; }
     .closing { margin-top: 15px; font-size: 13.5px; }
-    .signatures { display: flex; justify-content: space-between; margin-top: 50px; }
+    .signatures { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; position: relative; }
     .sig-block { text-align: center; }
-    .sig-line { width: 200px; border-top: 1px solid #333; padding-top: 5px; }
+    .sig-img { height: 70px; width: auto; display: block; margin: 0 auto -8px; }
+    .sig-line { width: 220px; border-top: 1px solid #333; padding-top: 5px; }
     .sig-name { font-weight: 700; font-size: 13px; }
     .sig-role { font-size: 12px; color: #555; }
+    .sello-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
+    .sello-center img { height: 110px; width: auto; opacity: 0.85; }
     .footer { position: absolute; bottom: 0; left: 0; right: 0; border-top: 2px solid #eee; padding: 15px 30px; display: flex; justify-content: space-between; font-size: 8.5px; color: #777; background: white; }
     .footer-col { text-align: center; flex: 1; padding: 0 5px; }
     .footer-col strong { display: block; color: #1a5276; font-size: 9px; margin-bottom: 2px; }
@@ -149,8 +152,23 @@ const generateApprovalLetterHTML = (aval) => {
       <div class="thanks">Agradecemos y valoramos el trabajo y esfuerzo constante que implementa en la promoción del crecimiento continuo de los profesionales. Así mismo, solicitamos incluir el número de AVAL en el material correspondiente a la actividad aprobada.</div>
       <div class="closing">Sin otro particular, nos despedimos.</div>
       <div class="signatures">
-        <div class="sig-block"><div class="sig-line"><div class="sig-name">Dra. Rebecca Ramírez de Chajón</div><div class="sig-role">Coordinadora – CAEDUC</div></div></div>
-        <div class="sig-block"><div class="sig-line"><div class="sig-name">Mgtr. Luisa Mazariegos</div><div class="sig-role">Secretaria - CAEDUC</div></div></div>
+        <div class="sig-block">
+          <img src="${window.location.origin}/firma-coordinador.png" alt="Firma Coordinador" class="sig-img" />
+          <div class="sig-line">
+            <div class="sig-name">M. A. Juan J. Reyes</div>
+            <div class="sig-role">Coordinador – CAEDUC</div>
+          </div>
+        </div>
+        <div class="sello-center">
+          <img src="${window.location.origin}/sello.png" alt="Sello CAEDUC" />
+        </div>
+        <div class="sig-block">
+          <img src="${window.location.origin}/firma-secretaria.png" alt="Firma Secretaria" class="sig-img" />
+          <div class="sig-line">
+            <div class="sig-name">Mgtr. Luisa Mazariegos</div>
+            <div class="sig-role">Secretaria - CAEDUC</div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="footer">
@@ -304,21 +322,12 @@ const generateOficioHTML = (oficio) => {
     .addressee { margin-bottom: 20px; font-size: 13px; line-height: 1.7; }
     .saludo { font-size: 13px; font-weight: 600; margin-bottom: 16px; }
 
-    .firma-section { margin-top: 40px; text-align: center; }
+    .firma-section { margin-top: 25px; text-align: center; }
     .firma-line { font-size: 13px; font-weight: 600; margin-top: 4px; }
     .firma-role { font-size: 12px; color: #555; }
     .firma-inst { font-size: 12px; color: #555; }
-    
-    /* Sello visual */
-    .sello { 
-      display: inline-block; width: 90px; height: 90px; border: 3px solid #1a5276; border-radius: 50%; 
-      text-align: center; line-height: 1.1; padding: 12px 6px; font-size: 7.5px; font-weight: 700; 
-      color: #1a5276; margin-left: 20px; vertical-align: middle; position: relative;
-    }
-    .sello::before { content: ''; position: absolute; inset: 4px; border: 1.5px solid #1a5276; border-radius: 50%; }
-    .sello .sello-top { font-size: 6.5px; letter-spacing: 1.5px; text-transform: uppercase; display: block; margin-top: 8px; }
-    .sello .sello-mid { font-size: 7px; font-weight: 800; color: #E91E63; display: block; margin: 4px 0; }
-    .sello .sello-bot { font-size: 6px; letter-spacing: 1px; text-transform: uppercase; display: block; }
+    .firma-img { height: 65px; width: auto; display: block; margin: 0 auto -6px; }
+    .sello-img { height: 100px; width: auto; opacity: 0.85; }
 
     .cc { font-size: 11px; color: #777; margin-top: 15px; }
 
@@ -380,19 +389,18 @@ const generateOficioHTML = (oficio) => {
       <p style="font-size:13px;margin-top:20px;text-align:center;">Cordialmente,</p>
       
       <div class="firma-section">
-        <div style="display:inline-flex;align-items:center;gap:15px;margin-top:35px;">
+        <div style="display:inline-flex;align-items:flex-end;gap:20px;margin-top:20px;">
           <div style="text-align:center;">
+            <img src="${window.location.origin}/firma-coordinador.png" alt="Firma Coordinador" class="firma-img" />
             <div style="width:220px;border-top:1px solid #333;padding-top:6px;">
-              <div class="firma-line">M.A Juan José Reyes Rodríguez</div>
+              <div class="firma-line">M. A. Juan J. Reyes</div>
               <div class="firma-role">Coordinador</div>
               <div class="firma-inst">Comisión de Acreditación Educación continua</div>
               <div class="firma-inst">Colegio de Psicólogos de Guatemala</div>
             </div>
           </div>
-          <div class="sello">
-            <span class="sello-top">Colegio de Psicólogos</span>
-            <span class="sello-mid">COMISIÓN DE<br>ACREDITACIÓN<br>Y EDUCACIÓN<br>CONTINUA</span>
-            <span class="sello-bot">de Guatemala</span>
+          <div style="text-align:center;margin-bottom:15px;">
+            <img src="${window.location.origin}/sello.png" alt="Sello CAEDUC" class="sello-img" />
           </div>
         </div>
       </div>
@@ -1072,7 +1080,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, existingCount }
                   ) : null}
                 </div>
                 <div className="border-t pt-2">
-                  <p className="text-xs text-gray-400">Firma: M.A Juan José Reyes Rodríguez — Coordinador CAEDUC + Sello de la Comisión</p>
+                  <p className="text-xs text-gray-400">Firma: M. A. Juan J. Reyes — Coordinador CAEDUC + Sello</p>
                 </div>
               </div>
 
