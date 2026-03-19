@@ -67,6 +67,8 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
   const f1FirmaUrl = f1FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f1FirmaPath}` : '';
   const f2FirmaUrl = f2FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f2FirmaPath}` : '';
   const selloUrl = selloPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${selloPath}` : '';
+  const logoPath = settings.logo_path || '';
+  const logoUrl = logoPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${logoPath}` : '';
   const formatApprovalDate = (dateStr) => {
     if (!dateStr) return '—';
     const months = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -101,11 +103,8 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
     .deco-curve::before { content: ''; position: absolute; right: -100px; top: 100px; width: 300px; height: 300px; border-radius: 50%; border: 40px solid rgba(200,200,200,0.15); }
     .deco-curve::after { content: ''; position: absolute; right: -50px; bottom: 150px; width: 250px; height: 250px; border-radius: 50%; border: 30px solid rgba(200,200,200,0.12); }
     .content { padding: 50px 70px 40px 70px; position: relative; z-index: 1; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
-    .logo-area { display: flex; align-items: center; gap: 8px; }
-    .logo-text { font-size: 22px; font-weight: 800; color: #1a5276; line-height: 1.2; }
-    .logo-text .green { color: #27ae60; }
-    .logo-text .sub { font-size: 16px; font-weight: 600; }
+    .header { margin-bottom: 20px; }
+    .header img { height: 90px; width: auto; }
     .title { text-align: center; font-size: 24px; font-weight: 800; color: #1a5276; letter-spacing: 2px; margin: 20px 0 30px 0; }
     .date-line { text-align: right; color: #E91E63; font-weight: 600; margin-bottom: 25px; font-size: 14px; }
     .addressee { margin-bottom: 25px; font-size: 14px; line-height: 1.6; }
@@ -143,7 +142,7 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
     <div class="deco-curve"></div>
     <div class="content">
       <div class="header">
-        <div class="logo-area"><div class="logo-text">Colegio de<br><span class="green">Psicólogos</span><br><span class="sub">de Guatemala</span></div></div>
+        ${logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}
       </div>
       <div class="title">APROBACIÓN DE AVAL</div>
       <div class="date-line">Guatemala, ${formatApprovalDate(aval.approval_date)}</div>
@@ -219,6 +218,8 @@ const generateOficioHTML = (oficio, settings = {}) => {
   const selloPath = settings.sello_path || '';
   const f1FirmaUrl = f1FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f1FirmaPath}` : '';
   const selloUrl = selloPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${selloPath}` : '';
+  const logoPath = settings.logo_path || '';
+  const logoUrl = logoPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${logoPath}` : '';
   const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
   const isRecursos = oficio.motivo?.includes('recursos') || oficio.motivo?.includes('Aprobación');
 
@@ -329,10 +330,8 @@ const generateOficioHTML = (oficio, settings = {}) => {
     
     .content { padding: 45px 65px 120px 65px; position: relative; z-index: 1; }
     
-    .header { display: flex; justify-content: flex-start; align-items: flex-start; margin-bottom: 10px; }
-    .logo-text { font-size: 20px; font-weight: 800; color: #1a5276; line-height: 1.2; }
-    .logo-text .green { color: #27ae60; }
-    .logo-text .sub { font-size: 15px; font-weight: 600; }
+    .header { margin-bottom: 10px; }
+    .header img { height: 90px; width: auto; }
 
     .oficio-ref { text-align: right; font-size: 13px; color: #555; margin-bottom: 4px; }
     .oficio-date { text-align: right; font-size: 13px; color: #555; margin-bottom: 25px; }
@@ -378,11 +377,7 @@ const generateOficioHTML = (oficio, settings = {}) => {
     
     <div class="content">
       <div class="header">
-        <div class="logo-text">
-          Colegio de<br>
-          <span class="green">Psicólogos</span><br>
-          <span class="sub">de Guatemala</span>
-        </div>
+        ${logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}
       </div>
       
       <div class="oficio-ref"><strong>${oficio.numero_oficio || 'Of. ___.CAEDUC'}</strong></div>
@@ -439,11 +434,7 @@ const generateOficioHTML = (oficio, settings = {}) => {
   <div class="page">
     <div class="content" style="padding-top:50px;">
       <div class="header">
-        <div class="logo-text" style="font-size:16px;">
-          Colegio de<br>
-          <span class="green">Psicólogos</span><br>
-          <span class="sub" style="font-size:13px;">de Guatemala</span>
-        </div>
+        ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:70px;" />` : ''}
       </div>
       
       <h2 style="font-size:16px;font-weight:800;color:#1a5276;text-align:center;margin:20px 0 8px;">Justificación técnica y aporte gremial</h2>
@@ -1441,11 +1432,20 @@ const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-lg font-bold text-gray-700">Firmas, Sello y Datos de Firmantes</h3>
-        <p className="text-sm text-gray-500">Configura quiénes firman las cartas de aprobación de avales y los oficios. Las imágenes y nombres se reflejan automáticamente en todos los documentos generados.</p>
+        <h3 className="text-lg font-bold text-gray-700">Logo, Firmas, Sello y Firmantes</h3>
+        <p className="text-sm text-gray-500">Configura el logo de encabezado, quiénes firman las cartas y el sello institucional. Todo se refleja automáticamente en las cartas de avales y oficios.</p>
       </div>
 
       {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
+
+      {/* Logo del encabezado */}
+      <Card>
+        <div className="space-y-4">
+          <h4 className="font-bold text-green-800 flex items-center gap-2"><FileText size={18} /> Logo de Encabezado</h4>
+          <p className="text-sm text-gray-500">Este logo aparece en la parte superior de todas las cartas de aprobación de avales y oficios. Recomendado: imagen PNG con fondo transparente, ancho mínimo 400px.</p>
+          <FirmaUploader label="Imagen del logo" settingKey="logo_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} />
+        </div>
+      </Card>
 
       {/* Firmante 1 */}
       <Card>
