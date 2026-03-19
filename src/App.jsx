@@ -104,34 +104,56 @@ const loadHtml2Pdf = () => {
 const downloadPDF = async (htmlContent, filename) => {
   try {
     const html2pdf = await loadHtml2Pdf();
-    // Convertir imágenes externas a base64 para evitar CORS
     const safeHtml = await convertImagesToBase64(htmlContent);
 
+    // Overlay de carga visible al usuario
+    const overlay = document.createElement('div');
+    overlay.id = 'pdf-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,0.97);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
+    overlay.innerHTML = '<div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:pdfspin 0.8s linear infinite;"></div><p style="font-size:15px;color:#374151;font-weight:600;">Generando PDF...</p><p style="font-size:12px;color:#9ca3af;">Espera un momento</p><style>@keyframes pdfspin{to{transform:rotate(360deg)}}</style>';
+    document.body.appendChild(overlay);
+
+    // Contenedor VISIBLE (detrás del overlay) para que html2canvas lo capture
     const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.left = '-9999px';
-    container.style.top = '0';
-    container.style.width = '8.5in';
-    container.style.background = 'white';
-    container.style.zIndex = '-1';
+    container.id = 'pdf-render-container';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:8.5in;background:white;z-index:99998;overflow:visible;';
     document.body.appendChild(container);
     container.innerHTML = safeHtml;
 
-    // Esperar renderizado
-    await new Promise(r => setTimeout(r, 500));
+    // Esperar renderizado completo del navegador
+    await new Promise(r => setTimeout(r, 1200));
+
+    const safeName = filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf';
 
     await html2pdf().set({
       margin: 0,
-      filename: filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf',
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, allowTaint: true },
+      filename: safeName,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        width: container.scrollWidth,
+        height: container.scrollHeight
+      },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] }
     }).from(container).save();
 
-    document.body.removeChild(container);
+    // Limpiar
+    if (container.parentNode) document.body.removeChild(container);
+    if (overlay.parentNode) document.body.removeChild(overlay);
   } catch (err) {
     console.error('Error generando PDF:', err);
+    const ov = document.getElementById('pdf-overlay');
+    const ct = document.getElementById('pdf-render-container');
+    if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+    if (ct && ct.parentNode) ct.parentNode.removeChild(ct);
     alert('Error al generar el PDF. Intenta de nuevo.');
   }
 };
