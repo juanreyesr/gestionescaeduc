@@ -435,7 +435,7 @@ const Modal = ({ isOpen, onClose, title, children, size = "md" }) => {
           <h3 className="text-xl font-bold text-gray-800">{title}</h3>
           <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
         </div>
-        <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="p-4 overflow-y-auto" style={{maxHeight:'calc(100dvh - 120px)',overflowY:'auto'}}>{children}</div>
       </div>
     </div>
   );
@@ -678,35 +678,41 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
 // ── Tarjeta colapsable de oficio ──────────────────────────────────────────────
 const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }) => {
   const [expanded, setExpanded] = useState(false);
+  // No renderizar tarjetas vacías
+  if (!o.numero_oficio && !o.motivo) return null;
   return (
-    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow" style={{overflow:'hidden',maxWidth:'100%',boxSizing:'border-box'}}>
       {/* Fila siempre visible — clic para expandir */}
-      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+      <div className="flex items-center gap-2 px-3 py-3 cursor-pointer select-none"
+           style={{minWidth:0,overflow:'hidden'}}
            onClick={() => setExpanded(e => !e)}>
         {/* Número de oficio + estado */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-gray-800">{o.numero_oficio}</span>
+        <div style={{flex:'1',minWidth:0,overflow:'hidden'}}>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-bold text-gray-800 text-sm">{o.numero_oficio}</span>
             <Badge status={o.estado}/>
             {o.ultima_edicion_en && (
-              <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-200 flex items-center gap-1">
-                ✏ Editado {new Date(o.ultima_edicion_en).toLocaleDateString('es-GT')}
-                {o.ultima_edicion_por ? ` · ${o.ultima_edicion_por}` : ''}
+              <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-200">
+                ✏ {new Date(o.ultima_edicion_en).toLocaleDateString('es-GT')}
+                {o.ultima_edicion_por ? ` · ${o.ultima_edicion_por.split('@')[0]}` : ''}
               </span>
             )}
             <span className="text-xs text-gray-400 flex items-center gap-1">
-              <Calendar size={11}/>{o.fecha}
+              <Calendar size={10}/>{o.fecha}
             </span>
           </div>
-          {/* Título si existe, o motivo como fallback */}
-          {o.titulo
-            ? <p className="text-sm font-semibold text-gray-700 truncate mt-0.5">{o.titulo}</p>
-            : <p className="text-sm text-gray-500 truncate mt-0.5">{o.motivo}</p>
-          }
-          {o.titulo && <p className="text-xs text-gray-400 truncate">{o.motivo}</p>}
+          {/* Título o motivo — truncado estrictamente */}
+          <p style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'100%',fontSize:'13px',marginTop:'2px',color: o.titulo ? '#374151' : '#6b7280',fontWeight: o.titulo ? '600' : '400'}}>
+            {o.titulo || o.motivo}
+          </p>
+          {o.titulo && (
+            <p style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'100%',fontSize:'11px',color:'#9ca3af'}}>
+              {o.motivo}
+            </p>
+          )}
         </div>
         {/* Indicador expandir/colapsar */}
-        <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}/>
+        <ChevronDown size={15} className={`text-gray-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}/>
       </div>
 
       {/* Contenido expandido */}
@@ -788,10 +794,10 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
   const updateField = (field,value) => setFd(prev=>({...prev,[field]:value}));
   if (currentStep===2) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
-          <div className="flex justify-between items-center p-6 border-b"><div><h3 className="text-xl font-bold text-gray-800">{initialData?'Editar Oficio':'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">Paso 2: Vista previa</p></div><button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500"/></button></div>
-          <div className="p-6 max-h-[80vh] overflow-y-auto space-y-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-3 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full my-3" style={{maxWidth:'min(95vw,720px)',boxSizing:'border-box'}}>
+          <div className="flex justify-between items-center p-4 border-b"><div><h3 className="text-lg font-bold text-gray-800">{initialData?'Editar Oficio':'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">Paso 2: Vista previa</p></div><button onClick={onClose}><X size={22} className="text-gray-500 hover:text-red-500"/></button></div>
+          <div className="p-4 overflow-y-auto space-y-4" style={{maxHeight:'calc(100dvh - 120px)'}}>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4"><p className="text-blue-800 font-medium text-sm">Vista previa del oficio. Puedes volver atrás para editar o guardar directamente.</p></div>
             <div className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 space-y-3">
               <div className="flex justify-between items-start"><div><p className="font-bold text-lg text-gray-800">{fd.numero_oficio}</p><p className="text-sm text-gray-500">Guatemala, {formatOficioDate(fd.fecha)}</p></div><Badge status={fd.estado}/></div>
@@ -813,9 +819,9 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
     );
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
-        <div className="flex justify-between items-center p-6 border-b"><div><h3 className="text-xl font-bold text-gray-800">{initialData?'Editar Oficio':'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">{preFillData?`Datos importados desde Planificación — "${preFillData.actividad_nombre}"` : 'Paso 1: Datos del oficio'}</p></div><button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500"/></button></div>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-3 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl w-full my-3" style={{maxWidth:'min(95vw,720px)',boxSizing:'border-box'}}>
+        <div className="flex justify-between items-center p-4 border-b"><div><h3 className="text-lg font-bold text-gray-800">{initialData?'Editar Oficio':'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">{preFillData?`Datos importados desde Planificación — "${preFillData.actividad_nombre}"` : 'Paso 1: Datos del oficio'}</p></div><button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500"/></button></div>
         <div className="p-6 max-h-[80vh] overflow-y-auto">
           {preFillData&&(<div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 flex items-start gap-2 text-sm text-indigo-800"><FileText size={15} className="shrink-0 mt-0.5"/><span>Datos importados desde <strong>Planificación CAEDUC 2026</strong>. Revisa y complementa antes de guardar.</span></div>)}
           <form onSubmit={goToPreview} className="space-y-5">
@@ -1081,7 +1087,7 @@ export default function CAEDUCApp() {
           setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}}
           logout={handleLogout}/>
       )}
-      <main className={`flex-1 p-8 transition-all ${userMode==='admin'?(isSidebarOpen?'ml-64':'ml-20'):''}`}>
+      <main className={`flex-1 p-4 md:p-8 transition-all ${userMode==='admin'?(isSidebarOpen?'ml-64':'ml-20'):''}`} style={{overflowX:'hidden',minWidth:0}}>
         {userMode==='public'&&<LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
         {userMode==='external'&&<ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
         {userMode==='consultar_estado'&&<ConsultarEstadoView onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
