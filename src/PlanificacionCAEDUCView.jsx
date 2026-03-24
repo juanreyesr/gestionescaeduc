@@ -127,7 +127,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const [gastoRubroModal,setGastoRubroModal] = useState(null);
   const [editingArea,setEditingArea]     = useState(null);
   const [respForm,setRespForm]           = useState({responsable:'',email:'',telefono:''});
-  const [filters,setFilters]             = useState({trimestre:'',area:'',estado:''});
+  const [filters,setFilters]             = useState({trimestre:'',area:'',estado:'activas'});
 
   const fetchAll = useCallback(async()=>{
     setLoading(true);
@@ -252,12 +252,32 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     responsable_nombre:getRespName(a.area),
     lineas_gasto:gastosAct.filter(g=>g.actividad_id===a.id),
   }));
-  const filteredActs = enriched.filter(a=>{
-    if(filters.trimestre&&a.trimestre!==filters.trimestre)return false;
-    if(filters.area&&a.area!==filters.area)return false;
-    if(filters.estado&&a.estado_general!==filters.estado)return false;
-    return true;
-  });
+  const filteredActs = enriched
+    .filter(a=>{
+      if(filters.trimestre&&a.trimestre!==filters.trimestre)return false;
+      if(filters.area&&a.area!==filters.area)return false;
+      // 'activas' = oculta Completado y Cancelado (comportamiento por defecto)
+      if(filters.estado==='activas'){
+        if(a.estado_general==='Completado'||a.estado_general==='Cancelado')return false;
+      } else if(filters.estado&&filters.estado!=='todas'){
+        if(a.estado_general!==filters.estado)return false;
+      }
+      return true;
+    })
+    .sort((a,b)=>{
+      // Ordenar por fecha — intentar parsear texto como "21 mar 2026"
+      const MONTHS = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11};
+      const parseDate = (str) => {
+        if(!str)return new Date(9999,0,1);
+        // Formato ISO YYYY-MM-DD
+        if(/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str);
+        // Formato "21 mar 2026"
+        const m = str.match(/(\d{1,2})\s+([a-záéíóú]{3})\s+(\d{4})/i);
+        if(m) return new Date(Number(m[3]), MONTHS[m[2].toLowerCase()]||0, Number(m[1]));
+        return new Date(9999,0,1);
+      };
+      return parseDate(a.fecha) - parseDate(b.fecha);
+    });
   const areaStats = AREAS.map(area=>{
     const acts=actividades.filter(a=>a.area===area);
     return {area,total:acts.length,
@@ -449,11 +469,15 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               {AREAS.map(a=><option key={a} value={a}>{a}</option>)}
             </select>
             <select className="border p-2 rounded-lg text-xs" value={filters.estado} onChange={e=>setFilters({...filters,estado:e.target.value})}>
-              <option value="">Todos los estados</option>
-              {ESTADOS.map(e=><option key={e} value={e}>{e}</option>)}
+              <option value="activas">Solo activas (Pendiente + En proceso)</option>
+              <option value="todas">Todos los estados</option>
+              <option value="Pendiente">Solo Pendientes</option>
+              <option value="En proceso">Solo En proceso</option>
+              <option value="Completado">Solo Completadas</option>
+              <option value="Cancelado">Solo Canceladas</option>
             </select>
-            {(filters.trimestre||filters.area||filters.estado)&&(
-              <button onClick={()=>setFilters({trimestre:'',area:'',estado:''})} className="text-xs text-red-500 underline">Limpiar</button>
+            {(filters.trimestre||filters.area||filters.estado!=='activas')&&(
+              <button onClick={()=>setFilters({trimestre:'',area:'',estado:'activas'})} className="text-xs text-red-500 underline">Restablecer</button>
             )}
             <span className="ml-auto text-xs text-gray-400">{filteredActs.length} actividades</span>
             <button onClick={()=>setActModal({mode:'new',data:{}})}
