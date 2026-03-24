@@ -113,7 +113,7 @@ const downloadPDF = async (htmlContent, filename) => {
     document.body.appendChild(overlay);
     const container = document.createElement('div');
     container.id = 'pdf-render-container';
-    container.style.cssText = 'position:fixed;top:0;left:0;width:8.5in;background:white;z-index:99998;overflow:visible;';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:8.5in;max-width:8.5in;background:white;z-index:99998;overflow:hidden;';
     document.body.appendChild(container);
     container.innerHTML = safeHtml;
     await new Promise(r => setTimeout(r, 1200));
@@ -121,7 +121,7 @@ const downloadPDF = async (htmlContent, filename) => {
     await html2pdf().set({
       margin: 0, filename: safeName,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, x: 0, y: 0, width: container.scrollWidth, height: container.scrollHeight },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, x: 0, y: 0, width: 816, height: container.scrollHeight },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] }
     }).from(container).save();
@@ -250,91 +250,169 @@ const formatOficioDate = (dateStr) => {
 };
 
 const generateOficioHTML = (oficio, settings = {}) => {
-  const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
-  const f1Cargo = settings.firmante1_cargo || 'Coordinador';
-  const f1Inst = settings.firmante1_institucion || 'Comisión de Acreditación Educación continua, Colegio de Psicólogos de Guatemala';
-  const f1FirmaPath = settings.firmante1_firma_path || '';
-  const selloPath = settings.sello_path || '';
-  const f1FirmaUrl = f1FirmaPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${f1FirmaPath}` : '';
-  const selloUrl = selloPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${selloPath}` : '';
-  const logoPath = settings.logo_path || '';
-  const logoUrl = logoPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${logoPath}` : '';
+  const f1Name     = settings.firmante1_nombre      || 'M. A. Juan J. Reyes';
+  const f1Cargo    = settings.firmante1_cargo       || 'Coordinador';
+  const f1Inst     = settings.firmante1_institucion || 'Comisión de Acreditación Educación Continua, Colegio de Psicólogos de Guatemala';
+  const f1FirmaUrl = settings.firmante1_firma_path  ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.firmante1_firma_path}` : '';
+  const selloUrl   = settings.sello_path            ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.sello_path}`           : '';
+  const logoUrl    = settings.logo_path             ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.logo_path}`            : '';
+
+  // Split institución por comas para mostrar en varias líneas
   const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
+
   const isRecursos = oficio.motivo?.includes('recursos') || oficio.motivo?.includes('Aprobación');
+
+  // ── Cuerpo principal ──────────────────────────────────────────────────────
+  const parrafo = (txt) =>
+    `<p style="font-size:12.5px;line-height:1.85;text-align:justify;margin:0 0 12px 0;word-wrap:break-word;overflow-wrap:break-word;">${txt}</p>`;
+
   let cuerpoHTML = '';
   if (oficio.cuerpo_personalizado) {
-    cuerpoHTML = oficio.cuerpo_personalizado.split('\n').filter(l => l.trim()).map(p => `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">${p}</p>`).join('');
+    cuerpoHTML = oficio.cuerpo_personalizado
+      .split('\n').map(l => l.trimEnd())
+      .reduce((acc, line) => {
+        // blank line = new paragraph
+        if (line === '') { acc.push(''); return acc; }
+        if (acc.length === 0 || acc[acc.length-1] === '') acc.push(line);
+        else acc[acc.length-1] += ' ' + line;
+        return acc;
+      }, [])
+      .filter(p => p !== '')
+      .map(p => parrafo(p)).join('');
   } else if (isRecursos && oficio.actividad_nombre) {
-    cuerpoHTML = `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) solicita respetuosamente la aprobación y la asignación de recursos para realizar la ${oficio.actividad_tipo?oficio.actividad_tipo.toLowerCase():'actividad'} ${oficio.actividad_modalidad?oficio.actividad_modalidad.toLowerCase():''} titulada <strong>"${oficio.actividad_nombre}"</strong>.${oficio.actividad_descripcion?' '+oficio.actividad_descripcion:''}</p>`;
+    cuerpoHTML = parrafo(`Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) solicita respetuosamente la aprobación y la asignación de recursos para realizar la ${oficio.actividad_tipo ? oficio.actividad_tipo.toLowerCase() : 'actividad'} ${oficio.actividad_modalidad ? oficio.actividad_modalidad.toLowerCase() : ''} titulada <strong>"${oficio.actividad_nombre}"</strong>.${oficio.actividad_descripcion ? ' ' + oficio.actividad_descripcion : ''}`);
   } else {
-    cuerpoHTML = `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) se dirige a ustedes para: <strong>${oficio.motivo||'—'}</strong>.</p>`;
+    cuerpoHTML = parrafo(`Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) se dirige a ustedes para: <strong>${oficio.motivo || '—'}</strong>.`);
   }
+
+  // ── Detalles actividad ────────────────────────────────────────────────────
+  const detalleRow = (label, val) => val
+    ? `<tr><td style="font-weight:600;font-size:12px;padding:3px 12px 3px 0;white-space:nowrap;color:#374151;">${label}:</td><td style="font-size:12px;padding:3px 0;color:#111;">${val}</td></tr>`
+    : '';
   let detallesHTML = '';
-  if (oficio.actividad_nombre) {
-    detallesHTML = `<div style="margin:14px 0;font-size:12.5px;line-height:2.2;">
-      ${oficio.actividad_tipo?`<div><span style="font-weight:600;">Tipo de actividad:</span> ${oficio.actividad_tipo}</div>`:''}
-      ${oficio.actividad_modalidad?`<div><span style="font-weight:600;">Modalidad:</span> ${oficio.actividad_modalidad}</div>`:''}
-      ${oficio.actividad_duracion?`<div><span style="font-weight:600;">Duración estimada:</span> ${oficio.actividad_duracion}</div>`:''}
-      ${oficio.actividad_fecha?`<div><span style="font-weight:600;">Fecha de la actividad:</span> ${oficio.actividad_fecha}</div>`:''}
-      ${oficio.actividad_sede?`<div><span style="font-weight:600;">Sede / Plataforma:</span> ${oficio.actividad_sede}</div>`:''}
+  if (oficio.actividad_nombre && (oficio.actividad_tipo || oficio.actividad_modalidad || oficio.actividad_fecha || oficio.actividad_duracion || oficio.actividad_sede)) {
+    detallesHTML = `<table style="margin:14px 0;border-collapse:collapse;width:auto;">
+      ${detalleRow('Tipo de actividad', oficio.actividad_tipo)}
+      ${detalleRow('Modalidad', oficio.actividad_modalidad)}
+      ${detalleRow('Duración estimada', oficio.actividad_duracion)}
+      ${detalleRow('Fecha de la actividad', oficio.actividad_fecha)}
+      ${detalleRow('Sede / Plataforma', oficio.actividad_sede)}
+    </table>`;
+  }
+
+  // ── Recursos ──────────────────────────────────────────────────────────────
+  let recursosHTML = '';
+  if (oficio.monto) {
+    recursosHTML = `<div style="margin-top:14px;">
+      <p style="font-size:11px;font-weight:700;color:#1a5276;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Recursos solicitados</p>
+      ${parrafo(`Honorarios del profesional invitado: <strong>${oficio.monto}</strong>${oficio.monto_detalle ? '. ' + oficio.monto_detalle : '.'}`)}
+      ${parrafo('Pormenores logísticos esenciales: salón y audio, materiales de apoyo (digitales/impresos básicos), registro y control de asistencia, apoyo de protocolo y difusión institucional.')}
     </div>`;
   }
-  let recursosHTML = oficio.monto ? `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;">RECURSOS SOLICITADOS</p><p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">Honorarios del profesional invitado: <strong>${oficio.monto}</strong>${oficio.monto_detalle?'. '+oficio.monto_detalle:'.'}</p><p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">Pormenores logísticos esenciales: salón y audio, materiales de apoyo (digitales/impresos básicos), registro y control de asistencia, apoyo de protocolo y difusión institucional.</p></div>` : '';
-  let justificacionHTML = oficio.justificacion ? `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;">JUSTIFICACIÓN TÉCNICA</p>${oficio.justificacion.split('\n').filter(l=>l.trim()).map(p=>`<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">${p}</p>`).join('')}</div>` : '';
-  let solicitudHTML = oficio.solicitud_puntual ? `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;">SOLICITUD PUNTUAL</p>${oficio.solicitud_puntual.split('\n').filter(l=>l.trim()).map(p=>`<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:8px;">• ${p}</p>`).join('')}</div>` : '';
-  const BASE_STYLE = `@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;}
-  .page{width:8.5in;height:11in;margin:0 auto;padding:0;position:relative;background:white;overflow:hidden;page-break-after:always;}
-  .page:last-child{page-break-after:auto;}
-  .deco-left{position:absolute;left:0;top:200px;width:18px;height:300px;}.deco-left div{width:8px;margin-bottom:4px;border-radius:4px;}
-  .deco-left div:nth-child(1){height:60px;background:#E91E63;}.deco-left div:nth-child(2){height:60px;background:#9C27B0;}
-  .deco-left div:nth-child(3){height:60px;background:#2196F3;}.deco-left div:nth-child(4){height:60px;background:#4CAF50;}
-  .content{padding:45px 65px 120px 65px;position:relative;z-index:1;}
-  .header img{height:90px;width:auto;}
-  .footer{position:absolute;bottom:0;left:0;right:0;border-top:3px solid #E91E63;padding:12px 30px 8px;display:flex;justify-content:space-between;font-size:8px;color:#777;background:white;}
-  .footer-col{text-align:center;flex:1;padding:0 4px;}.footer-col strong{display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;}
-  .footer-bottom{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:8.5px;background:#E91E63;color:white;padding:3px 0;}
-  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}`;
-  const FOOTER_HTML = `<div class="footer">
-    <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div>
-    <div class="footer-col"><strong>Sub Sede Cobán</strong>Plaza Magdalena<br>+(502) 7764-7109</div>
-    <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div>
-    <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div>
-  </div><div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>`;
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>${BASE_STYLE}</style></head><body>
-  <div class="page"><div class="deco-left"><div></div><div></div><div></div><div></div></div>
-  <div class="content">
-    <div class="header">${logoUrl?`<img src="${logoUrl}" alt="Logo"/>`:''}  </div>
-    <div style="text-align:right;font-size:13px;color:#555;margin-bottom:4px;"><strong>${oficio.numero_oficio||'Of. ___.CAEDUC'}</strong></div>
-    <div style="text-align:right;font-size:13px;color:#555;margin-bottom:25px;">Guatemala ${formatOficioDate(oficio.fecha)}</div>
-    <div style="margin-bottom:20px;font-size:13px;line-height:1.7;">${(oficio.dirigido_a||'').split(',').map(l=>l.trim()).filter(Boolean).join('<br>')}<br>Presente</div>
-    <div style="font-size:13px;font-weight:600;margin-bottom:16px;">Honorables miembros de la Junta Directiva:</div>
-    ${cuerpoHTML}${detallesHTML}
-    <p style="font-size:13px;line-height:1.8;text-align:justify;margin-top:16px;">Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.</p>
-    <p style="font-size:13px;margin-top:14px;">Sin otro particular, me suscribo.</p>
-    <p style="font-size:13px;margin-top:20px;text-align:center;">Cordialmente,</p>
-    <div style="margin-top:20px;text-align:center;">
-      <div style="display:inline-flex;align-items:flex-end;gap:20px;">
-        <div style="text-align:center;">${f1FirmaUrl?`<img src="${f1FirmaUrl}" alt="Firma" style="height:65px;width:auto;display:block;margin:0 auto -6px;"/>`:'<div style="height:65px;"></div>'}
-          <div style="width:220px;border-top:1px solid #333;padding-top:6px;">
-            <div style="font-size:13px;font-weight:600;">${f1Name}</div>
-            <div style="font-size:12px;color:#555;">${f1Cargo}</div>
-            ${instLines.map(l=>`<div style="font-size:12px;color:#555;">${l}</div>`).join('')}
+
+  // ── Justificación ─────────────────────────────────────────────────────────
+  let justificacionHTML = '';
+  if (oficio.justificacion) {
+    justificacionHTML = `<div style="margin-top:14px;">
+      <p style="font-size:11px;font-weight:700;color:#1a5276;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Justificación técnica</p>
+      ${oficio.justificacion.split('\n').filter(l=>l.trim()).map(p=>parrafo(p)).join('')}
+    </div>`;
+  }
+
+  // ── Solicitud puntual ─────────────────────────────────────────────────────
+  let solicitudHTML = '';
+  if (oficio.solicitud_puntual) {
+    solicitudHTML = `<div style="margin-top:14px;">
+      <p style="font-size:11px;font-weight:700;color:#1a5276;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Solicitud puntual a la Junta Directiva</p>
+      <ul style="padding-left:18px;margin:0;">
+        ${oficio.solicitud_puntual.split('\n').filter(l=>l.trim()).map(p=>`<li style="font-size:12.5px;line-height:1.8;margin-bottom:4px;">${p}</li>`).join('')}
+      </ul>
+    </div>`;
+  }
+
+  // ── Bloque de firma ───────────────────────────────────────────────────────
+  const firmaBlock = `
+    <div style="margin-top:24px;text-align:center;">
+      <p style="font-size:12.5px;margin-bottom:20px;">Cordialmente,</p>
+      <div style="display:inline-flex;align-items:flex-end;gap:24px;">
+        <div style="text-align:center;">
+          ${f1FirmaUrl ? `<img src="${f1FirmaUrl}" alt="Firma" style="height:60px;width:auto;display:block;margin:0 auto -4px;"/>` : '<div style="height:60px;"></div>'}
+          <div style="width:210px;border-top:1.5px solid #333;padding-top:5px;">
+            <div style="font-size:12.5px;font-weight:700;">${f1Name}</div>
+            <div style="font-size:11px;color:#555;">${f1Cargo}</div>
+            ${instLines.map(l => `<div style="font-size:10.5px;color:#666;">${l}</div>`).join('')}
           </div>
         </div>
-        <div style="text-align:center;margin-bottom:15px;">${selloUrl?`<img src="${selloUrl}" alt="Sello CAEDUC" style="height:100px;width:auto;opacity:0.85;"/>`:''}  </div>
+        ${selloUrl ? `<div style="margin-bottom:12px;"><img src="${selloUrl}" alt="Sello" style="height:90px;width:auto;opacity:0.88;"/></div>` : ''}
       </div>
     </div>
-    <div style="font-size:11px;color:#777;margin-top:15px;">C.C: Archivo/ CAEDUC</div>
+    <p style="font-size:10px;color:#999;margin-top:12px;">C.C: Archivo / CAEDUC</p>`;
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  const footerHTML = `
+    <div style="margin-top:auto;border-top:2px solid #E91E63;padding-top:10px;display:flex;justify-content:space-between;font-size:8px;color:#777;gap:8px;">
+      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div>
+      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel Of. 105<br>+(502) 7764-7109</div>
+      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div>
+      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div>
+    </div>
+    <p style="text-align:center;font-size:8.5px;color:white;background:#E91E63;padding:3px 0;margin:0;">colegiodepsicologos.org.gt • @colpsicogt</p>`;
+
+  // ── Contenido extra (justificación/recursos/solicitud) ────────────────────
+  const hasExtra = oficio.justificacion || oficio.solicitud_puntual || oficio.monto;
+  const extraHTML = hasExtra ? `
+    <div style="page-break-before:always;padding:0.7in 0.8in 0.3in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;min-height:9in;box-sizing:border-box;display:flex;flex-direction:column;">
+      <div style="flex:1;">
+        ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:70px;width:auto;margin-bottom:16px;"/>` : ''}
+        <h2 style="font-size:15px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 6px;">Justificación técnica y aporte gremial</h2>
+        ${oficio.actividad_nombre ? `<h3 style="font-size:13px;font-weight:600;color:#374151;text-align:center;margin:0 0 20px;">${oficio.actividad_nombre}</h3>` : ''}
+        ${justificacionHTML}${recursosHTML}${solicitudHTML}
+        ${parrafo('Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo. Confiamos en que esta iniciativa fortalecerá la práctica profesional y beneficiará directamente a nuestros colegiados.')}
+      </div>
+      ${footerHTML}
+    </div>` : '';
+
+  // ── Página principal ──────────────────────────────────────────────────────
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Oficio ${oficio.numero_oficio || ''}</title>
+  <style>
+    @page { size: letter; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @media print { body { -webkit-print-color-adjust: exact; } }
+  </style>
+  </head><body>
+  <div style="padding:0.65in 0.8in 0.3in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;min-height:10.4in;box-sizing:border-box;display:flex;flex-direction:column;width:8.5in;">
+    <div style="flex:1;">
+      <!-- Header: logos -->
+      <div style="margin-bottom:18px;">
+        ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:80px;width:auto;"/>` : ''}
+      </div>
+      <!-- Referencia y fecha -->
+      <div style="text-align:right;margin-bottom:22px;">
+        <div style="font-size:13px;font-weight:700;color:#111;">${oficio.numero_oficio || 'Of. ___.CAEDUC'}</div>
+        <div style="font-size:12.5px;color:#555;margin-top:2px;">Guatemala ${formatOficioDate(oficio.fecha)}</div>
+      </div>
+      <!-- Destinatario -->
+      <div style="margin-bottom:18px;font-size:12.5px;line-height:1.7;">
+        ${(oficio.dirigido_a || '').split(',').map(l => l.trim()).filter(Boolean).join('<br>')}
+        <br>Presente
+      </div>
+      <!-- Saludo -->
+      <p style="font-size:12.5px;font-weight:700;margin-bottom:14px;">Honorables miembros de la Junta Directiva:</p>
+      <!-- Cuerpo -->
+      ${cuerpoHTML}
+      ${detallesHTML}
+      <!-- Cierre -->
+      ${parrafo('Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.')}
+      <p style="font-size:12.5px;margin-bottom:4px;">Sin otro particular, me suscribo.</p>
+      <!-- Firma -->
+      ${firmaBlock}
+    </div>
+    <!-- Footer -->
+    ${footerHTML}
   </div>
-  ${FOOTER_HTML}</div>
-  ${(oficio.justificacion||oficio.solicitud_puntual||oficio.monto)?`
-  <div class="page"><div class="content" style="padding-top:50px;">
-    <div class="header">${logoUrl?`<img src="${logoUrl}" alt="Logo" style="height:70px;"/>`:''}  </div>
-    <h2 style="font-size:16px;font-weight:800;color:#1a5276;text-align:center;margin:20px 0 8px;">Justificación técnica y aporte gremial</h2>
-    <h3 style="font-size:14px;font-weight:700;color:#333;text-align:center;margin-bottom:25px;">${oficio.actividad_nombre||''}</h3>
-    ${justificacionHTML}${recursosHTML}${solicitudHTML}
-    <p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-top:20px;">Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.</p>
-  </div>${FOOTER_HTML}</div>`:''}
+  ${extraHTML}
   </body></html>`;
 };
 
@@ -610,12 +688,22 @@ const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-gray-800">{o.numero_oficio}</span>
             <Badge status={o.estado}/>
+            {o.ultima_edicion_en && (
+              <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full border border-orange-200 flex items-center gap-1">
+                ✏ Editado {new Date(o.ultima_edicion_en).toLocaleDateString('es-GT')}
+                {o.ultima_edicion_por ? ` · ${o.ultima_edicion_por}` : ''}
+              </span>
+            )}
             <span className="text-xs text-gray-400 flex items-center gap-1">
               <Calendar size={11}/>{o.fecha}
             </span>
           </div>
-          {/* Primera línea del motivo — siempre visible */}
-          <p className="text-sm text-gray-500 truncate mt-0.5">{o.motivo}</p>
+          {/* Título si existe, o motivo como fallback */}
+          {o.titulo
+            ? <p className="text-sm font-semibold text-gray-700 truncate mt-0.5">{o.titulo}</p>
+            : <p className="text-sm text-gray-500 truncate mt-0.5">{o.motivo}</p>
+          }
+          {o.titulo && <p className="text-xs text-gray-400 truncate">{o.motivo}</p>}
         </div>
         {/* Indicador expandir/colapsar */}
         <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}/>
@@ -685,16 +773,16 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
     if (!isOpen) return;
     setCurrentStep(1);
     if (preFillData && !initialData) {
-      setFd({ numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:'', monto:'', monto_detalle:'', justificacion:'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
+      setFd({ numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', titulo:'', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:'', monto:'', monto_detalle:'', justificacion:'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
     } else {
-      setFd({ numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:(()=>{ const m=initialData?.motivo||MOTIVOS_OFICIO[0]; return MOTIVOS_OFICIO.includes(m)?m:'Otro (personalizado)'; })(), motivo_custom:(()=>{ const m=initialData?.motivo||''; return MOTIVOS_OFICIO.includes(m)?'':m; })(), actividad_nombre:initialData?(initialData.actividad_nombre||''):'', actividad_tipo:initialData?(initialData.actividad_tipo||''):'', actividad_fecha:initialData?(initialData.actividad_fecha||''):'', actividad_duracion:initialData?(initialData.actividad_duracion||''):'', actividad_modalidad:initialData?(initialData.actividad_modalidad||''):'', actividad_sede:initialData?(initialData.actividad_sede||''):'', actividad_descripcion:initialData?(initialData.actividad_descripcion||''):'', monto:initialData?(initialData.monto||''):'', monto_detalle:initialData?(initialData.monto_detalle||''):'', justificacion:initialData?(initialData.justificacion||''):'', solicitud_puntual:initialData?(initialData.solicitud_puntual||''):'', cuerpo_personalizado:initialData?(initialData.cuerpo_personalizado||''):'', estado:initialData?(initialData.estado||'Borrador'):'Borrador' });
+      setFd({ numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', titulo:initialData?(initialData.titulo||''):'', motivo:(()=>{ const m=initialData?.motivo||MOTIVOS_OFICIO[0]; return MOTIVOS_OFICIO.includes(m)?m:'Otro (personalizado)'; })(), motivo_custom:(()=>{ const m=initialData?.motivo||''; return MOTIVOS_OFICIO.includes(m)?'':m; })(), actividad_nombre:initialData?(initialData.actividad_nombre||''):'', actividad_tipo:initialData?(initialData.actividad_tipo||''):'', actividad_fecha:initialData?(initialData.actividad_fecha||''):'', actividad_duracion:initialData?(initialData.actividad_duracion||''):'', actividad_modalidad:initialData?(initialData.actividad_modalidad||''):'', actividad_sede:initialData?(initialData.actividad_sede||''):'', actividad_descripcion:initialData?(initialData.actividad_descripcion||''):'', monto:initialData?(initialData.monto||''):'', monto_detalle:initialData?(initialData.monto_detalle||''):'', justificacion:initialData?(initialData.justificacion||''):'', solicitud_puntual:initialData?(initialData.solicitud_puntual||''):'', cuerpo_personalizado:initialData?(initialData.cuerpo_personalizado||''):'', estado:initialData?(initialData.estado||'Borrador'):'Borrador' });
     }
   }, [isOpen, initialData, preFillData]);
   if (!isOpen||!fd) return null;
   const isRecursos = fd.motivo.includes('recursos')||fd.motivo.includes('Aprobación');
   const isCustomMotivo = fd.motivo==='Otro (personalizado)';
   const goToPreview = (e) => { e.preventDefault(); setCurrentStep(2); };
-  const handleSaveOficio = async () => { setSaving(true); const saveData={...fd}; if(isCustomMotivo&&fd.motivo_custom)saveData.motivo=fd.motivo_custom; delete saveData.motivo_custom; await onSave(saveData); setSaving(false); };
+  const handleSaveOficio = async () => { setSaving(true); const saveData={...fd}; if(isCustomMotivo&&fd.motivo_custom)saveData.motivo=fd.motivo_custom; delete saveData.motivo_custom; await onSave(saveData); setSaving(false); }; // titulo is included automatically via spread
   const handlePreviewOpen = () => { const pd={...fd}; if(fd.motivo==='Otro (personalizado)'&&fd.motivo_custom)pd.motivo=fd.motivo_custom; openOficioLetter(pd,appSettings,'preview'); };
   const handleDownloadPdf = () => { const pd={...fd}; if(fd.motivo==='Otro (personalizado)'&&fd.motivo_custom)pd.motivo=fd.motivo_custom; openOficioLetter(pd,appSettings,'download'); };
   const updateField = (field,value) => setFd(prev=>({...prev,[field]:value}));
@@ -733,13 +821,20 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
           <form onSubmit={goToPreview} className="space-y-5">
             <div className="bg-blue-50 rounded-lg p-4 space-y-3 border border-blue-100">
               <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide">Encabezado del Oficio</h4>
+              <div>
+                <label className="block text-sm font-bold mb-1 flex items-center gap-1">
+                  Título / Identificador
+                  <span className="text-xs font-normal text-blue-400 bg-blue-100 px-1.5 py-0.5 rounded-full">Solo visible en la lista, no aparece en el PDF</span>
+                </label>
+                <input placeholder="Ej: Solicitud licencia Zoom, Oficio reunión CAEDUC..." className="w-full border p-2.5 rounded-lg text-sm" value={fd.titulo||''} onChange={e=>updateField('titulo',e.target.value)}/>
+              </div>
               <div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Número de Oficio *</label><input required className="w-full border p-2.5 rounded-lg" value={fd.numero_oficio} onChange={e=>updateField('numero_oficio',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha *</label><input required type="date" className="w-full border p-2.5 rounded-lg" value={fd.fecha} onChange={e=>updateField('fecha',e.target.value)}/></div></div>
               <div><label className="block text-sm font-bold mb-1">Dirigido a *</label><textarea required rows={2} className="w-full border p-2.5 rounded-lg" value={fd.dirigido_a} onChange={e=>updateField('dirigido_a',e.target.value)}/></div>
             </div>
             <div className="bg-amber-50 rounded-lg p-4 space-y-3 border border-amber-100">
               <h4 className="font-bold text-amber-800 text-sm uppercase tracking-wide">Motivo del Oficio</h4>
               <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e=>updateField('motivo',e.target.value)}>{MOTIVOS_OFICIO.map(m=><option key={m} value={m}>{m}</option>)}</select>
-              {isCustomMotivo&&(<input required placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg" value={fd.motivo_custom} onChange={e=>updateField('motivo_custom',e.target.value)}/>)}
+              {isCustomMotivo&&(<textarea required rows={3} placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg text-sm resize-none" value={fd.motivo_custom} onChange={e=>updateField('motivo_custom',e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.stopPropagation();}}/>)}
             </div>
             {isRecursos&&(<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
               <h4 className="font-bold text-green-800 text-sm uppercase tracking-wide">Datos de la Actividad</h4>
@@ -956,7 +1051,24 @@ export default function CAEDUCApp() {
   const updateSetting=async(key,value)=>{const{error}=await supabase.from('app_settings').update({value,updated_at:new Date().toISOString()}).eq('key',key);if(error){const{error:ie}=await supabase.from('app_settings').insert([{key,value}]);if(ie)throw ie;}setAppSettings(prev=>({...prev,[key]:value}));};
 
   const createOficio=async(data)=>{const{error}=await supabase.from('oficios').insert([data]);if(error){alert('Error al crear oficio: '+error.message);return;}fetchData();};
-  const updateOficio=async(id,data)=>{const{estado,...rest}=data;const{error}=await supabase.from('oficios').update({...rest,estado,updated_at:new Date().toISOString()}).eq('id',id);if(error){alert('Error al actualizar: '+error.message);return;}fetchData();};
+  const updateOficio=async(id,data)=>{
+    const{estado,...rest}=data;
+    // Track edit if the oficio was archived
+    let editFields={};
+    const existing=oficios.find(o=>o.id===id);
+    if(existing&&existing.estado==='Archivado'){
+      const{data:userData}=await supabase.auth.getUser();
+      const userName=userData?.user?.email||'usuario';
+      editFields={
+        ultima_edicion_en:new Date().toISOString(),
+        ultima_edicion_por:userName,
+        ultima_edicion_razon:data.ultima_edicion_razon||'Editado manualmente',
+      };
+    }
+    const{error}=await supabase.from('oficios').update({...rest,estado,updated_at:new Date().toISOString(),...editFields}).eq('id',id);
+    if(error){alert('Error al actualizar: '+error.message);return;}
+    fetchData();
+  };
   const deleteOficio=async(id)=>{const{error}=await supabase.from('oficios').delete().eq('id',id);if(error){alert('Error al eliminar: '+error.message);return;}fetchData();};
 
   const handleNavigateToOficios=(activityData)=>{setOficioPreFill({actividad_nombre:activityData.actividad||'',actividad_tipo:activityData.tipo||'',actividad_fecha:activityData.fecha||'',actividad_duracion:'',actividad_modalidad:activityData.sede_modalidad||'',actividad_sede:activityData.t3_lugar||activityData.sede_modalidad||'',_source_trimestre:activityData.trimestre||'',_source_area:activityData.area||''});setCurrentModule('oficios');};
