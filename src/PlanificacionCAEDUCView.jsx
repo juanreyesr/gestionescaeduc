@@ -165,15 +165,23 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 
   // CRUD actividades
   const saveActividad = async(data)=>{
-    if(data.id){
-      await supabase.from('planificacion_actividades')
-        .update({...data,updated_at:new Date().toISOString()}).eq('id',data.id);
+    // Siempre extraer id para no enviarlo accidentalmente en inserts
+    const {id, ...cleanData} = data;
+    if(id){
+      const {error} = await supabase.from('planificacion_actividades')
+        .update({...cleanData, updated_at:new Date().toISOString()}).eq('id',id);
+      if(error){ alert('Error al actualizar actividad: ' + error.message); return; }
     } else {
-      // Auto-asignar número correlativo
+      // Auto-asignar número correlativo (siguiente al máximo existente)
       const maxNum = actividades.reduce((m,a)=>Math.max(m,Number(a.numero||0)),0);
-      await supabase.from('planificacion_actividades').insert([{...data,numero:maxNum+1}]);
+      const {data:inserted, error} = await supabase
+        .from('planificacion_actividades')
+        .insert([{...cleanData, numero:maxNum+1}])
+        .select();
+      if(error){ alert('Error al crear actividad: ' + error.message); return; }
     }
-    setActModal(null); await fetchAll();
+    setActModal(null);
+    await fetchAll();
   };
   const deleteActividad = async(id)=>{
     await supabase.from('planificacion_actividades').delete().eq('id',id);
