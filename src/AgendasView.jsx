@@ -362,7 +362,7 @@ export default function AgendasView() {
     };
 
     const removePunto = (idx) => {
-      if (puntos[idx].es_fijo) return;
+      // Todos los puntos son eliminables (los fijos son solo propuestas)
       setPuntos(prev => prev.filter((_, i) => i !== idx));
     };
 
@@ -370,7 +370,7 @@ export default function AgendasView() {
       const newPuntos = [...puntos];
       const target = idx + dir;
       if (target < 0 || target >= newPuntos.length) return;
-      if (newPuntos[idx].es_fijo || newPuntos[target].es_fijo) return;
+      // Todos los puntos son reordenables
       [newPuntos[idx], newPuntos[target]] = [newPuntos[target], newPuntos[idx]];
       setPuntos(newPuntos);
     };
@@ -649,15 +649,14 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
         {/* Controles */}
         {!aprobada && (
           <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-            {!punto.es_fijo && (
-              <>
-                <button onClick={() => onMove(-1)} disabled={idx === 0}
-                  className="text-gray-300 hover:text-gray-600 disabled:opacity-30 p-1"><ChevronUp size={15}/></button>
-                <button onClick={() => onMove(1)} disabled={idx === total - 1}
-                  className="text-gray-300 hover:text-gray-600 disabled:opacity-30 p-1"><ChevronDown size={15}/></button>
-                <button onClick={onRemove} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
-              </>
-            )}
+            {/* Todos los puntos son movibles y eliminables */}
+            <>
+              <button onClick={() => onMove(-1)} disabled={idx === 0}
+                className="text-gray-300 hover:text-gray-600 disabled:opacity-30 p-1"><ChevronUp size={15}/></button>
+              <button onClick={() => onMove(1)} disabled={idx === total - 1}
+                className="text-gray-300 hover:text-gray-600 disabled:opacity-30 p-1"><ChevronDown size={15}/></button>
+              <button onClick={onRemove} className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={14}/></button>
+            </>
             <button onClick={() => setExpanded(e => !e)} className="text-gray-400 hover:text-gray-700 p-1">
               {expanded ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
             </button>
@@ -668,16 +667,21 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
       {/* Cuerpo expandible */}
       {expanded && !aprobada && (
         <div className="px-4 pb-4 space-y-3 border-t pt-3">
-          {/* Tema (editable solo si no es fijo) */}
-          {!punto.es_fijo && (
-            <div>
-              <label className="text-xs font-bold text-gray-500 mb-1 block">Tema *</label>
-              <input className="w-full border p-2 rounded-lg text-sm"
-                placeholder="Escribe el tema de este punto..."
-                value={punto.tema}
-                onChange={e => onChange('tema', e.target.value)}/>
-            </div>
-          )}
+          {/* Tema editable para todos los puntos */}
+          <div>
+            <label className="text-xs font-bold text-gray-500 mb-1 block flex items-center gap-1.5">
+              Tema *
+              {punto.es_fijo && (
+                <span className="text-blue-400 font-normal text-xs bg-blue-50 px-1.5 py-0.5 rounded-full">
+                  punto habitual
+                </span>
+              )}
+            </label>
+            <input className="w-full border p-2 rounded-lg text-sm"
+              placeholder="Escribe el tema de este punto..."
+              value={punto.tema}
+              onChange={e => onChange('tema', e.target.value)}/>
+          </div>
           {/* Descripción */}
           <div>
             <label className="text-xs font-bold text-gray-500 mb-1 block">Descripción / detalles (opcional)</label>
