@@ -133,7 +133,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     setLoading(true);
     const [r1,r2,r3,r4,r5,r6]=await Promise.all([
       supabase.from('planificacion_responsables').select('*').order('area'),
-      supabase.from('planificacion_actividades').select('*').order('numero'),
+      supabase.from('planificacion_actividades').select('*').order('numero',{nullsFirst:false}).order('created_at',{ascending:true}),
       supabase.from('planificacion_rubros').select('*').eq('activo',true).order('orden'),
       supabase.from('planificacion_gastos_rubro').select('*').order('created_at'),
       supabase.from('planificacion_gastos_actividad').select('*').order('created_at'),
@@ -169,7 +169,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       await supabase.from('planificacion_actividades')
         .update({...data,updated_at:new Date().toISOString()}).eq('id',data.id);
     } else {
-      await supabase.from('planificacion_actividades').insert([data]);
+      // Auto-asignar número correlativo
+      const maxNum = actividades.reduce((m,a)=>Math.max(m,Number(a.numero||0)),0);
+      await supabase.from('planificacion_actividades').insert([{...data,numero:maxNum+1}]);
     }
     setActModal(null); await fetchAll();
   };
@@ -746,11 +748,31 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 }
 
 // ── Modal Actividad ──────────────────────────────────────────────────────────
+
+// Calcula el trimestre a partir de una fecha ISO (YYYY-MM-DD)
+const getTrimestreFromDate = (dateStr) => {
+  if (!dateStr) return TRIMESTRES[0];
+  const month = new Date(dateStr + 'T12:00:00').getMonth() + 1; // 1-12
+  if (month <= 3)  return 'T1 – Ene/Mar';
+  if (month <= 6)  return 'T2 – Abr/Jun';
+  if (month <= 9)  return 'T3 – Jul/Sep';
+  return 'T4 – Oct/Dic';
+};
+
+// Formatea una fecha ISO a texto legible para mostrar en la lista
+const formatFechaDisplay = (isoDate) => {
+  if (!isoDate) return '';
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const d = new Date(isoDate + 'T12:00:00');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+};
+
 function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDeleteGasto,gastosLines}){
   const [fd,setFd]=useState({
-    numero:initialData?.numero||'',trimestre:initialData?.trimestre||TRIMESTRES[0],
+    trimestre:initialData?.trimestre||TRIMESTRES[0],
     area:initialData?.area||AREAS[0],actividad:initialData?.actividad||'',
-    tipo:initialData?.tipo||TIPOS[0],fecha:initialData?.fecha||'',
+    tipo:initialData?.tipo||TIPOS[0],
+    fecha:initialData?.fecha||'',          // Ahora guarda ISO YYYY-MM-DD internamente
     monto:initialData?.monto||0,monto_gastado:initialData?.monto_gastado||0,
     estado_general:initialData?.estado_general||'Pendiente',
     sede_modalidad:initialData?.sede_modalidad||'',id:initialData?.id,
@@ -761,7 +783,17 @@ function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDelete
   const [gFecha,setGFecha]=useState(todayStr());
   const [addingG,setAddingG]=useState(false);
 
-  const handleSave=async(e)=>{e.preventDefault();setSaving(true);await onSave(fd);setSaving(false);};
+  const handleSave=async(e)=>{
+    e.preventDefault(); setSaving(true);
+    // Guardar fecha como texto legible y trimestre calculado automáticamente
+    const dataToSave = {
+      ...fd,
+      fecha: fd.fecha ? formatFechaDisplay(fd.fecha) : '',
+      trimestre: fd.fecha ? getTrimestreFromDate(fd.fecha) : fd.trimestre,
+    };
+    await onSave(dataToSave);
+    setSaving(false);
+  };
   const handleAddG=async()=>{
     if(!gDesc.trim()||!gMonto)return;
     if(!fd.id){alert('Guarda la actividad primero para registrar gastos.');return;}
@@ -780,13 +812,13 @@ function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDelete
         </div>
         <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
           <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-bold text-gray-600 mb-1 block"># Actividad</label>
-                <input type="number" className="w-full border p-2.5 rounded-lg text-sm" value={fd.numero} onChange={e=>setFd({...fd,numero:e.target.value})}/></div>
-              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Trimestre</label>
-                <select className="w-full border p-2.5 rounded-lg text-sm" value={fd.trimestre} onChange={e=>setFd({...fd,trimestre:e.target.value})}>
-                  {TRIMESTRES.map(t=><option key={t}>{t}</option>)}</select></div>
-            </div>
+            {/* Trimestre se asigna automáticamente — solo se muestra */}
+            {fd.fecha && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-800 flex items-center gap-2">
+                <Calendar size={13} className="shrink-0"/>
+                <span>Trimestre asignado automáticamente: <strong>{getTrimestreFromDate(fd.fecha)}</strong></span>
+              </div>
+            )}
             <div><label className="text-xs font-bold text-gray-600 mb-1 block">Nombre de la actividad *</label>
               <textarea required rows={2} className="w-full border p-2.5 rounded-lg text-sm resize-none" value={fd.actividad} onChange={e=>setFd({...fd,actividad:e.target.value})}/></div>
             <div className="grid grid-cols-2 gap-3">
@@ -798,8 +830,24 @@ function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDelete
                   {TIPOS.map(t=><option key={t}>{t}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Fecha</label>
-                <input className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: 15 mar 2026" value={fd.fecha} onChange={e=>setFd({...fd,fecha:e.target.value})}/></div>
+              <div>
+                <label className="text-xs font-bold text-gray-600 mb-1 block flex items-center gap-1">
+                  <Calendar size={12}/> Fecha de la actividad *
+                </label>
+                <input
+                  required
+                  type="date"
+                  className="w-full border p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-300 focus:outline-none cursor-pointer"
+                  value={fd.fecha}
+                  onChange={e=>{
+                    const newDate = e.target.value;
+                    setFd({...fd, fecha:newDate, trimestre:getTrimestreFromDate(newDate)});
+                  }}
+                />
+                {fd.fecha && (
+                  <p className="text-xs text-gray-400 mt-1">{formatFechaDisplay(fd.fecha)}</p>
+                )}
+              </div>
               <div><label className="text-xs font-bold text-gray-600 mb-1 block">Estado</label>
                 <select className="w-full border p-2.5 rounded-lg text-sm" value={fd.estado_general} onChange={e=>setFd({...fd,estado_general:e.target.value})}>
                   {ESTADOS.map(s=><option key={s}>{s}</option>)}</select></div>
