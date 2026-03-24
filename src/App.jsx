@@ -9,6 +9,7 @@ import {
   Printer, FileDown, Send, Archive, FilePlus, Copy
 } from 'lucide-react';
 import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
+import AgendasView from './AgendasView';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -65,8 +66,7 @@ const imgToBase64 = (url) => {
     img.onload = () => {
       try {
         const c = document.createElement('canvas');
-        c.width = img.naturalWidth;
-        c.height = img.naturalHeight;
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
         c.getContext('2d').drawImage(img, 0, 0);
         resolve(c.toDataURL('image/png'));
       } catch { resolve(url); }
@@ -119,8 +119,7 @@ const downloadPDF = async (htmlContent, filename) => {
     await new Promise(r => setTimeout(r, 1200));
     const safeName = filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf';
     await html2pdf().set({
-      margin: 0,
-      filename: safeName,
+      margin: 0, filename: safeName,
       image: { type: 'jpeg', quality: 0.95 },
       html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, x: 0, y: 0, width: container.scrollWidth, height: container.scrollHeight },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
@@ -145,7 +144,7 @@ const previewHTML = (htmlContent) => {
 };
 
 // ==========================================
-// GENERAR CARTA DE APROBACIÓN PDF (HTML)
+// GENERAR CARTA DE APROBACIÓN PDF
 // ==========================================
 const generateApprovalLetterHTML = (aval, settings = {}) => {
   const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
@@ -172,99 +171,66 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
     const d = new Date(dateStr);
     return `${String(d.getDate()).padStart(2,'0')} de ${months[d.getMonth()]} de ${d.getFullYear()}`;
   };
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Aprobación de Aval - ${aval.correlativo || ''}</title>
-  <style>
-    @page { size: letter; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
-    .page { width: 8.5in; height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; overflow: hidden; }
-    .deco-left { position: absolute; left: 0; top: 200px; width: 18px; height: 300px; }
-    .deco-left div { width: 8px; margin-bottom: 4px; border-radius: 4px; }
-    .deco-left div:nth-child(1) { height: 60px; background: #E91E63; }
-    .deco-left div:nth-child(2) { height: 60px; background: #9C27B0; }
-    .deco-left div:nth-child(3) { height: 60px; background: #2196F3; }
-    .deco-left div:nth-child(4) { height: 60px; background: #4CAF50; }
-    .deco-curve { position: absolute; right: 0; top: 0; width: 200px; height: 100%; overflow: hidden; pointer-events: none; }
-    .deco-curve::before { content: ''; position: absolute; right: -100px; top: 100px; width: 300px; height: 300px; border-radius: 50%; border: 40px solid rgba(200,200,200,0.15); }
-    .deco-curve::after { content: ''; position: absolute; right: -50px; bottom: 150px; width: 250px; height: 250px; border-radius: 50%; border: 30px solid rgba(200,200,200,0.12); }
-    .content { padding: 50px 70px 40px 70px; position: relative; z-index: 1; }
-    .header { margin-bottom: 20px; }
-    .header img { height: 90px; width: auto; }
-    .title { text-align: center; font-size: 24px; font-weight: 800; color: #1a5276; letter-spacing: 2px; margin: 20px 0 30px 0; }
-    .date-line { text-align: right; color: #E91E63; font-weight: 600; margin-bottom: 25px; font-size: 14px; }
-    .addressee { margin-bottom: 25px; font-size: 14px; line-height: 1.6; }
-    .addressee .name { color: #E91E63; font-weight: 600; }
-    .addressee .inst { color: #E91E63; font-weight: 600; }
-    .body-text { font-size: 13.5px; line-height: 1.8; text-align: justify; margin-bottom: 15px; }
-    .body-text .highlight { color: #E91E63; font-weight: 700; }
-    .details { margin: 15px 0 20px 0; font-size: 13.5px; line-height: 2; }
-    .details .label { font-weight: 600; color: #333; }
-    .details .value { color: #E91E63; font-weight: 600; }
-    .thanks { font-size: 13.5px; line-height: 1.8; text-align: justify; margin: 20px 0; }
-    .closing { margin-top: 15px; font-size: 13.5px; }
-    .signatures { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 30px; position: relative; }
-    .sig-block { text-align: center; }
-    .sig-img { height: 70px; width: auto; display: block; margin: 0 auto -8px; }
-    .sig-line { width: 220px; border-top: 1px solid #333; padding-top: 5px; }
-    .sig-name { font-weight: 700; font-size: 13px; }
-    .sig-role { font-size: 12px; color: #555; }
-    .sello-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; }
-    .sello-center img { height: 110px; width: auto; opacity: 0.85; }
-    .footer { position: absolute; bottom: 0; left: 0; right: 0; border-top: 2px solid #eee; padding: 15px 30px; display: flex; justify-content: space-between; font-size: 8.5px; color: #777; background: white; }
-    .footer-col { text-align: center; flex: 1; padding: 0 5px; }
-    .footer-col strong { display: block; color: #1a5276; font-size: 9px; margin-bottom: 2px; }
-    .footer-bottom { position: absolute; bottom: 5px; left: 0; right: 0; text-align: center; font-size: 9px; color: #1a5276; font-weight: 600; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .page { margin: 0; box-shadow: none; } }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="deco-left"><div></div><div></div><div></div><div></div></div>
-    <div class="deco-curve"></div>
-    <div class="content">
-      <div class="header">${logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}</div>
-      <div class="title">APROBACIÓN DE AVAL</div>
-      <div class="date-line">Guatemala, ${formatApprovalDate(aval.approval_date)}</div>
-      <div class="addressee">Estimado(a) <span class="name">${aval.applicant_name || '—'}</span><br><span class="inst">${aval.institution || ''}</span></div>
-      <div class="body-text">Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.</div>
-      <div class="body-text">Por medio de la presente carta se extiende la aprobación a su solicitud recibida el <span class="highlight">${formatRequestDate(aval.created_at)}</span>, con el Aval <span class="highlight">${aval.correlativo || '—'}</span>. En resumen el Aval refleja la cobertura de:</div>
-      <div class="details">
-        <div><span class="label">Actividad:</span> <span class="value">${aval.activity_type || '—'}</span></div>
-        <div><span class="label">Duración:</span> <span class="value">${aval.duration || '—'}</span></div>
-        <div><span class="label">Modalidad:</span> <span class="value">${aval.modality || '—'}</span></div>
-        <div><span class="label">Fecha y hora:</span> <span class="value">${aval.schedule || aval.activity_date || '—'}</span></div>
-        <div><span class="label">Lugar/Plataforma:</span> <span class="value">${aval.platform || '—'}</span></div>
-        <div><span class="label">Tema:</span> <span class="value">${aval.topic || aval.activity_name || '—'}</span></div>
-        <div><span class="label">Dirigido a:</span> <span class="value">${aval.target_audience || '—'}</span></div>
-      </div>
-      <div class="thanks">Agradecemos y valoramos el trabajo y esfuerzo constante que implementa en la promoción del crecimiento continuo de los profesionales. Así mismo, solicitamos incluir el número de AVAL en el material correspondiente a la actividad aprobada.</div>
-      <div class="closing">Sin otro particular, nos despedimos.</div>
-      <div class="signatures">
-        <div class="sig-block">
-          ${f1FirmaUrl ? `<img src="${f1FirmaUrl}" alt="Firma" class="sig-img" />` : '<div style="height:70px;"></div>'}
-          <div class="sig-line"><div class="sig-name">${f1Name}</div><div class="sig-role">${f1Cargo} – CAEDUC</div></div>
-        </div>
-        <div class="sello-center">${selloUrl ? `<img src="${selloUrl}" alt="Sello CAEDUC" />` : ''}</div>
-        <div class="sig-block">
-          ${f2FirmaUrl ? `<img src="${f2FirmaUrl}" alt="Firma" class="sig-img" />` : '<div style="height:70px;"></div>'}
-          <div class="sig-line"><div class="sig-name">${f2Name}</div><div class="sig-role">${f2Cargo} - CAEDUC</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="footer">
-      <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>+(502) 2218 - 3400<br>info@colegiodepsicologos.org.gt</div>
-      <div class="footer-col"><strong>Sub Sede Cobán</strong>Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>+(502) 7764-7109<br>infocoban@colegiodepsicologos.org.gt</div>
-      <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>+(502) 7941-0587<br>infozacapa@colegiodepsicologos.org.gt</div>
-      <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>+(502) 7767-3314<br>infoquetzaltenango@colegiodepsicologos.org.gt</div>
-    </div>
-    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Aprobación de Aval - ${aval.correlativo || ''}</title>
+  <style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;}
+  .page{width:8.5in;height:11in;margin:0 auto;padding:0;position:relative;background:white;overflow:hidden;}
+  .deco-left{position:absolute;left:0;top:200px;width:18px;height:300px;}.deco-left div{width:8px;margin-bottom:4px;border-radius:4px;}
+  .deco-left div:nth-child(1){height:60px;background:#E91E63;}.deco-left div:nth-child(2){height:60px;background:#9C27B0;}
+  .deco-left div:nth-child(3){height:60px;background:#2196F3;}.deco-left div:nth-child(4){height:60px;background:#4CAF50;}
+  .deco-curve{position:absolute;right:0;top:0;width:200px;height:100%;overflow:hidden;pointer-events:none;}
+  .deco-curve::before{content:'';position:absolute;right:-100px;top:100px;width:300px;height:300px;border-radius:50%;border:40px solid rgba(200,200,200,0.15);}
+  .deco-curve::after{content:'';position:absolute;right:-50px;bottom:150px;width:250px;height:250px;border-radius:50%;border:30px solid rgba(200,200,200,0.12);}
+  .content{padding:50px 70px 40px 70px;position:relative;z-index:1;}
+  .header img{height:90px;width:auto;}.title{text-align:center;font-size:24px;font-weight:800;color:#1a5276;letter-spacing:2px;margin:20px 0 30px 0;}
+  .date-line{text-align:right;color:#E91E63;font-weight:600;margin-bottom:25px;font-size:14px;}
+  .body-text{font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;}
+  .body-text .highlight{color:#E91E63;font-weight:700;}
+  .details{margin:15px 0 20px 0;font-size:13.5px;line-height:2;}
+  .details .label{font-weight:600;color:#333;}.details .value{color:#E91E63;font-weight:600;}
+  .thanks{font-size:13.5px;line-height:1.8;text-align:justify;margin:20px 0;}
+  .signatures{display:flex;justify-content:space-between;align-items:flex-end;margin-top:30px;position:relative;}
+  .sig-block{text-align:center;}.sig-img{height:70px;width:auto;display:block;margin:0 auto -8px;}
+  .sig-line{width:220px;border-top:1px solid #333;padding-top:5px;}
+  .sig-name{font-weight:700;font-size:13px;}.sig-role{font-size:12px;color:#555;}
+  .sello-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;}
+  .sello-center img{height:110px;width:auto;opacity:0.85;}
+  .footer{position:absolute;bottom:0;left:0;right:0;border-top:2px solid #eee;padding:15px 30px;display:flex;justify-content:space-between;font-size:8.5px;color:#777;background:white;}
+  .footer-col{text-align:center;flex:1;padding:0 5px;}.footer-col strong{display:block;color:#1a5276;font-size:9px;margin-bottom:2px;}
+  .footer-bottom{position:absolute;bottom:5px;left:0;right:0;text-align:center;font-size:9px;color:#1a5276;font-weight:600;}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.page{margin:0;box-shadow:none;}}</style></head>
+  <body><div class="page"><div class="deco-left"><div></div><div></div><div></div><div></div></div><div class="deco-curve"></div>
+  <div class="content"><div class="header">${logoUrl?`<img src="${logoUrl}" alt="Logo"/>`:''}
+  </div><div class="title">APROBACIÓN DE AVAL</div>
+  <div class="date-line">Guatemala, ${formatApprovalDate(aval.approval_date)}</div>
+  <div style="margin-bottom:25px;font-size:14px;line-height:1.6;">Estimado(a) <span style="color:#E91E63;font-weight:600;">${aval.applicant_name||'—'}</span><br><span style="color:#E91E63;font-weight:600;">${aval.institution||''}</span></div>
+  <div class="body-text">Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.</div>
+  <div class="body-text">Por medio de la presente carta se extiende la aprobación a su solicitud recibida el <span class="highlight">${formatRequestDate(aval.created_at)}</span>, con el Aval <span class="highlight">${aval.correlativo||'—'}</span>. En resumen el Aval refleja la cobertura de:</div>
+  <div class="details">
+    <div><span class="label">Actividad:</span> <span class="value">${aval.activity_type||'—'}</span></div>
+    <div><span class="label">Duración:</span> <span class="value">${aval.duration||'—'}</span></div>
+    <div><span class="label">Modalidad:</span> <span class="value">${aval.modality||'—'}</span></div>
+    <div><span class="label">Fecha y hora:</span> <span class="value">${aval.schedule||aval.activity_date||'—'}</span></div>
+    <div><span class="label">Lugar/Plataforma:</span> <span class="value">${aval.platform||'—'}</span></div>
+    <div><span class="label">Tema:</span> <span class="value">${aval.topic||aval.activity_name||'—'}</span></div>
+    <div><span class="label">Dirigido a:</span> <span class="value">${aval.target_audience||'—'}</span></div>
   </div>
-</body>
-</html>`;
+  <div class="thanks">Agradecemos y valoramos el trabajo y esfuerzo constante que implementa en la promoción del crecimiento continuo de los profesionales. Así mismo, solicitamos incluir el número de AVAL en el material correspondiente a la actividad aprobada.</div>
+  <div style="margin-top:15px;font-size:13.5px;">Sin otro particular, nos despedimos.</div>
+  <div class="signatures">
+    <div class="sig-block">${f1FirmaUrl?`<img src="${f1FirmaUrl}" alt="Firma" class="sig-img"/>`:'<div style="height:70px;"></div>'}
+      <div class="sig-line"><div class="sig-name">${f1Name}</div><div class="sig-role">${f1Cargo} – CAEDUC</div></div></div>
+    <div class="sello-center">${selloUrl?`<img src="${selloUrl}" alt="Sello CAEDUC"/>`:''}  </div>
+    <div class="sig-block">${f2FirmaUrl?`<img src="${f2FirmaUrl}" alt="Firma" class="sig-img"/>`:'<div style="height:70px;"></div>'}
+      <div class="sig-line"><div class="sig-name">${f2Name}</div><div class="sig-role">${f2Cargo} - CAEDUC</div></div></div>
+  </div></div>
+  <div class="footer">
+    <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>+(502) 2218 - 3400<br>info@colegiodepsicologos.org.gt</div>
+    <div class="footer-col"><strong>Sub Sede Cobán</strong>Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>+(502) 7764-7109<br>infocoban@colegiodepsicologos.org.gt</div>
+    <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>+(502) 7941-0587<br>infozacapa@colegiodepsicologos.org.gt</div>
+    <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>+(502) 7767-3314<br>infoquetzaltenango@colegiodepsicologos.org.gt</div>
+  </div>
+  <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+  </div></body></html>`;
 };
 
 const openApprovalLetter = async (aval, settings = {}, mode = 'download') => {
@@ -274,7 +240,7 @@ const openApprovalLetter = async (aval, settings = {}, mode = 'download') => {
 };
 
 // ==========================================
-// GENERAR OFICIO / SOLICITUD HTML
+// GENERAR OFICIO HTML
 // ==========================================
 const formatOficioDate = (dateStr) => {
   if (!dateStr) return '—';
@@ -299,124 +265,77 @@ const generateOficioHTML = (oficio, settings = {}) => {
   if (oficio.cuerpo_personalizado) {
     cuerpoHTML = oficio.cuerpo_personalizado.split('\n').filter(l => l.trim()).map(p => `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">${p}</p>`).join('');
   } else if (isRecursos && oficio.actividad_nombre) {
-    cuerpoHTML = `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) solicita respetuosamente la aprobación y la asignación de recursos para realizar la ${oficio.actividad_tipo ? oficio.actividad_tipo.toLowerCase() : 'actividad'} ${oficio.actividad_modalidad ? oficio.actividad_modalidad.toLowerCase() : ''} titulada <strong>"${oficio.actividad_nombre}"</strong>.${oficio.actividad_descripcion ? ' ' + oficio.actividad_descripcion : ''}</p>`;
+    cuerpoHTML = `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) solicita respetuosamente la aprobación y la asignación de recursos para realizar la ${oficio.actividad_tipo?oficio.actividad_tipo.toLowerCase():'actividad'} ${oficio.actividad_modalidad?oficio.actividad_modalidad.toLowerCase():''} titulada <strong>"${oficio.actividad_nombre}"</strong>.${oficio.actividad_descripcion?' '+oficio.actividad_descripcion:''}</p>`;
   } else {
-    cuerpoHTML = `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) se dirige a ustedes para: <strong>${oficio.motivo || '—'}</strong>.</p>`;
-  }
-  let justificacionHTML = '';
-  if (oficio.justificacion) {
-    justificacionHTML = `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Justificación técnica y aporte gremial</p>${oficio.justificacion.split('\n').filter(l => l.trim()).map(p => `<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">${p}</p>`).join('')}</div>`;
+    cuerpoHTML = `<p style="font-size:13px;line-height:1.9;text-align:justify;margin-bottom:14px;">Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) se dirige a ustedes para: <strong>${oficio.motivo||'—'}</strong>.</p>`;
   }
   let detallesHTML = '';
   if (oficio.actividad_nombre) {
-    detallesHTML = `<div style="margin:14px 0;font-size:12.5px;line-height:2.2;">${oficio.actividad_tipo ? `<div><span style="font-weight:600;">Tipo de actividad:</span> ${oficio.actividad_tipo}</div>` : ''}${oficio.actividad_modalidad ? `<div><span style="font-weight:600;">Modalidad:</span> ${oficio.actividad_modalidad}</div>` : ''}${oficio.actividad_duracion ? `<div><span style="font-weight:600;">Duración estimada:</span> ${oficio.actividad_duracion}</div>` : ''}${oficio.actividad_fecha ? `<div><span style="font-weight:600;">Fecha de la actividad:</span> ${oficio.actividad_fecha}</div>` : ''}${oficio.actividad_sede ? `<div><span style="font-weight:600;">Sede / Plataforma:</span> ${oficio.actividad_sede}</div>` : ''}</div>`;
+    detallesHTML = `<div style="margin:14px 0;font-size:12.5px;line-height:2.2;">
+      ${oficio.actividad_tipo?`<div><span style="font-weight:600;">Tipo de actividad:</span> ${oficio.actividad_tipo}</div>`:''}
+      ${oficio.actividad_modalidad?`<div><span style="font-weight:600;">Modalidad:</span> ${oficio.actividad_modalidad}</div>`:''}
+      ${oficio.actividad_duracion?`<div><span style="font-weight:600;">Duración estimada:</span> ${oficio.actividad_duracion}</div>`:''}
+      ${oficio.actividad_fecha?`<div><span style="font-weight:600;">Fecha de la actividad:</span> ${oficio.actividad_fecha}</div>`:''}
+      ${oficio.actividad_sede?`<div><span style="font-weight:600;">Sede / Plataforma:</span> ${oficio.actividad_sede}</div>`:''}
+    </div>`;
   }
-  let recursosHTML = '';
-  if (oficio.monto) {
-    recursosHTML = `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Recursos solicitados</p><p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">Honorarios del profesional invitado: <strong>${oficio.monto}</strong>${oficio.monto_detalle ? '. ' + oficio.monto_detalle : '.'}</p><p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">Pormenores logísticos esenciales: salón y audio, materiales de apoyo (digitales/impresos básicos), registro y control de asistencia, apoyo de protocolo y difusión institucional.</p></div>`;
-  }
-  let solicitudPuntualHTML = '';
-  if (oficio.solicitud_puntual) {
-    solicitudPuntualHTML = `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Solicitud puntual a la Junta Directiva</p>${oficio.solicitud_puntual.split('\n').filter(l => l.trim()).map(p => `<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:8px;">• ${p}</p>`).join('')}</div>`;
-  }
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Oficio ${oficio.numero_oficio || ''}</title>
-  <style>
-    @page { size: letter; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; color: #333; background: white; }
-    .page { width: 8.5in; height: 11in; margin: 0 auto; padding: 0; position: relative; background: white; overflow: hidden; page-break-after: always; }
-    .page:last-child { page-break-after: auto; }
-    .deco-left { position: absolute; left: 0; top: 200px; width: 18px; height: 300px; }
-    .deco-left div { width: 8px; margin-bottom: 4px; border-radius: 4px; }
-    .deco-left div:nth-child(1) { height: 60px; background: #E91E63; }
-    .deco-left div:nth-child(2) { height: 60px; background: #9C27B0; }
-    .deco-left div:nth-child(3) { height: 60px; background: #2196F3; }
-    .deco-left div:nth-child(4) { height: 60px; background: #4CAF50; }
-    .deco-curve { position: absolute; right: 0; top: 0; width: 200px; height: 100%; overflow: hidden; pointer-events: none; opacity: 0.7; }
-    .deco-curve::before { content: ''; position: absolute; right: -100px; top: 100px; width: 300px; height: 300px; border-radius: 50%; border: 40px solid rgba(200,200,200,0.15); }
-    .deco-curve::after { content: ''; position: absolute; right: -50px; bottom: 150px; width: 250px; height: 250px; border-radius: 50%; border: 30px solid rgba(200,200,200,0.12); }
-    .content { padding: 45px 65px 120px 65px; position: relative; z-index: 1; }
-    .header { margin-bottom: 10px; }
-    .header img { height: 90px; width: auto; }
-    .oficio-ref { text-align: right; font-size: 13px; color: #555; margin-bottom: 4px; }
-    .oficio-date { text-align: right; font-size: 13px; color: #555; margin-bottom: 25px; }
-    .addressee { margin-bottom: 20px; font-size: 13px; line-height: 1.7; }
-    .saludo { font-size: 13px; font-weight: 600; margin-bottom: 16px; }
-    .firma-section { margin-top: 25px; text-align: center; }
-    .firma-line { font-size: 13px; font-weight: 600; margin-top: 4px; }
-    .firma-role { font-size: 12px; color: #555; }
-    .firma-inst { font-size: 12px; color: #555; }
-    .firma-img { height: 65px; width: auto; display: block; margin: 0 auto -6px; }
-    .sello-img { height: 100px; width: auto; opacity: 0.85; }
-    .cc { font-size: 11px; color: #777; margin-top: 15px; }
-    .footer { position: absolute; bottom: 0; left: 0; right: 0; border-top: 3px solid #E91E63; padding: 12px 30px 8px; display: flex; justify-content: space-between; font-size: 8px; color: #777; background: white; }
-    .footer-col { text-align: center; flex: 1; padding: 0 4px; }
-    .footer-col strong { display: block; color: #1a5276; font-size: 8.5px; margin-bottom: 2px; }
-    .footer-bottom { position: absolute; bottom: 3px; left: 0; right: 0; text-align: center; font-size: 8.5px; color: #1a5276; font-weight: 600; background: #E91E63; color: white; padding: 3px 0; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .page { margin: 0; box-shadow: none; } }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="deco-left"><div></div><div></div><div></div><div></div></div>
-    <div class="deco-curve"></div>
-    <div class="content">
-      <div class="header">${logoUrl ? `<img src="${logoUrl}" alt="Logo" />` : ''}</div>
-      <div class="oficio-ref"><strong>${oficio.numero_oficio || 'Of. ___.CAEDUC'}</strong></div>
-      <div class="oficio-date">Guatemala ${formatOficioDate(oficio.fecha)}</div>
-      <div class="addressee">${(oficio.dirigido_a || '').split(',').map(line => line.trim()).filter(Boolean).join('<br>')}<br>Presente</div>
-      <div class="saludo">Honorables miembros de la Junta Directiva:</div>
-      ${cuerpoHTML}
-      ${detallesHTML}
-      <p style="font-size:13px;line-height:1.8;text-align:justify;margin-top:16px;">Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.</p>
-      <p style="font-size:13px;margin-top:14px;">Sin otro particular, me suscribo.</p>
-      <p style="font-size:13px;margin-top:20px;text-align:center;">Cordialmente,</p>
-      <div class="firma-section">
-        <div style="display:inline-flex;align-items:flex-end;gap:20px;margin-top:20px;">
-          <div style="text-align:center;">
-            ${f1FirmaUrl ? `<img src="${f1FirmaUrl}" alt="Firma" class="firma-img" />` : '<div style="height:65px;"></div>'}
-            <div style="width:220px;border-top:1px solid #333;padding-top:6px;">
-              <div class="firma-line">${f1Name}</div>
-              <div class="firma-role">${f1Cargo}</div>
-              ${instLines.map(l => `<div class="firma-inst">${l}</div>`).join('')}
-            </div>
+  let recursosHTML = oficio.monto ? `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;">RECURSOS SOLICITADOS</p><p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">Honorarios del profesional invitado: <strong>${oficio.monto}</strong>${oficio.monto_detalle?'. '+oficio.monto_detalle:'.'}</p><p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">Pormenores logísticos esenciales: salón y audio, materiales de apoyo (digitales/impresos básicos), registro y control de asistencia, apoyo de protocolo y difusión institucional.</p></div>` : '';
+  let justificacionHTML = oficio.justificacion ? `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;">JUSTIFICACIÓN TÉCNICA</p>${oficio.justificacion.split('\n').filter(l=>l.trim()).map(p=>`<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:10px;">${p}</p>`).join('')}</div>` : '';
+  let solicitudHTML = oficio.solicitud_puntual ? `<div style="margin-top:18px;"><p style="font-size:12px;font-weight:700;color:#1a5276;margin-bottom:8px;">SOLICITUD PUNTUAL</p>${oficio.solicitud_puntual.split('\n').filter(l=>l.trim()).map(p=>`<p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-bottom:8px;">• ${p}</p>`).join('')}</div>` : '';
+  const BASE_STYLE = `@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;}
+  .page{width:8.5in;height:11in;margin:0 auto;padding:0;position:relative;background:white;overflow:hidden;page-break-after:always;}
+  .page:last-child{page-break-after:auto;}
+  .deco-left{position:absolute;left:0;top:200px;width:18px;height:300px;}.deco-left div{width:8px;margin-bottom:4px;border-radius:4px;}
+  .deco-left div:nth-child(1){height:60px;background:#E91E63;}.deco-left div:nth-child(2){height:60px;background:#9C27B0;}
+  .deco-left div:nth-child(3){height:60px;background:#2196F3;}.deco-left div:nth-child(4){height:60px;background:#4CAF50;}
+  .content{padding:45px 65px 120px 65px;position:relative;z-index:1;}
+  .header img{height:90px;width:auto;}
+  .footer{position:absolute;bottom:0;left:0;right:0;border-top:3px solid #E91E63;padding:12px 30px 8px;display:flex;justify-content:space-between;font-size:8px;color:#777;background:white;}
+  .footer-col{text-align:center;flex:1;padding:0 4px;}.footer-col strong{display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;}
+  .footer-bottom{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:8.5px;background:#E91E63;color:white;padding:3px 0;}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}`;
+  const FOOTER_HTML = `<div class="footer">
+    <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div>
+    <div class="footer-col"><strong>Sub Sede Cobán</strong>Plaza Magdalena<br>+(502) 7764-7109</div>
+    <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div>
+    <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div>
+  </div><div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>`;
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>${BASE_STYLE}</style></head><body>
+  <div class="page"><div class="deco-left"><div></div><div></div><div></div><div></div></div>
+  <div class="content">
+    <div class="header">${logoUrl?`<img src="${logoUrl}" alt="Logo"/>`:''}  </div>
+    <div style="text-align:right;font-size:13px;color:#555;margin-bottom:4px;"><strong>${oficio.numero_oficio||'Of. ___.CAEDUC'}</strong></div>
+    <div style="text-align:right;font-size:13px;color:#555;margin-bottom:25px;">Guatemala ${formatOficioDate(oficio.fecha)}</div>
+    <div style="margin-bottom:20px;font-size:13px;line-height:1.7;">${(oficio.dirigido_a||'').split(',').map(l=>l.trim()).filter(Boolean).join('<br>')}<br>Presente</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:16px;">Honorables miembros de la Junta Directiva:</div>
+    ${cuerpoHTML}${detallesHTML}
+    <p style="font-size:13px;line-height:1.8;text-align:justify;margin-top:16px;">Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.</p>
+    <p style="font-size:13px;margin-top:14px;">Sin otro particular, me suscribo.</p>
+    <p style="font-size:13px;margin-top:20px;text-align:center;">Cordialmente,</p>
+    <div style="margin-top:20px;text-align:center;">
+      <div style="display:inline-flex;align-items:flex-end;gap:20px;">
+        <div style="text-align:center;">${f1FirmaUrl?`<img src="${f1FirmaUrl}" alt="Firma" style="height:65px;width:auto;display:block;margin:0 auto -6px;"/>`:'<div style="height:65px;"></div>'}
+          <div style="width:220px;border-top:1px solid #333;padding-top:6px;">
+            <div style="font-size:13px;font-weight:600;">${f1Name}</div>
+            <div style="font-size:12px;color:#555;">${f1Cargo}</div>
+            ${instLines.map(l=>`<div style="font-size:12px;color:#555;">${l}</div>`).join('')}
           </div>
-          <div style="text-align:center;margin-bottom:15px;">${selloUrl ? `<img src="${selloUrl}" alt="Sello CAEDUC" class="sello-img" />` : ''}</div>
         </div>
+        <div style="text-align:center;margin-bottom:15px;">${selloUrl?`<img src="${selloUrl}" alt="Sello CAEDUC" style="height:100px;width:auto;opacity:0.85;"/>`:''}  </div>
       </div>
-      <div class="cc">C.C: Archivo/ CAEDUC</div>
     </div>
-    <div class="footer">
-      <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9, Ciudad de Guatemala<br>+(502) 2218 - 3400<br>info@colegiodepsicologos.org.gt</div>
-      <div class="footer-col"><strong>Sub Sede Cobán</strong>Centro Comercial Plaza Magdalena, Centro de Negocios, 1er Nivel Of. 105 Cobán<br>+(502) 7764-7109<br>infocoban@colegiodepsicologos.org.gt</div>
-      <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1, Plaza Salguero, Local 4, Zacapa.<br>+(502) 7941-0587<br>infozacapa@colegiodepsicologos.org.gt</div>
-      <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1, Residenciales Las Américas, Quetzaltenango.<br>+(502) 7767-3314<br>infoquetzaltenango@colegiodepsicologos.org.gt</div>
-    </div>
-    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+    <div style="font-size:11px;color:#777;margin-top:15px;">C.C: Archivo/ CAEDUC</div>
   </div>
-  ${(oficio.justificacion || oficio.solicitud_puntual || oficio.monto) ? `
-  <div class="page">
-    <div class="content" style="padding-top:50px;">
-      <div class="header">${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:70px;" />` : ''}</div>
-      <h2 style="font-size:16px;font-weight:800;color:#1a5276;text-align:center;margin:20px 0 8px;">Justificación técnica y aporte gremial</h2>
-      <h3 style="font-size:14px;font-weight:700;color:#333;text-align:center;margin-bottom:25px;">${oficio.actividad_nombre || ''}</h3>
-      ${justificacionHTML}${recursosHTML}${solicitudPuntualHTML}
-      <p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-top:20px;">Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.</p>
-    </div>
-    <div class="footer">
-      <div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218 - 3400</div>
-      <div class="footer-col"><strong>Sub Sede Cobán</strong>Plaza Magdalena<br>+(502) 7764-7109</div>
-      <div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div>
-      <div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div>
-    </div>
-    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
-  </div>` : ''}
-</body>
-</html>`;
+  ${FOOTER_HTML}</div>
+  ${(oficio.justificacion||oficio.solicitud_puntual||oficio.monto)?`
+  <div class="page"><div class="content" style="padding-top:50px;">
+    <div class="header">${logoUrl?`<img src="${logoUrl}" alt="Logo" style="height:70px;"/>`:''}  </div>
+    <h2 style="font-size:16px;font-weight:800;color:#1a5276;text-align:center;margin:20px 0 8px;">Justificación técnica y aporte gremial</h2>
+    <h3 style="font-size:14px;font-weight:700;color:#333;text-align:center;margin-bottom:25px;">${oficio.actividad_nombre||''}</h3>
+    ${justificacionHTML}${recursosHTML}${solicitudHTML}
+    <p style="font-size:12.5px;line-height:1.8;text-align:justify;margin-top:20px;">Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.</p>
+  </div>${FOOTER_HTML}</div>`:''}
+  </body></html>`;
 };
 
 const openOficioLetter = async (oficio, settings = {}, mode = 'download') => {
@@ -452,14 +371,10 @@ const Card = ({ children, className = "" }) => (
 
 const Badge = ({ status }) => {
   const colors = {
-    'Pendiente': 'bg-yellow-100 text-yellow-800',
-    'En Proceso': 'bg-blue-100 text-blue-800',
-    'Aprobado': 'bg-green-100 text-green-800',
-    'Rechazado': 'bg-red-100 text-red-800',
-    'Eliminado': 'bg-gray-200 text-gray-600',
-    'Finalizado': 'bg-gray-100 text-gray-800',
-    'Borrador': 'bg-yellow-100 text-yellow-800',
-    'Enviado': 'bg-green-100 text-green-800',
+    'Pendiente': 'bg-yellow-100 text-yellow-800','En Proceso': 'bg-blue-100 text-blue-800',
+    'Aprobado': 'bg-green-100 text-green-800','Rechazado': 'bg-red-100 text-red-800',
+    'Eliminado': 'bg-gray-200 text-gray-600','Finalizado': 'bg-gray-100 text-gray-800',
+    'Borrador': 'bg-yellow-100 text-yellow-800','Enviado': 'bg-green-100 text-green-800',
     'Archivado': 'bg-gray-200 text-gray-600'
   };
   return <span className={`px-2 py-1 rounded-full text-xs font-bold ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
@@ -486,22 +401,19 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
       <Card className="max-w-lg w-full border-t-8 border-t-green-600 hover:shadow-2xl transition-all">
         <div className="flex flex-col items-center text-center space-y-5 py-8">
           <img src="/logo-CAEDUC.png" alt="CAEDUC Logo" className="w-32 h-32 object-contain" />
-          <div>
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">Solicitud de Avales</h2>
-            <p className="text-gray-600 px-4">Portal oficial para solicitudes externas — CAEDUC</p>
-          </div>
+          <div><h2 className="text-3xl font-bold text-gray-800 mb-2">Solicitud de Avales</h2><p className="text-gray-600 px-4">Portal oficial para solicitudes externas — CAEDUC</p></div>
           <button onClick={() => setUserMode('external')} className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 font-bold w-full transition-colors">Ingresar al Portal de Solicitudes</button>
-          <button onClick={() => setUserMode('consultar_estado')} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-6 py-3 rounded-lg hover:bg-blue-100 font-semibold w-full justify-center border border-blue-200 transition-colors"><Search size={20} /> Consultar Estado de Solicitud</button>
-          <button onClick={() => setUserMode('verificar_aval')} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-6 py-3 rounded-lg hover:bg-indigo-100 font-semibold w-full justify-center border border-indigo-200 transition-colors"><Shield size={20} /> Verificar Validez de Aval</button>
-          {reglamentoUrl && (<a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-purple-50 text-purple-700 px-6 py-3 rounded-lg hover:bg-purple-100 font-semibold w-full justify-center border border-purple-200 transition-colors"><BookOpen size={20} /> Descargar Reglamento de Avales</a>)}
-          {youtubeUrl && (<a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-red-50 text-red-600 px-6 py-3 rounded-lg hover:bg-red-100 font-semibold w-full justify-center border border-red-200 transition-colors"><Play size={20} fill="currentColor" /> Ver Tutorial de Avales</a>)}
+          <button onClick={() => setUserMode('consultar_estado')} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-6 py-3 rounded-lg hover:bg-blue-100 font-semibold w-full justify-center border border-blue-200 transition-colors"><Search size={20}/> Consultar Estado de Solicitud</button>
+          <button onClick={() => setUserMode('verificar_aval')} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-6 py-3 rounded-lg hover:bg-indigo-100 font-semibold w-full justify-center border border-indigo-200 transition-colors"><Shield size={20}/> Verificar Validez de Aval</button>
+          {reglamentoUrl && (<a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-purple-50 text-purple-700 px-6 py-3 rounded-lg hover:bg-purple-100 font-semibold w-full justify-center border border-purple-200 transition-colors"><BookOpen size={20}/> Descargar Reglamento de Avales</a>)}
+          {youtubeUrl && (<a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-red-50 text-red-600 px-6 py-3 rounded-lg hover:bg-red-100 font-semibold w-full justify-center border border-red-200 transition-colors"><Play size={20} fill="currentColor"/> Ver Tutorial de Avales</a>)}
         </div>
       </Card>
-      <button onClick={() => setShowAdmin(true)} className="absolute bottom-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"><Lock size={12} /> Acceso Administrativo</button>
+      <button onClick={() => setShowAdmin(true)} className="absolute bottom-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"><Lock size={12}/> Acceso Administrativo</button>
       <Modal isOpen={showAdmin} onClose={() => setShowAdmin(false)} title="Acceso Comisión" size="sm">
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(email, password); }} className="space-y-4">
-          <input type="email" placeholder="Email" className="w-full p-2 border rounded" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input type="password" placeholder="Contraseña" className="w-full p-2 border rounded" value={password} onChange={e => setPassword(e.target.value)} required />
+          <input type="email" placeholder="Email" className="w-full p-2 border rounded" value={email} onChange={e => setEmail(e.target.value)} required/>
+          <input type="password" placeholder="Contraseña" className="w-full p-2 border rounded" value={password} onChange={e => setPassword(e.target.value)} required/>
           {authError && <p className="text-red-500 text-sm">{authError}</p>}
           <button type="submit" disabled={loading} className="w-full bg-blue-800 text-white py-2 rounded font-bold hover:bg-blue-900">{loading ? 'Entrando...' : 'Iniciar Sesión'}</button>
         </form>
@@ -514,7 +426,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
 // VISTA PÚBLICA: FORMULARIO SOLICITUD
 // ==========================================
 const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
-  const [data, setData] = useState({ applicantName: '', institution: '', activityName: '', activityDate: '', email: '', activityType: '', duration: '', modality: '', schedule: '', platform: '', topic: '', targetAudience: '' });
+  const [data, setData] = useState({ applicantName:'', institution:'', activityName:'', activityDate:'', email:'', activityType:'', duration:'', modality:'', schedule:'', platform:'', topic:'', targetAudience:'' });
   const [file, setFile] = useState(null);
   const [submittedNumber, setSubmittedNumber] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -522,26 +434,19 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
   const formFileUrl = formFilePath ? `${supabaseUrl}/storage/v1/object/public/aval-form-template/${formFilePath}` : null;
   const reglamentoPath = appSettings?.reglamento_file_path || '';
   const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
-  const handleSubmit = async (e) => {
-    e.preventDefault(); setSubmitting(true);
-    const reqNum = await submitAval(data, file);
-    if (reqNum) setSubmittedNumber(reqNum);
-    setSubmitting(false);
-  };
+  const handleSubmit = async (e) => { e.preventDefault(); setSubmitting(true); const reqNum = await submitAval(data, file); if (reqNum) setSubmittedNumber(reqNum); setSubmitting(false); };
   if (submittedNumber) {
     return (
       <div className="max-w-lg mx-auto space-y-6 mt-10">
         <Card className="border-t-4 border-t-green-500">
           <div className="text-center space-y-4 py-6">
-            <div className="bg-green-100 p-4 rounded-full inline-block"><CheckCircle size={48} className="text-green-600" /></div>
+            <div className="bg-green-100 p-4 rounded-full inline-block"><CheckCircle size={48} className="text-green-600"/></div>
             <h2 className="text-2xl font-bold text-gray-800">¡Solicitud Enviada!</h2>
             <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-6 space-y-2">
-              <p className="text-amber-800 font-semibold text-sm flex items-center justify-center gap-2"><AlertTriangle size={16} /> Anota este número de solicitud para verificar el estado de tu solicitud generada</p>
+              <p className="text-amber-800 font-semibold text-sm flex items-center justify-center gap-2"><AlertTriangle size={16}/> Anota este número de solicitud</p>
               <p className="text-5xl font-black text-amber-700">#{submittedNumber}</p>
             </div>
-            <div className="flex flex-col gap-3 pt-4">
-              <button onClick={onBack} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700">Volver al Menú Principal</button>
-            </div>
+            <button onClick={onBack} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700">Volver al Menú Principal</button>
           </div>
         </Card>
       </div>
@@ -549,45 +454,42 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
   }
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <BackButton onClick={onBack} />
+      <BackButton onClick={onBack}/>
       <div className="grid gap-4 md:grid-cols-2">
-        {formFileUrl && (<Card className="border-l-4 border-l-blue-500"><div className="flex items-center gap-3"><div className="bg-blue-100 p-3 rounded-lg shrink-0"><Download size={24} className="text-blue-600" /></div><div className="flex-1"><p className="font-bold text-gray-800">Formulario de Solicitud</p><p className="text-sm text-gray-500">Descarga, llena y adjunta.</p></div><a href={formFileUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shrink-0 text-sm"><Download size={16} /> Descargar</a></div></Card>)}
-        {reglamentoUrl && (<Card className="border-l-4 border-l-purple-500"><div className="flex items-center gap-3"><div className="bg-purple-100 p-3 rounded-lg shrink-0"><BookOpen size={24} className="text-purple-600" /></div><div className="flex-1"><p className="font-bold text-gray-800">Reglamento de Avales</p><p className="text-sm text-gray-500">Consulta el reglamento vigente.</p></div><a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 font-medium shrink-0 text-sm"><Download size={16} /> Descargar</a></div></Card>)}
+        {formFileUrl && (<Card className="border-l-4 border-l-blue-500"><div className="flex items-center gap-3"><div className="bg-blue-100 p-3 rounded-lg shrink-0"><Download size={24} className="text-blue-600"/></div><div className="flex-1"><p className="font-bold text-gray-800">Formulario de Solicitud</p><p className="text-sm text-gray-500">Descarga, llena y adjunta.</p></div><a href={formFileUrl} target="_blank" rel="noopener noreferrer" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 font-medium shrink-0 text-sm"><Download size={16}/> Descargar</a></div></Card>)}
+        {reglamentoUrl && (<Card className="border-l-4 border-l-purple-500"><div className="flex items-center gap-3"><div className="bg-purple-100 p-3 rounded-lg shrink-0"><BookOpen size={24} className="text-purple-600"/></div><div className="flex-1"><p className="font-bold text-gray-800">Reglamento de Avales</p><p className="text-sm text-gray-500">Consulta el reglamento vigente.</p></div><a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 font-medium shrink-0 text-sm"><Download size={16}/> Descargar</a></div></Card>)}
       </div>
       <Card>
         <h2 className="text-xl font-bold mb-4">Solicitud de Aval</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Datos del Solicitante</h3>
-            <input required placeholder="Nombre completo del Solicitante" className="w-full border p-2 rounded" value={data.applicantName} onChange={e => setData({...data, applicantName: e.target.value})} />
-            <input required placeholder="Institución (o escriba 'Solicitud propia')" className="w-full border p-2 rounded" value={data.institution} onChange={e => setData({...data, institution: e.target.value})} />
-            <input required type="email" placeholder="Email de Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data, email: e.target.value})} />
+            <input required placeholder="Nombre completo del Solicitante" className="w-full border p-2 rounded" value={data.applicantName} onChange={e => setData({...data,applicantName:e.target.value})}/>
+            <input required placeholder="Institución (o escriba 'Solicitud propia')" className="w-full border p-2 rounded" value={data.institution} onChange={e => setData({...data,institution:e.target.value})}/>
+            <input required type="email" placeholder="Email de Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e => setData({...data,email:e.target.value})}/>
           </div>
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Datos de la Actividad</h3>
-            <input required placeholder="Nombre / Tema de la Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e => setData({...data, activityName: e.target.value})} />
-            <input placeholder="Tema específico" className="w-full border p-2 rounded" value={data.topic} onChange={e => setData({...data, topic: e.target.value})} />
+            <input required placeholder="Nombre / Tema de la Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e => setData({...data,activityName:e.target.value})}/>
+            <input placeholder="Tema específico" className="w-full border p-2 rounded" value={data.topic} onChange={e => setData({...data,topic:e.target.value})}/>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-sm font-bold mb-1">Tipo de Actividad *</label><select required className="w-full border p-2 rounded" value={data.activityType} onChange={e => setData({...data, activityType: e.target.value})}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-              <div><label className="block text-sm font-bold mb-1">Modalidad *</label><select required className="w-full border p-2 rounded" value={data.modality} onChange={e => setData({...data, modality: e.target.value})}><option value="">Seleccionar...</option>{MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
+              <div><label className="block text-sm font-bold mb-1">Tipo de Actividad *</label><select required className="w-full border p-2 rounded" value={data.activityType} onChange={e => setData({...data,activityType:e.target.value})}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+              <div><label className="block text-sm font-bold mb-1">Modalidad *</label><select required className="w-full border p-2 rounded" value={data.modality} onChange={e => setData({...data,modality:e.target.value})}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-sm font-bold mb-1">Duración *</label><input required placeholder="Ej: 12 horas" className="w-full border p-2 rounded" value={data.duration} onChange={e => setData({...data, duration: e.target.value})} /></div>
-              <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad *</label><input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data, activityDate: e.target.value})} /></div>
+              <div><label className="block text-sm font-bold mb-1">Duración *</label><input required placeholder="Ej: 12 horas" className="w-full border p-2 rounded" value={data.duration} onChange={e => setData({...data,duration:e.target.value})}/></div>
+              <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad *</label><input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e => setData({...data,activityDate:e.target.value})}/></div>
             </div>
-            <input required placeholder="Fecha y Hora específica" className="w-full border p-2 rounded" value={data.schedule} onChange={e => setData({...data, schedule: e.target.value})} />
-            <input required placeholder="Lugar o Plataforma" className="w-full border p-2 rounded" value={data.platform} onChange={e => setData({...data, platform: e.target.value})} />
-            <input required placeholder="Dirigido a" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e => setData({...data, targetAudience: e.target.value})} />
+            <input required placeholder="Fecha y Hora específica" className="w-full border p-2 rounded" value={data.schedule} onChange={e => setData({...data,schedule:e.target.value})}/>
+            <input required placeholder="Lugar o Plataforma" className="w-full border p-2 rounded" value={data.platform} onChange={e => setData({...data,platform:e.target.value})}/>
+            <input required placeholder="Dirigido a" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e => setData({...data,targetAudience:e.target.value})}/>
           </div>
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Documento Adjunto</h3>
-            <div>
-              <label className="block text-sm font-bold mb-1">Formulario Lleno (adjuntar)</label>
-              <input type="file" accept=".pdf" onChange={e => { const sel = e.target.files[0]; if (sel && sel.type !== 'application/pdf') { alert('Solo se admiten archivos en formato PDF.'); e.target.value = ''; setFile(null); return; } setFile(sel); }} className="w-full" />
-              <p className="text-red-600 font-black text-lg mt-2 leading-snug">⚠️ Solo se admiten archivos completos en formato PDF.</p>
-            </div>
+            <input type="file" accept=".pdf" onChange={e=>{const sel=e.target.files[0];if(sel&&sel.type!=='application/pdf'){alert('Solo se admiten archivos en formato PDF.');e.target.value='';setFile(null);return;}setFile(sel);}} className="w-full"/>
+            <p className="text-red-600 font-black text-lg mt-2">⚠️ Solo se admiten archivos completos en formato PDF.</p>
           </div>
-          <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 disabled:opacity-50">{submitting ? 'Enviando...' : 'Enviar Solicitud'}</button>
+          <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 disabled:opacity-50">{submitting?'Enviando...':'Enviar Solicitud'}</button>
         </form>
       </Card>
     </div>
@@ -602,24 +504,17 @@ const ConsultarEstadoView = ({ onBack, appSettings }) => {
   const [result, setResult] = useState(null);
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  const handleSearch = async (e) => {
-    e.preventDefault(); setSearching(true); setNotFound(false); setResult(null);
-    const { data, error } = await supabase.from('avales').select('*').eq('request_number', parseInt(requestNum)).single();
-    if (error || !data) setNotFound(true);
-    else if (data.is_deleted) setResult({ ...data, status: 'Eliminado' });
-    else setResult(data);
-    setSearching(false);
-  };
+  const handleSearch = async (e) => { e.preventDefault(); setSearching(true); setNotFound(false); setResult(null); const {data,error}=await supabase.from('avales').select('*').eq('request_number',parseInt(requestNum)).single(); if(error||!data)setNotFound(true); else if(data.is_deleted)setResult({...data,status:'Eliminado'}); else setResult(data); setSearching(false); };
   const handleReset = () => { setResult(null); setNotFound(false); setRequestNum(''); };
   return (
     <div className="max-w-lg mx-auto space-y-6 mt-10">
-      <BackButton onClick={onBack} />
+      <BackButton onClick={onBack}/>
       <Card className="border-t-4 border-t-blue-500">
         <div className="space-y-4">
-          <div className="text-center"><Search size={40} className="text-blue-600 mx-auto mb-2" /><h2 className="text-2xl font-bold text-gray-800">Consultar Estado de Solicitud</h2><p className="text-gray-500 text-sm">Ingresa el número de solicitud que recibiste.</p></div>
-          {!result && !notFound && (<form onSubmit={handleSearch} className="space-y-4"><div className="relative"><Hash size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input required type="number" min="1" placeholder="Número de solicitud" className="w-full border p-3 pl-10 rounded-lg text-lg" value={requestNum} onChange={e => setRequestNum(e.target.value)} /></div><button type="submit" disabled={searching} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{searching ? 'Buscando...' : 'Consultar'}</button></form>)}
-          {notFound && (<div className="text-center space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2" /><p className="text-red-700 font-medium">No se encontró solicitud #{requestNum}</p></div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
-          {result && (<div className="space-y-4"><div className="bg-gray-50 rounded-lg p-4 space-y-3"><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Solicitud</span><span className="font-bold text-lg">#{result.request_number}</span></div><div className="border-t pt-3 space-y-2"><div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div></div>{result.status === 'Aprobado' && (<div className="border-t pt-3 space-y-3">{result.correlativo && (<div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval (Correlativo)</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div>)}{result.approval_reason && (<div className="bg-green-50 border border-green-200 rounded-lg p-3"><p className="text-sm text-green-600 font-medium">Observaciones:</p><p className="text-green-800 text-sm">{result.approval_reason}</p></div>)}<div className="flex gap-2"><button onClick={() => openApprovalLetter(result, appSettings, 'preview')} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 flex items-center justify-center gap-2 border border-blue-200"><Eye size={18} /> Vista Previa</button><button onClick={() => openApprovalLetter(result, appSettings, 'download')} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={18} /> Descargar PDF</button></div></div>)}{result.status === 'Rechazado' && result.approval_reason && (<div className="border-t pt-3"><div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p><p className="text-red-800 text-sm">{result.approval_reason}</p></div></div>)}{result.status === 'Eliminado' && (<div className="border-t pt-3"><div className="bg-gray-100 border border-gray-300 rounded-lg p-3"><p className="text-sm text-gray-600 font-medium">Esta solicitud fue eliminada.</p></div></div>)}</div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
+          <div className="text-center"><Search size={40} className="text-blue-600 mx-auto mb-2"/><h2 className="text-2xl font-bold text-gray-800">Consultar Estado de Solicitud</h2><p className="text-gray-500 text-sm">Ingresa el número de solicitud que recibiste.</p></div>
+          {!result&&!notFound&&(<form onSubmit={handleSearch} className="space-y-4"><div className="relative"><Hash size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input required type="number" min="1" placeholder="Número de solicitud" className="w-full border p-3 pl-10 rounded-lg text-lg" value={requestNum} onChange={e=>setRequestNum(e.target.value)}/></div><button type="submit" disabled={searching} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{searching?'Buscando...':'Consultar'}</button></form>)}
+          {notFound&&(<div className="text-center space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2"/><p className="text-red-700 font-medium">No se encontró solicitud #{requestNum}</p></div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
+          {result&&(<div className="space-y-4"><div className="bg-gray-50 rounded-lg p-4 space-y-3"><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Solicitud</span><span className="font-bold text-lg">#{result.request_number}</span></div><div className="border-t pt-3 space-y-2"><div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date||'—'}</span></div><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status}/></div></div>{result.status==='Aprobado'&&(<div className="border-t pt-3 space-y-3">{result.correlativo&&(<div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div>)}<div className="flex gap-2"><button onClick={()=>openApprovalLetter(result,appSettings,'preview')} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 flex items-center justify-center gap-2 border border-blue-200"><Eye size={18}/> Vista Previa</button><button onClick={()=>openApprovalLetter(result,appSettings,'download')} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={18}/> Descargar PDF</button></div></div>)}{result.status==='Rechazado'&&result.approval_reason&&(<div className="border-t pt-3"><div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-sm text-red-600 font-medium">Razón del Rechazo:</p><p className="text-red-800 text-sm">{result.approval_reason}</p></div></div>)}</div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
         </div>
       </Card>
     </div>
@@ -627,29 +522,24 @@ const ConsultarEstadoView = ({ onBack, appSettings }) => {
 };
 
 // ==========================================
-// VISTA PÚBLICA: VERIFICAR VALIDEZ DE AVAL
+// VISTA PÚBLICA: VERIFICAR AVAL
 // ==========================================
 const VerificarAvalView = ({ onBack }) => {
   const [correlativo, setCorrelativo] = useState('');
   const [result, setResult] = useState(null);
   const [searching, setSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  const handleSearch = async (e) => {
-    e.preventDefault(); setSearching(true); setNotFound(false); setResult(null);
-    const { data, error } = await supabase.from('avales').select('*').eq('correlativo', correlativo.trim()).eq('is_deleted', false).single();
-    if (error || !data) setNotFound(true); else setResult(data);
-    setSearching(false);
-  };
+  const handleSearch = async (e) => { e.preventDefault(); setSearching(true); setNotFound(false); setResult(null); const {data,error}=await supabase.from('avales').select('*').eq('correlativo',correlativo.trim()).eq('is_deleted',false).single(); if(error||!data)setNotFound(true); else setResult(data); setSearching(false); };
   const handleReset = () => { setResult(null); setNotFound(false); setCorrelativo(''); };
   return (
     <div className="max-w-lg mx-auto space-y-6 mt-10">
-      <BackButton onClick={onBack} />
+      <BackButton onClick={onBack}/>
       <Card className="border-t-4 border-t-indigo-500">
         <div className="space-y-4">
-          <div className="text-center"><Shield size={40} className="text-indigo-600 mx-auto mb-2" /><h2 className="text-2xl font-bold text-gray-800">Verificar Validez de Aval</h2><p className="text-gray-500 text-sm">Ingresa el número de correlativo del aval.</p></div>
-          {!result && !notFound && (<form onSubmit={handleSearch} className="space-y-4"><input required placeholder="Número de correlativo del aval" className="w-full border p-3 rounded-lg text-lg text-center" value={correlativo} onChange={e => setCorrelativo(e.target.value)} /><button type="submit" disabled={searching} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">{searching ? 'Verificando...' : 'Verificar Aval'}</button></form>)}
-          {notFound && (<div className="text-center space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2" /><p className="text-red-700 font-medium">No se encontró un aval válido con correlativo: {correlativo}</p></div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
-          {result && (<div className="space-y-4">{result.status === 'Aprobado' ? (<div className="bg-green-50 border border-green-300 rounded-lg p-4 text-center"><CheckCircle size={40} className="text-green-600 mx-auto mb-2" /><p className="text-green-800 font-bold text-lg">Aval Válido ✓</p></div>) : (<div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-center"><AlertTriangle size={40} className="text-yellow-600 mx-auto mb-2" /><p className="text-yellow-800 font-bold text-lg">Aval en estado: {result.status}</p></div>)}<div className="bg-gray-50 rounded-lg p-4 space-y-2"><div className="flex justify-between"><span className="text-sm text-gray-500">Correlativo</span><span className="font-bold">{result.correlativo}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Fecha Actividad</span><span className="font-medium">{result.activity_date || '—'}</span></div><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status} /></div></div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Hacer Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
+          <div className="text-center"><Shield size={40} className="text-indigo-600 mx-auto mb-2"/><h2 className="text-2xl font-bold text-gray-800">Verificar Validez de Aval</h2></div>
+          {!result&&!notFound&&(<form onSubmit={handleSearch} className="space-y-4"><input required placeholder="Número de correlativo del aval" className="w-full border p-3 rounded-lg text-lg text-center" value={correlativo} onChange={e=>setCorrelativo(e.target.value)}/><button type="submit" disabled={searching} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50">{searching?'Verificando...':'Verificar Aval'}</button></form>)}
+          {notFound&&(<div className="text-center space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2"/><p className="text-red-700 font-medium">No se encontró un aval válido con correlativo: {correlativo}</p></div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
+          {result&&(<div className="space-y-4">{result.status==='Aprobado'?(<div className="bg-green-50 border border-green-300 rounded-lg p-4 text-center"><CheckCircle size={40} className="text-green-600 mx-auto mb-2"/><p className="text-green-800 font-bold text-lg">Aval Válido ✓</p></div>):(<div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-center"><AlertTriangle size={40} className="text-yellow-600 mx-auto mb-2"/><p className="text-yellow-800 font-bold text-lg">Estado: {result.status}</p></div>)}<div className="bg-gray-50 rounded-lg p-4 space-y-2"><div className="flex justify-between"><span className="text-sm text-gray-500">Correlativo</span><span className="font-bold">{result.correlativo}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status}/></div></div><div className="flex gap-3"><button onClick={handleReset} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Volver al Menú</button></div></div>)}
         </div>
       </Card>
     </div>
@@ -657,128 +547,67 @@ const VerificarAvalView = ({ onBack }) => {
 };
 
 // ==========================================
-// ADMIN: OFICIOS / SOLICITUDES INTERNAS
+// ADMIN: OFICIOS
 // ==========================================
 const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings, preFillData, onClearPreFill }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingOficio, setEditingOficio] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
   const [deleting, setDeleting] = useState(false);
-
-  // ── Auto-abrir formulario con datos pre-llenados desde Planificación ──
-  useEffect(() => {
-    if (preFillData) {
-      setEditingOficio(null);
-      setShowForm(true);
-    }
-  }, [preFillData]);
-
-  const handleNew = () => { setEditingOficio(null); if (onClearPreFill) onClearPreFill(); setShowForm(true); };
-  const handleEdit = (o) => { setEditingOficio(o); if (onClearPreFill) onClearPreFill(); setShowForm(true); };
-
-  const handleSave = async (data) => {
-    if (editingOficio) await onUpdateOficio(editingOficio.id, data);
-    else await onCreateOficio(data);
-    setShowForm(false);
-    setEditingOficio(null);
-    if (onClearPreFill) onClearPreFill();
-  };
-
-  const handleClose = () => {
-    setShowForm(false);
-    setEditingOficio(null);
-    if (onClearPreFill) onClearPreFill();
-  };
-
-  const handleDelete = async () => {
-    if (!deleteModal) return;
-    setDeleting(true);
-    await onDeleteOficio(deleteModal.id);
-    setDeleteModal(null);
-    setDeleting(false);
-  };
-
-  const handleStatusChange = async (oficio, newStatus) => {
-    await onUpdateOficio(oficio.id, { ...oficio, estado: newStatus });
-  };
-
+  useEffect(() => { if (preFillData) { setEditingOficio(null); setShowForm(true); } }, [preFillData]);
+  const handleNew = () => { setEditingOficio(null); if(onClearPreFill)onClearPreFill(); setShowForm(true); };
+  const handleEdit = (o) => { setEditingOficio(o); if(onClearPreFill)onClearPreFill(); setShowForm(true); };
+  const handleSave = async (data) => { if(editingOficio)await onUpdateOficio(editingOficio.id,data); else await onCreateOficio(data); setShowForm(false); setEditingOficio(null); if(onClearPreFill)onClearPreFill(); };
+  const handleClose = () => { setShowForm(false); setEditingOficio(null); if(onClearPreFill)onClearPreFill(); };
+  const handleDelete = async () => { if(!deleteModal)return; setDeleting(true); await onDeleteOficio(deleteModal.id); setDeleteModal(null); setDeleting(false); };
+  const handleStatusChange = async (oficio, newStatus) => { await onUpdateOficio(oficio.id,{...oficio,estado:newStatus}); };
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2>
-          <p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p>
-        </div>
-        <button onClick={handleNew} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium shadow-sm">
-          <FilePlus size={20} /> Nuevo Oficio
-        </button>
+        <div><h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2><p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p></div>
+        <button onClick={handleNew} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium shadow-sm"><FilePlus size={20}/> Nuevo Oficio</button>
       </div>
-
-      {/* Banner cuando viene de Planificación */}
-      {preFillData && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center gap-3">
-          <FileText size={18} className="text-indigo-600 shrink-0" />
-          <div className="flex-1 text-sm text-indigo-800">
-            <span className="font-bold">Nuevo oficio desde Planificación:</span> "{preFillData.actividad_nombre}" — datos pre-llenados automáticamente.
-          </div>
-          <button onClick={onClearPreFill} className="text-indigo-400 hover:text-indigo-700"><X size={16} /></button>
-        </div>
-      )}
-
+      {preFillData&&(<div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center gap-3"><FileText size={18} className="text-indigo-600 shrink-0"/><div className="flex-1 text-sm text-indigo-800"><span className="font-bold">Nuevo oficio desde Planificación:</span> "{preFillData.actividad_nombre}" — datos pre-llenados.</div><button onClick={onClearPreFill} className="text-indigo-400 hover:text-indigo-700"><X size={16}/></button></div>)}
       <div className="grid grid-cols-3 gap-4">
         <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{oficios.length}</p><p className="text-sm text-gray-500">Total Oficios</p></div></Card>
-        <Card><div className="text-center"><p className="text-3xl font-bold text-yellow-600">{oficios.filter(o => o.estado === 'Borrador').length}</p><p className="text-sm text-gray-500">Borradores</p></div></Card>
-        <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{oficios.filter(o => o.estado === 'Enviado').length}</p><p className="text-sm text-gray-500">Enviados</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-yellow-600">{oficios.filter(o=>o.estado==='Borrador').length}</p><p className="text-sm text-gray-500">Borradores</p></div></Card>
+        <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{oficios.filter(o=>o.estado==='Enviado').length}</p><p className="text-sm text-gray-500">Enviados</p></div></Card>
       </div>
-
       <div className="space-y-3">
-        {oficios.map(o => (
+        {oficios.map(o=>(
           <Card key={o.id} className="hover:shadow-lg transition-shadow">
             <div className="flex justify-between items-start gap-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-lg text-gray-800">{o.numero_oficio}</h3><Badge status={o.estado} /></div>
+                <div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-lg text-gray-800">{o.numero_oficio}</h3><Badge status={o.estado}/></div>
                 <p className="text-gray-600 mt-1">{o.motivo}</p>
-                {o.actividad_nombre && <p className="text-sm text-blue-600 font-medium mt-0.5">Actividad: {o.actividad_nombre}</p>}
+                {o.actividad_nombre&&<p className="text-sm text-blue-600 font-medium mt-0.5">Actividad: {o.actividad_nombre}</p>}
                 <div className="flex items-center gap-3 mt-2 flex-wrap">
-                  <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12} /> {o.fecha}</span>
-                  <span className="text-xs text-gray-400">Dirigido a: {(o.dirigido_a || '').substring(0, 50)}...</span>
-                  {o.monto && <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium">{o.monto}</span>}
+                  <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12}/> {o.fecha}</span>
+                  {o.monto&&<span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium">{o.monto}</span>}
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
                 <div className="flex gap-1">
-                  <button onClick={() => openOficioLetter(o, appSettings, 'preview')} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Eye size={14} /> Vista Previa</button>
-                  <button onClick={() => openOficioLetter(o, appSettings, 'download')} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-indigo-700 flex items-center gap-1 font-medium"><Download size={14} /> Descargar PDF</button>
+                  <button onClick={()=>openOficioLetter(o,appSettings,'preview')} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Eye size={14}/> Vista Previa</button>
+                  <button onClick={()=>openOficioLetter(o,appSettings,'download')} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-indigo-700 flex items-center gap-1 font-medium"><Download size={14}/> PDF</button>
                 </div>
-                <button onClick={() => handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium"><Edit3 size={14} /> Editar</button>
+                <button onClick={()=>handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium"><Edit3 size={14}/> Editar</button>
                 <div className="flex gap-1">
-                  {o.estado === 'Borrador' && (<button onClick={() => handleStatusChange(o, 'Enviado')} className="bg-green-50 text-green-600 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1"><Send size={12} /> Marcar Enviado</button>)}
-                  {o.estado === 'Enviado' && (<button onClick={() => handleStatusChange(o, 'Archivado')} className="bg-gray-50 text-gray-500 px-2 py-1 rounded text-xs hover:bg-gray-100 flex items-center gap-1"><Archive size={12} /> Archivar</button>)}
-                  <button onClick={() => setDeleteModal(o)} className="bg-red-50 text-red-500 px-2 py-1 rounded text-xs hover:bg-red-100 flex items-center gap-1"><Trash2 size={12} /> Eliminar</button>
+                  {o.estado==='Borrador'&&(<button onClick={()=>handleStatusChange(o,'Enviado')} className="bg-green-50 text-green-600 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1"><Send size={12}/> Enviado</button>)}
+                  {o.estado==='Enviado'&&(<button onClick={()=>handleStatusChange(o,'Archivado')} className="bg-gray-50 text-gray-500 px-2 py-1 rounded text-xs hover:bg-gray-100 flex items-center gap-1"><Archive size={12}/> Archivar</button>)}
+                  <button onClick={()=>setDeleteModal(o)} className="bg-red-50 text-red-500 px-2 py-1 rounded text-xs hover:bg-red-100 flex items-center gap-1"><Trash2 size={12}/> Eliminar</button>
                 </div>
               </div>
             </div>
           </Card>
         ))}
-        {oficios.length === 0 && (<div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4" /><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>)}
+        {oficios.length===0&&(<div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4"/><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>)}
       </div>
-
-      {showForm && (
-        <OficioFormModal
-          isOpen={showForm}
-          onClose={handleClose}
-          onSave={handleSave}
-          initialData={editingOficio}
-          preFillData={preFillData}
-          existingCount={oficios.length}
-          appSettings={appSettings}
-        />
-      )}
-
-      <Modal isOpen={!!deleteModal} onClose={() => setDeleteModal(null)} title="Eliminar Oficio" size="sm">
+      {showForm&&<OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} existingCount={oficios.length} appSettings={appSettings}/>}
+      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Oficio" size="sm">
         <div className="space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-medium">¿Seguro que deseas eliminar el oficio "{deleteModal?.numero_oficio}"?</p><p className="text-red-500 text-sm mt-1">Esta acción no se puede deshacer.</p></div>
-          <div className="flex gap-3"><button onClick={() => setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting ? 'Eliminando...' : 'Eliminar'}</button></div>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-medium">¿Seguro que deseas eliminar "{deleteModal?.numero_oficio}"?</p></div>
+          <div className="flex gap-3"><button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-200">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button></div>
         </div>
       </Modal>
     </div>
@@ -786,203 +615,101 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
 };
 
 // ==========================================
-// FORMULARIO CREAR/EDITAR OFICIO
+// FORMULARIO OFICIO
 // ==========================================
 const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, existingCount, appSettings }) => {
   const today = new Date().toISOString().split('T')[0];
-  const suggestedNum = 'Of. ' + String((existingCount || 0) + 1).padStart(3, '0') + '.CAEDUC';
+  const suggestedNum = 'Of. ' + String((existingCount||0)+1).padStart(3,'0') + '.CAEDUC';
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [fd, setFd] = useState(null);
-
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(1);
-      // Si viene de Planificación, pre-llenar con datos de la actividad
       if (preFillData && !initialData) {
-        setFd({
-          numero_oficio: suggestedNum,
-          fecha: today,
-          dirigido_a: 'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala',
-          motivo: MOTIVOS_OFICIO[0],
-          motivo_custom: '',
-          actividad_nombre: preFillData.actividad_nombre || '',
-          actividad_tipo: preFillData.actividad_tipo || '',
-          actividad_fecha: preFillData.actividad_fecha || '',
-          actividad_duracion: preFillData.actividad_duracion || '',
-          actividad_modalidad: preFillData.actividad_modalidad || '',
-          actividad_sede: preFillData.actividad_sede || preFillData.t3_lugar || '',
-          actividad_descripcion: '',
-          monto: '',
-          monto_detalle: '',
-          justificacion: '',
-          solicitud_puntual: '',
-          cuerpo_personalizado: '',
-          estado: 'Borrador',
-        });
+        setFd({ numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:'', monto:'', monto_detalle:'', justificacion:'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
       } else {
-        setFd({
-          numero_oficio: initialData ? initialData.numero_oficio : suggestedNum,
-          fecha: initialData ? initialData.fecha : today,
-          dirigido_a: initialData ? initialData.dirigido_a : 'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala',
-          motivo: initialData ? initialData.motivo : MOTIVOS_OFICIO[0],
-          motivo_custom: '',
-          actividad_nombre: initialData ? (initialData.actividad_nombre || '') : '',
-          actividad_tipo: initialData ? (initialData.actividad_tipo || '') : '',
-          actividad_fecha: initialData ? (initialData.actividad_fecha || '') : '',
-          actividad_duracion: initialData ? (initialData.actividad_duracion || '') : '',
-          actividad_modalidad: initialData ? (initialData.actividad_modalidad || '') : '',
-          actividad_sede: initialData ? (initialData.actividad_sede || '') : '',
-          actividad_descripcion: initialData ? (initialData.actividad_descripcion || '') : '',
-          monto: initialData ? (initialData.monto || '') : '',
-          monto_detalle: initialData ? (initialData.monto_detalle || '') : '',
-          justificacion: initialData ? (initialData.justificacion || '') : '',
-          solicitud_puntual: initialData ? (initialData.solicitud_puntual || '') : '',
-          cuerpo_personalizado: initialData ? (initialData.cuerpo_personalizado || '') : '',
-          estado: initialData ? (initialData.estado || 'Borrador') : 'Borrador',
-        });
+        setFd({ numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:initialData?initialData.motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:initialData?(initialData.actividad_nombre||''):'', actividad_tipo:initialData?(initialData.actividad_tipo||''):'', actividad_fecha:initialData?(initialData.actividad_fecha||''):'', actividad_duracion:initialData?(initialData.actividad_duracion||''):'', actividad_modalidad:initialData?(initialData.actividad_modalidad||''):'', actividad_sede:initialData?(initialData.actividad_sede||''):'', actividad_descripcion:initialData?(initialData.actividad_descripcion||''):'', monto:initialData?(initialData.monto||''):'', monto_detalle:initialData?(initialData.monto_detalle||''):'', justificacion:initialData?(initialData.justificacion||''):'', solicitud_puntual:initialData?(initialData.solicitud_puntual||''):'', cuerpo_personalizado:initialData?(initialData.cuerpo_personalizado||''):'', estado:initialData?(initialData.estado||'Borrador'):'Borrador' });
       }
     }
   }, [isOpen, initialData, preFillData]);
-
-  if (!isOpen || !fd) return null;
-
-  const isRecursos = fd.motivo.includes('recursos') || fd.motivo.includes('Aprobación');
-  const isCustomMotivo = fd.motivo === 'Otro (personalizado)';
+  if (!isOpen||!fd) return null;
+  const isRecursos = fd.motivo.includes('recursos')||fd.motivo.includes('Aprobación');
+  const isCustomMotivo = fd.motivo==='Otro (personalizado)';
   const goToPreview = (e) => { e.preventDefault(); setCurrentStep(2); };
-  const handleSaveOficio = async () => {
-    setSaving(true);
-    const saveData = { ...fd };
-    if (isCustomMotivo && fd.motivo_custom) saveData.motivo = fd.motivo_custom;
-    delete saveData.motivo_custom;
-    await onSave(saveData);
-    setSaving(false);
-  };
-  const handlePreviewOpen = () => {
-    const previewData = { ...fd };
-    if (fd.motivo === 'Otro (personalizado)' && fd.motivo_custom) previewData.motivo = fd.motivo_custom;
-    openOficioLetter(previewData, appSettings, 'preview');
-  };
-  const handleDownloadPdf = () => {
-    const previewData = { ...fd };
-    if (fd.motivo === 'Otro (personalizado)' && fd.motivo_custom) previewData.motivo = fd.motivo_custom;
-    openOficioLetter(previewData, appSettings, 'download');
-  };
-  const updateField = (field, value) => setFd(prev => ({ ...prev, [field]: value }));
-
-  if (currentStep === 2) {
+  const handleSaveOficio = async () => { setSaving(true); const saveData={...fd}; if(isCustomMotivo&&fd.motivo_custom)saveData.motivo=fd.motivo_custom; delete saveData.motivo_custom; await onSave(saveData); setSaving(false); };
+  const handlePreviewOpen = () => { const pd={...fd}; if(fd.motivo==='Otro (personalizado)'&&fd.motivo_custom)pd.motivo=fd.motivo_custom; openOficioLetter(pd,appSettings,'preview'); };
+  const handleDownloadPdf = () => { const pd={...fd}; if(fd.motivo==='Otro (personalizado)'&&fd.motivo_custom)pd.motivo=fd.motivo_custom; openOficioLetter(pd,appSettings,'download'); };
+  const updateField = (field,value) => setFd(prev=>({...prev,[field]:value}));
+  if (currentStep===2) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
-          <div className="flex justify-between items-center p-6 border-b">
-            <div><h3 className="text-xl font-bold text-gray-800">{initialData ? 'Editar Oficio' : 'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">Paso 2: Vista previa y edición</p></div>
-            <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
-          </div>
-          <div className="p-6 max-h-[80vh] overflow-y-auto">
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4"><p className="text-blue-800 font-medium text-sm">Vista previa del oficio. Puedes volver atrás para editar cualquier campo, o guardar y descargar directamente.</p></div>
-              <div className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 space-y-3">
-                <div className="flex justify-between items-start"><div><p className="font-bold text-lg text-gray-800">{fd.numero_oficio}</p><p className="text-sm text-gray-500">Guatemala, {formatOficioDate(fd.fecha)}</p></div><Badge status={fd.estado} /></div>
-                <div className="border-t pt-3 space-y-2 text-sm">
-                  <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Dirigido a:</span><span className="text-gray-800">{fd.dirigido_a}</span></div>
-                  <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Motivo:</span><span className="text-gray-800">{isCustomMotivo ? fd.motivo_custom : fd.motivo}</span></div>
-                  {fd.actividad_nombre && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Actividad:</span><span className="text-gray-800">{fd.actividad_nombre}</span></div>}
-                  {fd.actividad_tipo && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Tipo:</span><span className="text-gray-800">{fd.actividad_tipo} {fd.actividad_modalidad ? '— ' + fd.actividad_modalidad : ''}</span></div>}
-                  {fd.actividad_fecha && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Fecha actividad:</span><span className="text-gray-800">{fd.actividad_fecha}</span></div>}
-                  {fd.monto && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Monto:</span><span className="text-green-700 font-bold">{fd.monto}</span></div>}
-                  {fd.justificacion && <p className="text-xs text-purple-600 font-medium pt-1">✓ Incluye justificación técnica (se genera página 2)</p>}
-                  {fd.solicitud_puntual && <p className="text-xs text-indigo-600 font-medium">✓ Incluye solicitud puntual a la Junta Directiva</p>}
-                </div>
+          <div className="flex justify-between items-center p-6 border-b"><div><h3 className="text-xl font-bold text-gray-800">{initialData?'Editar Oficio':'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">Paso 2: Vista previa</p></div><button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500"/></button></div>
+          <div className="p-6 max-h-[80vh] overflow-y-auto space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4"><p className="text-blue-800 font-medium text-sm">Vista previa del oficio. Puedes volver atrás para editar o guardar directamente.</p></div>
+            <div className="border-2 border-gray-200 rounded-lg p-5 bg-gray-50 space-y-3">
+              <div className="flex justify-between items-start"><div><p className="font-bold text-lg text-gray-800">{fd.numero_oficio}</p><p className="text-sm text-gray-500">Guatemala, {formatOficioDate(fd.fecha)}</p></div><Badge status={fd.estado}/></div>
+              <div className="border-t pt-3 space-y-2 text-sm">
+                <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Dirigido a:</span><span className="text-gray-800">{fd.dirigido_a}</span></div>
+                <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Motivo:</span><span className="text-gray-800">{isCustomMotivo?fd.motivo_custom:fd.motivo}</span></div>
+                {fd.actividad_nombre&&<div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Actividad:</span><span className="text-gray-800">{fd.actividad_nombre}</span></div>}
+                {fd.monto&&<div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Monto:</span><span className="text-green-700 font-bold">{fd.monto}</span></div>}
+                {fd.justificacion&&<p className="text-xs text-purple-600 font-medium pt-1">✓ Incluye justificación técnica (página 2)</p>}
               </div>
-              <div className="space-y-2 pt-2">
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setCurrentStep(1)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2"><ArrowLeft size={18} /> Volver a Editar</button>
-                  <button type="button" onClick={handlePreviewOpen} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 flex items-center justify-center gap-2 border border-blue-200"><Eye size={18} /> Vista Previa</button>
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={handleDownloadPdf} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"><Download size={18} /> Descargar PDF</button>
-                  <button type="button" onClick={handleSaveOficio} disabled={saving} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"><Save size={18} /> {saving ? 'Guardando...' : 'Guardar Oficio'}</button>
-                </div>
-              </div>
+            </div>
+            <div className="space-y-2 pt-2">
+              <div className="flex gap-3"><button type="button" onClick={()=>setCurrentStep(1)} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200 flex items-center justify-center gap-2"><ArrowLeft size={18}/> Volver a Editar</button><button type="button" onClick={handlePreviewOpen} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 flex items-center justify-center gap-2 border border-blue-200"><Eye size={18}/> Vista Previa</button></div>
+              <div className="flex gap-3"><button type="button" onClick={handleDownloadPdf} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 flex items-center justify-center gap-2"><Download size={18}/> Descargar PDF</button><button type="button" onClick={handleSaveOficio} disabled={saving} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"><Save size={18}/> {saving?'Guardando...':'Guardar Oficio'}</button></div>
             </div>
           </div>
         </div>
       </div>
     );
   }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl m-auto">
-        <div className="flex justify-between items-center p-6 border-b">
-          <div>
-            <h3 className="text-xl font-bold text-gray-800">{initialData ? 'Editar Oficio' : 'Nuevo Oficio'}</h3>
-            <p className="text-sm text-gray-500">
-              {preFillData ? `Paso 1: Datos pre-llenados desde Planificación — "${preFillData.actividad_nombre}"` : 'Paso 1: Datos del oficio'}
-            </p>
-          </div>
-          <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
-        </div>
+        <div className="flex justify-between items-center p-6 border-b"><div><h3 className="text-xl font-bold text-gray-800">{initialData?'Editar Oficio':'Nuevo Oficio'}</h3><p className="text-sm text-gray-500">{preFillData?`Datos importados desde Planificación — "${preFillData.actividad_nombre}"` : 'Paso 1: Datos del oficio'}</p></div><button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500"/></button></div>
         <div className="p-6 max-h-[80vh] overflow-y-auto">
-          {preFillData && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 flex items-start gap-2 text-sm text-indigo-800">
-              <FileText size={15} className="shrink-0 mt-0.5" />
-              <span>Datos importados desde <strong>Planificación CAEDUC 2026</strong>. Revisa y complementa antes de guardar.</span>
-            </div>
-          )}
+          {preFillData&&(<div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 flex items-start gap-2 text-sm text-indigo-800"><FileText size={15} className="shrink-0 mt-0.5"/><span>Datos importados desde <strong>Planificación CAEDUC 2026</strong>. Revisa y complementa antes de guardar.</span></div>)}
           <form onSubmit={goToPreview} className="space-y-5">
             <div className="bg-blue-50 rounded-lg p-4 space-y-3 border border-blue-100">
-              <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide flex items-center gap-2"><FileSignature size={16} /> Encabezado del Oficio</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-sm font-bold mb-1">Número de Oficio *</label><input required className="w-full border p-2.5 rounded-lg" value={fd.numero_oficio} onChange={e => updateField('numero_oficio', e.target.value)} /></div>
-                <div><label className="block text-sm font-bold mb-1">Fecha del Oficio *</label><input required type="date" className="w-full border p-2.5 rounded-lg" value={fd.fecha} onChange={e => updateField('fecha', e.target.value)} /></div>
-              </div>
-              <div><label className="block text-sm font-bold mb-1">Dirigido a *</label><textarea required rows={2} className="w-full border p-2.5 rounded-lg" value={fd.dirigido_a} onChange={e => updateField('dirigido_a', e.target.value)} /><p className="text-xs text-gray-400 mt-1">Cada línea separada por coma se mostrará en línea separada.</p></div>
+              <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide">Encabezado del Oficio</h4>
+              <div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Número de Oficio *</label><input required className="w-full border p-2.5 rounded-lg" value={fd.numero_oficio} onChange={e=>updateField('numero_oficio',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha *</label><input required type="date" className="w-full border p-2.5 rounded-lg" value={fd.fecha} onChange={e=>updateField('fecha',e.target.value)}/></div></div>
+              <div><label className="block text-sm font-bold mb-1">Dirigido a *</label><textarea required rows={2} className="w-full border p-2.5 rounded-lg" value={fd.dirigido_a} onChange={e=>updateField('dirigido_a',e.target.value)}/></div>
             </div>
             <div className="bg-amber-50 rounded-lg p-4 space-y-3 border border-amber-100">
               <h4 className="font-bold text-amber-800 text-sm uppercase tracking-wide">Motivo del Oficio</h4>
-              <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e => updateField('motivo', e.target.value)}>{MOTIVOS_OFICIO.map(m => <option key={m} value={m}>{m}</option>)}</select>
-              {isCustomMotivo && (<input required placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg" value={fd.motivo_custom} onChange={e => updateField('motivo_custom', e.target.value)} />)}
+              <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e=>updateField('motivo',e.target.value)}>{MOTIVOS_OFICIO.map(m=><option key={m} value={m}>{m}</option>)}</select>
+              {isCustomMotivo&&(<input required placeholder="Describe el motivo del oficio..." className="w-full border p-2.5 rounded-lg" value={fd.motivo_custom} onChange={e=>updateField('motivo_custom',e.target.value)}/>)}
             </div>
-            {isRecursos && (
-              <div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
-                <h4 className="font-bold text-green-800 text-sm uppercase tracking-wide flex items-center gap-2"><Calendar size={16} /> Datos de la Actividad</h4>
-                <input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e => updateField('actividad_nombre', e.target.value)} />
-                <textarea rows={3} placeholder="Descripción de la actividad" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e => updateField('actividad_descripcion', e.target.value)} />
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-sm font-bold mb-1">Tipo de Actividad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e => updateField('actividad_tipo', e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                  <div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e => updateField('actividad_modalidad', e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m => <option key={m} value={m}>{m}</option>)}</select></div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e => updateField('actividad_duracion', e.target.value)} /></div>
-                  <div><label className="block text-sm font-bold mb-1">Fecha de la Actividad</label><input placeholder="Ej: 29 de octubre del presente año" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e => updateField('actividad_fecha', e.target.value)} /></div>
-                </div>
-                <input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e => updateField('actividad_sede', e.target.value)} />
-              </div>
-            )}
-            {isRecursos && (
-              <div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100">
-                <h4 className="font-bold text-rose-800 text-sm uppercase tracking-wide">Recursos Solicitados</h4>
-                <input placeholder="Monto solicitado (ej: US$400 o Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e => updateField('monto', e.target.value)} />
-                <textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e => updateField('monto_detalle', e.target.value)} />
-              </div>
-            )}
+            {isRecursos&&(<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
+              <h4 className="font-bold text-green-800 text-sm uppercase tracking-wide">Datos de la Actividad</h4>
+              <input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>updateField('actividad_nombre',e.target.value)}/>
+              <textarea rows={3} placeholder="Descripción de la actividad" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>updateField('actividad_descripcion',e.target.value)}/>
+              <div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>updateField('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>updateField('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m} value={m}>{m}</option>)}</select></div></div>
+              <div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>updateField('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>updateField('actividad_fecha',e.target.value)}/></div></div>
+              <input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>updateField('actividad_sede',e.target.value)}/>
+            </div>)}
+            {isRecursos&&(<div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100">
+              <h4 className="font-bold text-rose-800 text-sm uppercase tracking-wide">Recursos Solicitados</h4>
+              <input placeholder="Monto (ej: US$400 o Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e=>updateField('monto',e.target.value)}/>
+              <textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e=>updateField('monto_detalle',e.target.value)}/>
+            </div>)}
             <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
-              <h4 className="font-bold text-purple-800 text-sm uppercase tracking-wide">Justificación Técnica (opcional, genera página 2)</h4>
-              <textarea rows={4} placeholder="Justificación técnica y aporte gremial..." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e => updateField('justificacion', e.target.value)} />
+              <h4 className="font-bold text-purple-800 text-sm uppercase tracking-wide">Justificación Técnica (opcional)</h4>
+              <textarea rows={4} placeholder="Justificación técnica y aporte gremial..." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e=>updateField('justificacion',e.target.value)}/>
             </div>
             <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100">
-              <h4 className="font-bold text-indigo-800 text-sm uppercase tracking-wide">Solicitud Puntual a la Junta (opcional)</h4>
-              <textarea rows={3} placeholder={"Escribe cada punto en una línea separada."} className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e => updateField('solicitud_puntual', e.target.value)} />
+              <h4 className="font-bold text-indigo-800 text-sm uppercase tracking-wide">Solicitud Puntual (opcional)</h4>
+              <textarea rows={3} placeholder="Cada punto en una línea separada..." className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e=>updateField('solicitud_puntual',e.target.value)}/>
             </div>
             <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
               <h4 className="font-bold text-gray-700 text-sm uppercase tracking-wide">Cuerpo Personalizado (opcional)</h4>
-              <textarea rows={4} placeholder="Déjalo vacío para usar el texto generado automáticamente..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e => updateField('cuerpo_personalizado', e.target.value)} />
+              <textarea rows={4} placeholder="Déjalo vacío para usar el texto generado automáticamente..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e=>updateField('cuerpo_personalizado',e.target.value)}/>
             </div>
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200">Cancelar</button>
-              <button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2"><Eye size={18} /> Vista Previa del Oficio</button>
-            </div>
+            <div className="flex gap-3 pt-2"><button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-200">Cancelar</button><button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button></div>
           </form>
         </div>
       </div>
@@ -996,291 +723,104 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
 const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember }) => {
   const [activeTab, setActiveTab] = useState('users');
   const tabs = [
-    { id: 'users', label: 'Usuarios', icon: <UserPlus size={18} /> },
-    { id: 'firmas', label: 'Firmas y Sello', icon: <FileSignature size={18} /> },
-    { id: 'form_file', label: 'Formulario Aval', icon: <File size={18} /> },
-    { id: 'reglamento', label: 'Reglamento', icon: <BookOpen size={18} /> },
-    { id: 'tutorial', label: 'Tutorial YouTube', icon: <Youtube size={18} /> },
+    {id:'users',label:'Usuarios',icon:<UserPlus size={18}/>},{id:'firmas',label:'Firmas y Sello',icon:<FileSignature size={18}/>},
+    {id:'form_file',label:'Formulario Aval',icon:<File size={18}/>},{id:'reglamento',label:'Reglamento',icon:<BookOpen size={18}/>},
+    {id:'tutorial',label:'Tutorial YouTube',icon:<Youtube size={18}/>},
   ];
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">Configuración del Sistema</h2>
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-wrap">
-        {tabs.map(tab => (<button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all flex-1 justify-center ${activeTab === tab.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>{tab.icon} {tab.label}</button>))}
+        {tabs.map(tab=>(<button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all flex-1 justify-center ${activeTab===tab.id?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>{tab.icon} {tab.label}</button>))}
       </div>
-      {activeTab === 'users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember} />}
-      {activeTab === 'firmas' && <AdminFirmasTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
-      {activeTab === 'form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
-      {activeTab === 'reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
-      {activeTab === 'tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting} />}
+      {activeTab==='users'&&<AdminUsersTab members={members} onUpdateMember={onUpdateMember}/>}
+      {activeTab==='firmas'&&<AdminFirmasTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
+      {activeTab==='form_file'&&<AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
+      {activeTab==='reglamento'&&<AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
+      {activeTab==='tutorial'&&<AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
     </div>
   );
 };
 
 const AdminUsersTab = ({ members, onUpdateMember }) => {
-  const [showModal, setShowModal] = useState(false);
-  const [editModal, setEditModal] = useState(null);
-  const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: ROLES[0] });
-  const [editData, setEditData] = useState({ name: '', role: '', email: '' });
-  const [creating, setCreating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [showPw, setShowPw] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const handleCreate = async (e) => {
-    e.preventDefault(); setCreating(true); setMsg(null);
-    try {
-      const { data: ad, error: ae } = await supabase.auth.signUp({ email: newUser.email, password: newUser.password });
-      if (ae) { setMsg({ type: 'error', text: ae.message }); setCreating(false); return; }
-      if (ad.user) {
-        const { error: pe } = await supabase.from('profiles').insert([{ id: ad.user.id, name: newUser.name, role: newUser.role, email: newUser.email }]);
-        if (pe) setMsg({ type: 'warning', text: 'Auth OK pero error perfil: ' + pe.message });
-        else { setMsg({ type: 'success', text: `"${newUser.name}" creado.` }); setNewUser({ email: '', password: '', name: '', role: ROLES[0] }); setShowModal(false); }
-      }
-    } catch (err) { setMsg({ type: 'error', text: err.message }); }
-    setCreating(false);
-  };
-  const openEdit = (m) => { setEditData({ id: m.id, name: m.name || '', role: m.role || ROLES[0], email: m.email || '' }); setEditModal(true); setMsg(null); };
-  const handleEdit = async (e) => {
-    e.preventDefault(); setSaving(true); setMsg(null);
-    try { await onUpdateMember(editData.id, { name: editData.name, role: editData.role, email: editData.email }); setMsg({ type: 'success', text: 'Usuario actualizado.' }); setEditModal(null); } catch (err) { setMsg({ type: 'error', text: err.message }); }
-    setSaving(false);
-  };
+  const [showModal,setShowModal]=useState(false);const [editModal,setEditModal]=useState(null);const [newUser,setNewUser]=useState({email:'',password:'',name:'',role:ROLES[0]});const [editData,setEditData]=useState({name:'',role:'',email:''});const [creating,setCreating]=useState(false);const [saving,setSaving]=useState(false);const [showPw,setShowPw]=useState(false);const [msg,setMsg]=useState(null);
+  const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}if(ad.user){const{error:pe}=await supabase.from('profiles').insert([{id:ad.user.id,name:newUser.name,role:newUser.role,email:newUser.email}]);if(pe)setMsg({type:'warning',text:'Auth OK pero error perfil: '+pe.message});else{setMsg({type:'success',text:`"${newUser.name}" creado.`});setNewUser({email:'',password:'',name:'',role:ROLES[0]});setShowModal(false);}}}catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
+  const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||ROLES[0],email:m.email||''});setEditModal(true);setMsg(null);};
+  const handleEdit=async(e)=>{e.preventDefault();setSaving(true);setMsg(null);try{await onUpdateMember(editData.id,{name:editData.name,role:editData.role,email:editData.email});setMsg({type:'success',text:'Usuario actualizado.'});setEditModal(null);}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center"><div><h3 className="text-lg font-bold text-gray-700">Usuarios Administradores</h3></div><button onClick={() => { setShowModal(true); setMsg(null); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"><UserPlus size={18} /> Nuevo</button></div>
-      {msg && <div className={`p-3 rounded-lg text-sm flex items-start gap-2 ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : msg.type === 'warning' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
-      <div className="grid gap-3">
-        {members.length > 0 ? members.map(m => (<Card key={m.id} className="!shadow-sm"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm">{m.name?.charAt(0)?.toUpperCase() || '?'}</div><div><p className="font-semibold">{m.name || 'Sin nombre'}</p><p className="text-xs text-gray-500">{m.email || ''}</p></div></div><div className="flex items-center gap-2"><span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">{m.role || 'Sin rol'}</span><button onClick={() => openEdit(m)} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Edit3 size={14} /> Editar</button></div></div></Card>)) : <div className="text-gray-400 text-center py-8">No hay miembros.</div>}
-      </div>
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Crear Usuario" size="sm">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />
-          <input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} />
-          <div className="relative"><input required type={showPw ? 'text' : 'password'} placeholder="Contraseña (min 6)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} /><button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
-          <select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select>
-          <button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating ? 'Creando...' : 'Crear'}</button>
-        </form>
+      <div className="flex justify-between items-center"><h3 className="text-lg font-bold text-gray-700">Usuarios Administradores</h3><button onClick={()=>{setShowModal(true);setMsg(null);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"><UserPlus size={18}/> Nuevo</button></div>
+      {msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700 border border-green-200':msg.type==='warning'?'bg-yellow-50 text-yellow-700 border border-yellow-200':'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
+      <div className="grid gap-3">{members.length>0?members.map(m=>(<Card key={m.id} className="!shadow-sm"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm">{m.name?.charAt(0)?.toUpperCase()||'?'}</div><div><p className="font-semibold">{m.name||'Sin nombre'}</p><p className="text-xs text-gray-500">{m.email||''}</p></div></div><div className="flex items-center gap-2"><span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">{m.role||'Sin rol'}</span><button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Edit3 size={14}/> Editar</button></div></div></Card>)):<div className="text-gray-400 text-center py-8">No hay miembros.</div>}</div>
+      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm">
+        <form onSubmit={handleCreate} className="space-y-4"><input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/><div className="relative"><input required type={showPw?'text':'password'} placeholder="Contraseña (min 6)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{ROLES.map(r=><option key={r}>{r}</option>)}</select><button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear'}</button></form>
       </Modal>
-      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title="Editar Usuario" size="sm">
-        <form onSubmit={handleEdit} className="space-y-4">
-          <div><label className="block text-sm font-bold mb-1">Nombre completo</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} /></div>
-          <div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email} onChange={e => setEditData({...editData, email: e.target.value})} /></div>
-          <div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role} onChange={e => setEditData({...editData, role: e.target.value})}>{ROLES.map(r => <option key={r}>{r}</option>)}</select></div>
-          <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar Cambios'}</button>
-        </form>
+      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm">
+        <form onSubmit={handleEdit} className="space-y-4"><div><label className="block text-sm font-bold mb-1">Nombre completo</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name} onChange={e=>setEditData({...editData,name:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email} onChange={e=>setEditData({...editData,email:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role} onChange={e=>setEditData({...editData,role:e.target.value})}>{ROLES.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar Cambios'}</button></form>
       </Modal>
     </div>
   );
 };
 
 const FirmaUploader = ({ label, settingKey, appSettings, onUpdateSetting }) => {
-  const [uploading, setUploading] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const fp = appSettings?.[settingKey] || '';
-  const imgUrl = fp ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${fp}` : null;
-  const handleUpload = async (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    if (!f.type.startsWith('image/')) { alert('Solo se admiten imágenes (PNG, JPG, etc.)'); return; }
-    setUploading(true); setMsg(null);
-    try {
-      const fn = `${settingKey}_${Date.now()}.${f.name.split('.').pop()}`;
-      if (fp) await supabase.storage.from('firmas-sellos').remove([fp]);
-      const { data, error } = await supabase.storage.from('firmas-sellos').upload(fn, f, { upsert: true });
-      if (error) setMsg({ type: 'error', text: error.message });
-      else { await onUpdateSetting(settingKey, data.path); setMsg({ type: 'success', text: 'Imagen actualizada.' }); }
-    } catch (err) { setMsg({ type: 'error', text: err.message }); }
-    setUploading(false);
-  };
-  const handleRemove = async () => {
-    if (!fp || !confirm('¿Eliminar esta imagen?')) return;
-    await supabase.storage.from('firmas-sellos').remove([fp]);
-    await onUpdateSetting(settingKey, '');
-    setMsg({ type: 'success', text: 'Eliminada.' });
-  };
-  return (
-    <div className="space-y-2">
-      <p className="text-sm font-bold text-gray-700">{label}</p>
-      {msg && <div className={`p-2 rounded text-xs ${msg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg.text}</div>}
-      {imgUrl ? (
-        <div className="flex items-center gap-3 p-3 bg-gray-50 border rounded-lg">
-          <img src={imgUrl} alt={label} className="h-16 w-auto object-contain border bg-white p-1 rounded" />
-          <div className="flex-1"><p className="text-xs text-green-600 font-medium">Imagen activa</p></div>
-          <label className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded text-xs cursor-pointer hover:bg-blue-200 font-medium">{uploading ? '...' : 'Cambiar'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept="image/*" /></label>
-          <button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline" /></button>
-        </div>
-      ) : (
-        <label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-400 hover:bg-blue-50">
-          <Upload size={18} className="text-gray-400" />
-          <span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Subir imagen'}</span>
-          <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept="image/*" />
-        </label>
-      )}
-    </div>
-  );
+  const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);const fp=appSettings?.[settingKey]||'';const imgUrl=fp?`${supabaseUrl}/storage/v1/object/public/firmas-sellos/${fp}`:null;
+  const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith('image/')){alert('Solo imágenes.');return;}setUploading(true);setMsg(null);try{const fn=`${settingKey}_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('firmas-sellos').remove([fp]);const{data,error}=await supabase.storage.from('firmas-sellos').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting(settingKey,data.path);setMsg({type:'success',text:'Imagen actualizada.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
+  const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar?'))return;await supabase.storage.from('firmas-sellos').remove([fp]);await onUpdateSetting(settingKey,'');setMsg({type:'success',text:'Eliminada.'});};
+  return (<div className="space-y-2"><p className="text-sm font-bold text-gray-700">{label}</p>{msg&&<div className={`p-2 rounded text-xs ${msg.type==='success'?'bg-green-50 text-green-700':'bg-red-50 text-red-700'}`}>{msg.text}</div>}{imgUrl?(<div className="flex items-center gap-3 p-3 bg-gray-50 border rounded-lg"><img src={imgUrl} alt={label} className="h-16 w-auto object-contain border bg-white p-1 rounded"/><div className="flex-1"><p className="text-xs text-green-600 font-medium">Imagen activa</p></div><label className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded text-xs cursor-pointer hover:bg-blue-200 font-medium">{uploading?'...':'Cambiar'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept="image/*"/></label><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline"/></button></div>):(<label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-400 hover:bg-blue-50"><Upload size={18} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Subir imagen'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept="image/*"/></label>)}</div>);
 };
 
 const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const [f1, setF1] = useState({ nombre: '', cargo: '', institucion: '' });
-  const [f2, setF2] = useState({ nombre: '', cargo: '', institucion: '' });
-  useEffect(() => {
-    setF1({ nombre: appSettings?.firmante1_nombre || 'M. A. Juan J. Reyes', cargo: appSettings?.firmante1_cargo || 'Coordinador', institucion: appSettings?.firmante1_institucion || 'Comisión de Acreditación Educación continua, Colegio de Psicólogos de Guatemala' });
-    setF2({ nombre: appSettings?.firmante2_nombre || 'Mgtr. Luisa Mazariegos', cargo: appSettings?.firmante2_cargo || 'Secretaria', institucion: appSettings?.firmante2_institucion || 'CAEDUC' });
-  }, [appSettings]);
-  const handleSaveNames = async () => {
-    setSaving(true); setMsg(null);
-    try {
-      await onUpdateSetting('firmante1_nombre', f1.nombre); await onUpdateSetting('firmante1_cargo', f1.cargo); await onUpdateSetting('firmante1_institucion', f1.institucion);
-      await onUpdateSetting('firmante2_nombre', f2.nombre); await onUpdateSetting('firmante2_cargo', f2.cargo); await onUpdateSetting('firmante2_institucion', f2.institucion);
-      setMsg({ type: 'success', text: 'Datos de firmantes guardados correctamente.' });
-    } catch (err) { setMsg({ type: 'error', text: err.message }); }
-    setSaving(false);
-  };
-  return (
-    <div className="space-y-6">
-      <div><h3 className="text-lg font-bold text-gray-700">Logo, Firmas, Sello y Firmantes</h3><p className="text-sm text-gray-500">Configura el logo, quiénes firman las cartas y el sello institucional.</p></div>
-      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
-      <Card><div className="space-y-4"><h4 className="font-bold text-green-800 flex items-center gap-2"><FileText size={18} /> Logo de Encabezado</h4><FirmaUploader label="Imagen del logo" settingKey="logo_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} /></div></Card>
-      <Card><div className="space-y-4"><h4 className="font-bold text-blue-800 flex items-center gap-2"><FileSignature size={18} /> Firmante 1 (Coordinador/a)</h4><div className="grid md:grid-cols-2 gap-4"><div className="space-y-3"><div><label className="block text-sm font-bold mb-1">Nombre completo</label><input className="w-full border p-2.5 rounded-lg" value={f1.nombre} onChange={e => setF1({...f1, nombre: e.target.value})} /></div><div><label className="block text-sm font-bold mb-1">Cargo</label><input className="w-full border p-2.5 rounded-lg" value={f1.cargo} onChange={e => setF1({...f1, cargo: e.target.value})} /></div><div><label className="block text-sm font-bold mb-1">Institución</label><input className="w-full border p-2.5 rounded-lg" value={f1.institucion} onChange={e => setF1({...f1, institucion: e.target.value})} /></div></div><div><FirmaUploader label="Imagen de firma" settingKey="firmante1_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} /></div></div></div></Card>
-      <Card><div className="space-y-4"><h4 className="font-bold text-indigo-800 flex items-center gap-2"><FileSignature size={18} /> Firmante 2 (Secretaria/o)</h4><div className="grid md:grid-cols-2 gap-4"><div className="space-y-3"><div><label className="block text-sm font-bold mb-1">Nombre completo</label><input className="w-full border p-2.5 rounded-lg" value={f2.nombre} onChange={e => setF2({...f2, nombre: e.target.value})} /></div><div><label className="block text-sm font-bold mb-1">Cargo</label><input className="w-full border p-2.5 rounded-lg" value={f2.cargo} onChange={e => setF2({...f2, cargo: e.target.value})} /></div><div><label className="block text-sm font-bold mb-1">Institución</label><input className="w-full border p-2.5 rounded-lg" value={f2.institucion} onChange={e => setF2({...f2, institucion: e.target.value})} /></div></div><div><FirmaUploader label="Imagen de firma" settingKey="firmante2_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} /></div></div></div></Card>
-      <Card><div className="space-y-4"><h4 className="font-bold text-purple-800 flex items-center gap-2"><Shield size={18} /> Sello de la Comisión</h4><FirmaUploader label="Imagen del sello" settingKey="sello_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting} /></div></Card>
-      <button onClick={handleSaveNames} disabled={saving} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"><Save size={18} /> {saving ? 'Guardando...' : 'Guardar Nombres y Cargos'}</button>
-    </div>
-  );
+  const [saving,setSaving]=useState(false);const [msg,setMsg]=useState(null);const [f1,setF1]=useState({nombre:'',cargo:'',institucion:''});const [f2,setF2]=useState({nombre:'',cargo:'',institucion:''});
+  useEffect(()=>{setF1({nombre:appSettings?.firmante1_nombre||'M. A. Juan J. Reyes',cargo:appSettings?.firmante1_cargo||'Coordinador',institucion:appSettings?.firmante1_institucion||'Comisión de Acreditación Educación continua, Colegio de Psicólogos de Guatemala'});setF2({nombre:appSettings?.firmante2_nombre||'Mgtr. Luisa Mazariegos',cargo:appSettings?.firmante2_cargo||'Secretaria',institucion:appSettings?.firmante2_institucion||'CAEDUC'});},[appSettings]);
+  const handleSaveNames=async()=>{setSaving(true);setMsg(null);try{await onUpdateSetting('firmante1_nombre',f1.nombre);await onUpdateSetting('firmante1_cargo',f1.cargo);await onUpdateSetting('firmante1_institucion',f1.institucion);await onUpdateSetting('firmante2_nombre',f2.nombre);await onUpdateSetting('firmante2_cargo',f2.cargo);await onUpdateSetting('firmante2_institucion',f2.institucion);setMsg({type:'success',text:'Datos guardados.'});}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
+  return (<div className="space-y-6"><div><h3 className="text-lg font-bold text-gray-700">Logo, Firmas, Sello y Firmantes</h3></div>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}<Card><div className="space-y-4"><h4 className="font-bold text-green-800">Logo de Encabezado</h4><FirmaUploader label="Imagen del logo" settingKey="logo_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></Card><Card><div className="space-y-4"><h4 className="font-bold text-blue-800">Firmante 1 (Coordinador/a)</h4><div className="grid md:grid-cols-2 gap-4"><div className="space-y-3"><div><label className="block text-sm font-bold mb-1">Nombre</label><input className="w-full border p-2.5 rounded-lg" value={f1.nombre} onChange={e=>setF1({...f1,nombre:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Cargo</label><input className="w-full border p-2.5 rounded-lg" value={f1.cargo} onChange={e=>setF1({...f1,cargo:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Institución</label><input className="w-full border p-2.5 rounded-lg" value={f1.institucion} onChange={e=>setF1({...f1,institucion:e.target.value})}/></div></div><div><FirmaUploader label="Imagen de firma" settingKey="firmante1_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></div></div></Card><Card><div className="space-y-4"><h4 className="font-bold text-indigo-800">Firmante 2 (Secretaria/o)</h4><div className="grid md:grid-cols-2 gap-4"><div className="space-y-3"><div><label className="block text-sm font-bold mb-1">Nombre</label><input className="w-full border p-2.5 rounded-lg" value={f2.nombre} onChange={e=>setF2({...f2,nombre:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Cargo</label><input className="w-full border p-2.5 rounded-lg" value={f2.cargo} onChange={e=>setF2({...f2,cargo:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Institución</label><input className="w-full border p-2.5 rounded-lg" value={f2.institucion} onChange={e=>setF2({...f2,institucion:e.target.value})}/></div></div><div><FirmaUploader label="Imagen de firma" settingKey="firmante2_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></div></div></Card><Card><div className="space-y-4"><h4 className="font-bold text-purple-800">Sello de la Comisión</h4><FirmaUploader label="Imagen del sello" settingKey="sello_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></Card><button onClick={handleSaveNames} disabled={saving} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"><Save size={18}/> {saving?'Guardando...':'Guardar Nombres y Cargos'}</button></div>);
 };
 
 const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
-  const [uploading, setUploading] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const fp = appSettings?.aval_form_file_path || '';
-  const fUrl = fp ? `${supabaseUrl}/storage/v1/object/public/aval-form-template/${fp}` : null;
-  const handleUpload = async (e) => { const f = e.target.files[0]; if (!f) return; setUploading(true); setMsg(null); try { const fn = `formulario_aval_${Date.now()}.${f.name.split('.').pop()}`; if (fp) await supabase.storage.from('aval-form-template').remove([fp]); const { data, error } = await supabase.storage.from('aval-form-template').upload(fn, f, { upsert: true }); if (error) setMsg({ type: 'error', text: error.message }); else { await onUpdateSetting('aval_form_file_path', data.path); setMsg({ type: 'success', text: 'Archivo subido.' }); } } catch (err) { setMsg({ type: 'error', text: err.message }); } setUploading(false); };
-  const handleRemove = async () => { if (!fp || !confirm('¿Eliminar?')) return; await supabase.storage.from('aval-form-template').remove([fp]); await onUpdateSetting('aval_form_file_path', ''); setMsg({ type: 'success', text: 'Eliminado.' }); };
-  return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-bold text-gray-700">Formulario de Solicitud de Aval</h3>
-      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
-      <Card>{fUrl ? (<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"><FileText size={24} className="text-green-600 shrink-0" /><div className="flex-1 min-w-0"><p className="font-medium text-green-800">Archivo activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700"><Download size={14} className="inline mr-1" />Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50"><Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" /></label></div>) : (<div className="text-center space-y-4"><Upload size={28} className="text-gray-400 mx-auto" /><p className="font-medium text-gray-700">No hay formulario cargado</p><label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium"><Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Formulario'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx" /></label></div>)}</Card>
-    </div>
-  );
+  const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);const fp=appSettings?.aval_form_file_path||'';const fUrl=fp?`${supabaseUrl}/storage/v1/object/public/aval-form-template/${fp}`:null;
+  const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;setUploading(true);setMsg(null);try{const fn=`formulario_aval_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('aval-form-template').remove([fp]);const{data,error}=await supabase.storage.from('aval-form-template').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting('aval_form_file_path',data.path);setMsg({type:'success',text:'Archivo subido.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
+  const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar?'))return;await supabase.storage.from('aval-form-template').remove([fp]);await onUpdateSetting('aval_form_file_path','');setMsg({type:'success',text:'Eliminado.'});};
+  return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Formulario de Solicitud de Aval</h3>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}<Card>{fUrl?(<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"><FileText size={24} className="text-green-600 shrink-0"/><div className="flex-1"><p className="font-medium text-green-800">Archivo activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700"><Download size={14} className="inline mr-1"/>Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1"/>Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50"><Upload size={20} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx"/></label></div>):(<div className="text-center space-y-4"><Upload size={28} className="text-gray-400 mx-auto"/><p className="font-medium text-gray-700">No hay formulario cargado</p><label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium"><Upload size={18}/>{uploading?'Subiendo...':'Subir Formulario'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx"/></label></div>)}</Card></div>);
 };
 
 const AdminReglamentoTab = ({ appSettings, onUpdateSetting }) => {
-  const [uploading, setUploading] = useState(false);
-  const [msg, setMsg] = useState(null);
-  const fp = appSettings?.reglamento_file_path || '';
-  const fUrl = fp ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${fp}` : null;
-  const handleUpload = async (e) => { const f = e.target.files[0]; if (!f) return; setUploading(true); setMsg(null); try { const fn = `reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`; if (fp) await supabase.storage.from('reglamento-avales').remove([fp]); const { data, error } = await supabase.storage.from('reglamento-avales').upload(fn, f, { upsert: true }); if (error) setMsg({ type: 'error', text: error.message }); else { await onUpdateSetting('reglamento_file_path', data.path); setMsg({ type: 'success', text: 'Reglamento subido correctamente.' }); } } catch (err) { setMsg({ type: 'error', text: err.message }); } setUploading(false); };
-  const handleRemove = async () => { if (!fp || !confirm('¿Eliminar el reglamento?')) return; await supabase.storage.from('reglamento-avales').remove([fp]); await onUpdateSetting('reglamento_file_path', ''); setMsg({ type: 'success', text: 'Reglamento eliminado.' }); };
-  return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-bold text-gray-700">Reglamento de Avales</h3>
-      <p className="text-sm text-gray-500">Disponible para descarga pública en el portal de solicitudes.</p>
-      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
-      <Card>{fUrl ? (<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg"><BookOpen size={24} className="text-purple-600 shrink-0" /><div className="flex-1 min-w-0"><p className="font-medium text-purple-800">Reglamento activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700"><Download size={14} className="inline mr-1" />Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1" />Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50"><Upload size={20} className="text-gray-400" /><span className="text-sm text-gray-500">{uploading ? 'Subiendo...' : 'Reemplazar reglamento'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" /></label></div>) : (<div className="text-center space-y-4"><BookOpen size={28} className="text-gray-400 mx-auto" /><p className="font-medium text-gray-700">No hay reglamento cargado</p><label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium"><Upload size={18} />{uploading ? 'Subiendo...' : 'Subir Reglamento'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx" /></label></div>)}</Card>
-    </div>
-  );
+  const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);const fp=appSettings?.reglamento_file_path||'';const fUrl=fp?`${supabaseUrl}/storage/v1/object/public/reglamento-avales/${fp}`:null;
+  const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;setUploading(true);setMsg(null);try{const fn=`reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('reglamento-avales').remove([fp]);const{data,error}=await supabase.storage.from('reglamento-avales').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting('reglamento_file_path',data.path);setMsg({type:'success',text:'Reglamento subido.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
+  const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar el reglamento?'))return;await supabase.storage.from('reglamento-avales').remove([fp]);await onUpdateSetting('reglamento_file_path','');setMsg({type:'success',text:'Reglamento eliminado.'});};
+  return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Reglamento de Avales</h3><p className="text-sm text-gray-500">Disponible para descarga pública en el portal.</p>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}<Card>{fUrl?(<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg"><BookOpen size={24} className="text-purple-600 shrink-0"/><div className="flex-1"><p className="font-medium text-purple-800">Reglamento activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700"><Download size={14} className="inline mr-1"/>Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200"><Trash2 size={14} className="inline mr-1"/>Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50"><Upload size={20} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx"/></label></div>):(<div className="text-center space-y-4"><BookOpen size={28} className="text-gray-400 mx-auto"/><p className="font-medium text-gray-700">No hay reglamento cargado</p><label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium"><Upload size={18}/>{uploading?'Subiendo...':'Subir Reglamento'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx"/></label></div>)}</Card></div>);
 };
 
 const AdminTutorialTab = ({ appSettings, onUpdateSetting }) => {
-  const [url, setUrl] = useState(appSettings?.youtube_tutorial_url || '');
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null);
-  useEffect(() => { setUrl(appSettings?.youtube_tutorial_url || ''); }, [appSettings?.youtube_tutorial_url]);
-  const getEmbed = (raw) => { if (!raw) return null; let vid = null; try { const u = new URL(raw); if (u.hostname.includes('youtu.be')) vid = u.pathname.slice(1); else if (u.searchParams.get('v')) vid = u.searchParams.get('v'); else if (u.pathname.includes('/embed/')) vid = u.pathname.split('/embed/')[1]; } catch { return null; } return vid ? `https://www.youtube.com/embed/${vid}` : null; };
-  const handleSave = async () => { setSaving(true); setMsg(null); try { await onUpdateSetting('youtube_tutorial_url', url.trim()); setMsg({ type: 'success', text: 'Guardado.' }); } catch (err) { setMsg({ type: 'error', text: err.message }); } setSaving(false); };
-  const handleRemove = async () => { setSaving(true); try { await onUpdateSetting('youtube_tutorial_url', ''); setUrl(''); setMsg({ type: 'success', text: 'Eliminado.' }); } catch (err) { setMsg({ type: 'error', text: err.message }); } setSaving(false); };
-  const embed = getEmbed(url);
-  return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-bold text-gray-700">Tutorial de YouTube</h3>
-      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}
-      <Card><div className="space-y-4"><div className="flex gap-2"><div className="relative flex-1"><Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="url" placeholder="https://www.youtube.com/watch?v=..." className="w-full border p-2.5 pl-9 rounded-lg" value={url} onChange={e => setUrl(e.target.value)} /></div><button onClick={handleSave} disabled={saving} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium shrink-0"><Save size={16} />{saving ? '...' : 'Guardar'}</button></div>{embed && <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ paddingTop: '56.25%' }}><iframe src={embed} className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div>}{url && !embed && <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700"><AlertTriangle size={16} className="inline mr-1" />URL no válido.</div>}{url && <button onClick={handleRemove} className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"><Trash2 size={14} /> Quitar</button>}</div></Card>
-    </div>
-  );
+  const [url,setUrl]=useState(appSettings?.youtube_tutorial_url||'');const [saving,setSaving]=useState(false);const [msg,setMsg]=useState(null);
+  useEffect(()=>{setUrl(appSettings?.youtube_tutorial_url||'');},[appSettings?.youtube_tutorial_url]);
+  const getEmbed=(raw)=>{if(!raw)return null;let vid=null;try{const u=new URL(raw);if(u.hostname.includes('youtu.be'))vid=u.pathname.slice(1);else if(u.searchParams.get('v'))vid=u.searchParams.get('v');else if(u.pathname.includes('/embed/'))vid=u.pathname.split('/embed/')[1];}catch{return null;}return vid?`https://www.youtube.com/embed/${vid}`:null;};
+  const handleSave=async()=>{setSaving(true);setMsg(null);try{await onUpdateSetting('youtube_tutorial_url',url.trim());setMsg({type:'success',text:'Guardado.'});}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
+  const handleRemove=async()=>{setSaving(true);try{await onUpdateSetting('youtube_tutorial_url','');setUrl('');setMsg({type:'success',text:'Eliminado.'});}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
+  const embed=getEmbed(url);
+  return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Tutorial de YouTube</h3>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700 border border-green-200':'bg-red-50 text-red-700 border border-red-200'}`}>{msg.text}</div>}<Card><div className="space-y-4"><div className="flex gap-2"><div className="relative flex-1"><Link2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input type="url" placeholder="https://www.youtube.com/watch?v=..." className="w-full border p-2.5 pl-9 rounded-lg" value={url} onChange={e=>setUrl(e.target.value)}/></div><button onClick={handleSave} disabled={saving} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium shrink-0"><Save size={16}/>{saving?'...':'Guardar'}</button></div>{embed&&<div className="relative w-full bg-black rounded-lg overflow-hidden" style={{paddingTop:'56.25%'}}><iframe src={embed} className="absolute inset-0 w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/></div>}{url&&!embed&&<div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700"><AlertTriangle size={16} className="inline mr-1"/>URL no válido.</div>}{url&&<button onClick={handleRemove} className="text-red-500 hover:text-red-700 text-sm flex items-center gap-1"><Trash2 size={14}/> Quitar</button>}</div></Card></div>);
 };
 
 // ==========================================
-// ADMIN: SOLICITUDES RECIBIDAS (AVALES)
+// ADMIN: AVALES
 // ==========================================
 const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
-  const [actionModal, setActionModal] = useState(null);
-  const [editModal, setEditModal] = useState(null);
-  const [deleteModal, setDeleteModal] = useState(null);
-  const [reason, setReason] = useState('');
-  const [correlativoInput, setCorrelativoInput] = useState('');
-  const [deleteReason, setDeleteReason] = useState('');
-  const [editData, setEditData] = useState({});
-  const [saving, setSaving] = useState(false);
-  const visibleAvales = avales.filter(a => !a.is_deleted);
-  const openAction = (aval, action) => { setActionModal({ id: aval.id, action, name: aval.applicant_name }); setReason(''); setCorrelativoInput(''); };
-  const handleAction = async () => {
-    if (!reason.trim()) { alert('La justificación es obligatoria.'); return; }
-    setSaving(true);
-    const updates = { status: actionModal.action, approval_reason: reason };
-    if (actionModal.action === 'Aprobado') { updates.approval_date = new Date().toISOString().split('T')[0]; if (correlativoInput.trim()) updates.correlativo = correlativoInput.trim(); }
-    await updateAval(actionModal.id, updates);
-    setActionModal(null); setSaving(false);
-  };
-  const openEdit = (a) => { setEditData({ id: a.id, status: a.status, approval_reason: a.approval_reason || '', correlativo: a.correlativo || '', approval_date: a.approval_date || '' }); setEditModal(true); };
-  const handleEdit = async () => { setSaving(true); await updateAval(editData.id, { status: editData.status, approval_reason: editData.approval_reason, correlativo: editData.correlativo, approval_date: editData.approval_date || null }); setEditModal(null); setSaving(false); };
-  const handleDelete = async () => { if (!deleteReason.trim()) { alert('Debes indicar la razón de eliminación.'); return; } setSaving(true); await deleteAval(deleteModal.id, deleteReason); setDeleteModal(null); setDeleteReason(''); setSaving(false); };
+  const [actionModal,setActionModal]=useState(null);const [editModal,setEditModal]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [reason,setReason]=useState('');const [correlativoInput,setCorrelativoInput]=useState('');const [deleteReason,setDeleteReason]=useState('');const [editData,setEditData]=useState({});const [saving,setSaving]=useState(false);
+  const visibleAvales=avales.filter(a=>!a.is_deleted);
+  const openAction=(aval,action)=>{setActionModal({id:aval.id,action,name:aval.applicant_name});setReason('');setCorrelativoInput('');};
+  const handleAction=async()=>{if(!reason.trim()){alert('La justificación es obligatoria.');return;}setSaving(true);const updates={status:actionModal.action,approval_reason:reason};if(actionModal.action==='Aprobado'){updates.approval_date=new Date().toISOString().split('T')[0];if(correlativoInput.trim())updates.correlativo=correlativoInput.trim();}await updateAval(actionModal.id,updates);setActionModal(null);setSaving(false);};
+  const openEdit=(a)=>{setEditData({id:a.id,status:a.status,approval_reason:a.approval_reason||'',correlativo:a.correlativo||'',approval_date:a.approval_date||''});setEditModal(true);};
+  const handleEdit=async()=>{setSaving(true);await updateAval(editData.id,{status:editData.status,approval_reason:editData.approval_reason,correlativo:editData.correlativo,approval_date:editData.approval_date||null});setEditModal(null);setSaving(false);};
+  const handleDelete=async()=>{if(!deleteReason.trim()){alert('Debes indicar la razón.');return;}setSaving(true);await deleteAval(deleteModal.id,deleteReason);setDeleteModal(null);setDeleteReason('');setSaving(false);};
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">Solicitudes Recibidas</h2>
-      {visibleAvales.map(req => (
-        <Card key={req.id}>
-          <div className="flex justify-between items-start gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2"><h3 className="font-bold text-lg">{req.applicant_name}</h3><span className="text-xs text-gray-400">#{req.request_number}</span></div>
-              <p className="text-gray-600">{req.activity_name}</p>
-              {req.institution && <p className="text-sm text-gray-500">{req.institution}</p>}
-              <div className="flex items-center gap-3 mt-1 flex-wrap">
-                {req.activity_date && <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12} /> {req.activity_date}</span>}
-                {req.email && <span className="text-xs text-gray-500">{req.email}</span>}
-                {req.correlativo && <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">Correlativo: {req.correlativo}</span>}
-                {req.activity_type && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.activity_type}</span>}
-                {req.modality && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.modality}</span>}
-                {req.duration && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.duration}</span>}
-              </div>
-              {req.approval_reason && <p className="text-xs text-gray-500 mt-1 italic">Nota: {req.approval_reason}</p>}
-              {req.form_url ? (<a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:underline font-medium"><Download size={12} /> Descargar PDF adjunto</a>) : <p className="text-xs text-gray-400 mt-2">Sin archivo adjunto</p>}
-            </div>
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <Badge status={req.status} />
-              {req.status === 'En Proceso' && (<div className="flex gap-2"><button onClick={() => openAction(req, 'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={() => openAction(req, 'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>)}
-              {req.status === 'Aprobado' && (<div className="flex gap-1"><button onClick={() => openApprovalLetter(req, appSettings, 'preview')} className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Eye size={12} /> Vista Previa</button><button onClick={() => openApprovalLetter(req, appSettings, 'download')} className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12} /> Descargar PDF</button></div>)}
-              <div className="flex gap-2"><button onClick={() => openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12} /> Editar</button><button onClick={() => { setDeleteModal(req); setDeleteReason(''); }} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12} /> Eliminar</button></div>
-            </div>
-          </div>
-        </Card>
+      {visibleAvales.map(req=>(
+        <Card key={req.id}><div className="flex justify-between items-start gap-4"><div className="flex-1"><div className="flex items-center gap-2"><h3 className="font-bold text-lg">{req.applicant_name}</h3><span className="text-xs text-gray-400">#{req.request_number}</span></div><p className="text-gray-600">{req.activity_name}</p>{req.institution&&<p className="text-sm text-gray-500">{req.institution}</p>}<div className="flex items-center gap-3 mt-1 flex-wrap">{req.activity_date&&<span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12}/> {req.activity_date}</span>}{req.email&&<span className="text-xs text-gray-500">{req.email}</span>}{req.correlativo&&<span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">Correlativo: {req.correlativo}</span>}{req.activity_type&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.activity_type}</span>}{req.modality&&<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{req.modality}</span>}</div>{req.approval_reason&&<p className="text-xs text-gray-500 mt-1 italic">Nota: {req.approval_reason}</p>}{req.form_url?(<a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${req.form_url}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-blue-600 text-xs mt-2 hover:underline font-medium"><Download size={12}/> Descargar PDF adjunto</a>):<p className="text-xs text-gray-400 mt-2">Sin archivo adjunto</p>}</div><div className="flex flex-col items-end gap-2 shrink-0"><Badge status={req.status}/>{req.status==='En Proceso'&&(<div className="flex gap-2"><button onClick={()=>openAction(req,'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={()=>openAction(req,'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>)}{req.status==='Aprobado'&&(<div className="flex gap-1"><button onClick={()=>openApprovalLetter(req,appSettings,'preview')} className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Eye size={12}/> Vista Previa</button><button onClick={()=>openApprovalLetter(req,appSettings,'download')} className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1 font-medium"><FileDown size={12}/> PDF</button></div>)}<div className="flex gap-2"><button onClick={()=>openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12}/> Editar</button><button onClick={()=>{setDeleteModal(req);setDeleteReason('');}} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12}/> Eliminar</button></div></div></div></Card>
       ))}
-      {visibleAvales.length === 0 && <div className="text-gray-400 text-center py-10">No hay solicitudes.</div>}
-      <Modal isOpen={!!actionModal} onClose={() => setActionModal(null)} title={actionModal?.action === 'Aprobado' ? 'Aprobar Solicitud' : 'Rechazar Solicitud'} size="sm">
-        <div className="space-y-4">
-          <p className="text-gray-600">Solicitud de: <strong>{actionModal?.name}</strong></p>
-          <div><label className="block text-sm font-bold mb-1">{actionModal?.action === 'Aprobado' ? '¿Por qué se aprueba?' : '¿Por qué se rechaza?'} *</label><textarea required rows={3} className="w-full border p-2 rounded" value={reason} onChange={e => setReason(e.target.value)} /></div>
-          {actionModal?.action === 'Aprobado' && (<div><label className="block text-sm font-bold mb-1">Número de Correlativo del Aval *</label><input required placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={correlativoInput} onChange={e => setCorrelativoInput(e.target.value)} /></div>)}
-          <button onClick={handleAction} disabled={saving || !reason.trim() || (actionModal?.action === 'Aprobado' && !correlativoInput.trim())} className={`w-full py-2 rounded font-bold text-white disabled:opacity-50 ${actionModal?.action === 'Aprobado' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>{saving ? 'Guardando...' : (actionModal?.action === 'Aprobado' ? 'Confirmar Aprobación' : 'Confirmar Rechazo')}</button>
-        </div>
-      </Modal>
-      <Modal isOpen={!!editModal} onClose={() => setEditModal(null)} title="Editar Solicitud" size="sm">
-        <div className="space-y-4">
-          <div><label className="block text-sm font-bold mb-1">Estado</label><select className="w-full border p-2 rounded" value={editData.status} onChange={e => setEditData({...editData, status: e.target.value})}><option value="En Proceso">En Proceso</option><option value="Aprobado">Aprobado</option><option value="Rechazado">Rechazado</option></select></div>
-          <div><label className="block text-sm font-bold mb-1">Razón / Notas</label><textarea rows={3} className="w-full border p-2 rounded" value={editData.approval_reason} onChange={e => setEditData({...editData, approval_reason: e.target.value})} /></div>
-          <div><label className="block text-sm font-bold mb-1">Correlativo del Aval</label><input className="w-full border p-2 rounded" value={editData.correlativo} onChange={e => setEditData({...editData, correlativo: e.target.value})} /></div>
-          <div><label className="block text-sm font-bold mb-1">Fecha de Aprobación</label><input type="date" className="w-full border p-2 rounded" value={editData.approval_date} onChange={e => setEditData({...editData, approval_date: e.target.value})} /></div>
-          <button onClick={handleEdit} disabled={saving} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">{saving ? 'Guardando...' : 'Guardar Cambios'}</button>
-        </div>
-      </Modal>
-      <Modal isOpen={!!deleteModal} onClose={() => setDeleteModal(null)} title="Eliminar Solicitud" size="sm">
-        <div className="space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-red-700 font-medium">¿Eliminar la solicitud de "{deleteModal?.applicant_name}"?</p></div>
-          <div><label className="block text-sm font-bold mb-1">¿Por qué se elimina? *</label><textarea required rows={3} className="w-full border p-2 rounded" value={deleteReason} onChange={e => setDeleteReason(e.target.value)} /></div>
-          <button onClick={handleDelete} disabled={saving || !deleteReason.trim()} className="w-full bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700 disabled:opacity-50">{saving ? 'Eliminando...' : 'Confirmar Eliminación'}</button>
-        </div>
-      </Modal>
+      {visibleAvales.length===0&&<div className="text-gray-400 text-center py-10">No hay solicitudes.</div>}
+      <Modal isOpen={!!actionModal} onClose={()=>setActionModal(null)} title={actionModal?.action==='Aprobado'?'Aprobar Solicitud':'Rechazar Solicitud'} size="sm"><div className="space-y-4"><p className="text-gray-600">Solicitud de: <strong>{actionModal?.name}</strong></p><div><label className="block text-sm font-bold mb-1">{actionModal?.action==='Aprobado'?'¿Por qué se aprueba?':'¿Por qué se rechaza?'} *</label><textarea required rows={3} className="w-full border p-2 rounded" value={reason} onChange={e=>setReason(e.target.value)}/></div>{actionModal?.action==='Aprobado'&&(<div><label className="block text-sm font-bold mb-1">Número de Correlativo *</label><input required placeholder="Ej: CAEDUC-01-2026" className="w-full border p-2 rounded" value={correlativoInput} onChange={e=>setCorrelativoInput(e.target.value)}/></div>)}<button onClick={handleAction} disabled={saving||!reason.trim()||(actionModal?.action==='Aprobado'&&!correlativoInput.trim())} className={`w-full py-2 rounded font-bold text-white disabled:opacity-50 ${actionModal?.action==='Aprobado'?'bg-green-600 hover:bg-green-700':'bg-red-600 hover:bg-red-700'}`}>{saving?'Guardando...':(actionModal?.action==='Aprobado'?'Confirmar Aprobación':'Confirmar Rechazo')}</button></div></Modal>
+      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Solicitud" size="sm"><div className="space-y-4"><div><label className="block text-sm font-bold mb-1">Estado</label><select className="w-full border p-2 rounded" value={editData.status} onChange={e=>setEditData({...editData,status:e.target.value})}><option value="En Proceso">En Proceso</option><option value="Aprobado">Aprobado</option><option value="Rechazado">Rechazado</option></select></div><div><label className="block text-sm font-bold mb-1">Razón / Notas</label><textarea rows={3} className="w-full border p-2 rounded" value={editData.approval_reason} onChange={e=>setEditData({...editData,approval_reason:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Correlativo</label><input className="w-full border p-2 rounded" value={editData.correlativo} onChange={e=>setEditData({...editData,correlativo:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Fecha de Aprobación</label><input type="date" className="w-full border p-2 rounded" value={editData.approval_date} onChange={e=>setEditData({...editData,approval_date:e.target.value})}/></div><button onClick={handleEdit} disabled={saving} className="w-full bg-blue-600 text-white py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar Cambios'}</button></div></Modal>
+      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Solicitud" size="sm"><div className="space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-red-700 font-medium">¿Eliminar la solicitud de "{deleteModal?.applicant_name}"?</p></div><div><label className="block text-sm font-bold mb-1">¿Por qué se elimina? *</label><textarea required rows={3} className="w-full border p-2 rounded" value={deleteReason} onChange={e=>setDeleteReason(e.target.value)}/></div><button onClick={handleDelete} disabled={saving||!deleteReason.trim()} className="w-full bg-red-600 text-white py-2 rounded font-bold hover:bg-red-700 disabled:opacity-50">{saving?'Eliminando...':'Confirmar Eliminación'}</button></div></Modal>
     </div>
   );
 };
@@ -1289,35 +829,14 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
 // ADMIN: REPORTES
 // ==========================================
 const ReportesView = ({ avales, docs, oficios }) => {
-  const [showModal, setShowModal] = useState(false);
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [reportFormat, setReportFormat] = useState('pdf');
-  const [generating, setGenerating] = useState(false);
-  const generateReport = async () => {
-    if (!dateFrom || !dateTo) { alert('Selecciona ambas fechas.'); return; }
-    setGenerating(true);
-    const filtered = avales.filter(a => { const d = a.activity_date || a.created_at?.substring(0, 10); return d >= dateFrom && d <= dateTo; });
-    if (filtered.length === 0) { alert('No hay solicitudes en ese período.'); setGenerating(false); return; }
-    if (reportFormat === 'excel') generateCSV(filtered); else await generatePDF(filtered);
-    setGenerating(false); setShowModal(false);
-  };
-  const generateCSV = (data) => {
-    const h = ['Actividad', 'Solicitante', 'Institución', 'Fecha', 'Estado', 'Correlativo', 'Tipo', 'Modalidad', 'Duración', 'Notas', 'Razón Eliminación'];
-    const rows = data.map(a => [a.activity_name||'', a.applicant_name||'', a.institution||'', a.activity_date||'', a.is_deleted?'Eliminado':(a.status||''), a.correlativo||'', a.activity_type||'', a.modality||'', a.duration||'', a.approval_reason||'', a.deletion_reason||'']);
-    const csv = [h, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `reporte_avales_${dateFrom}_${dateTo}.csv`; a.click();
-  };
-  const generatePDF = async (data) => {
-    const rows = data.map(a => `<tr><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.deletion_reason||'—'}</td></tr>`).join('');
-    const html = `<div style="font-family:Arial;padding:30px;background:white;width:10in;"><h1 style="color:#1e3a5f;font-size:20px;">Reporte de Avales — CAEDUC</h1><p style="color:#666;font-size:12px;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p><p style="color:#666;font-size:12px;">Aprobadas: ${data.filter(a=>a.status==='Aprobado'&&!a.is_deleted).length} | Rechazadas: ${data.filter(a=>a.status==='Rechazado'&&!a.is_deleted).length} | En Proceso: ${data.filter(a=>a.status==='En Proceso'&&!a.is_deleted).length} | Eliminadas: ${data.filter(a=>a.is_deleted).length}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr style="background:#1e3a5f;color:white;"><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p></div>`;
-    await downloadPDF(html, `Reporte_Avales_${dateFrom}_${dateTo}`);
-  };
-  const active = avales.filter(a => !a.is_deleted);
+  const [showModal,setShowModal]=useState(false);const [dateFrom,setDateFrom]=useState('');const [dateTo,setDateTo]=useState('');const [reportFormat,setReportFormat]=useState('pdf');const [generating,setGenerating]=useState(false);
+  const generateReport=async()=>{if(!dateFrom||!dateTo){alert('Selecciona ambas fechas.');return;}setGenerating(true);const filtered=avales.filter(a=>{const d=a.activity_date||a.created_at?.substring(0,10);return d>=dateFrom&&d<=dateTo;});if(filtered.length===0){alert('No hay solicitudes en ese período.');setGenerating(false);return;}if(reportFormat==='excel')generateCSV(filtered);else await generatePDF(filtered);setGenerating(false);setShowModal(false);};
+  const generateCSV=(data)=>{const h=['Actividad','Solicitante','Institución','Fecha','Estado','Correlativo','Tipo','Modalidad','Duración','Notas','Razón Eliminación'];const rows=data.map(a=>[a.activity_name||'',a.applicant_name||'',a.institution||'',a.activity_date||'',a.is_deleted?'Eliminado':(a.status||''),a.correlativo||'',a.activity_type||'',a.modality||'',a.duration||'',a.approval_reason||'',a.deletion_reason||'']);const csv=[h,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`reporte_avales_${dateFrom}_${dateTo}.csv`;a.click();};
+  const generatePDF=async(data)=>{const rows=data.map(a=>`<tr><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.deletion_reason||'—'}</td></tr>`).join('');const html=`<div style="font-family:Arial;padding:30px;background:white;width:10in;"><h1 style="color:#1e3a5f;font-size:20px;">Reporte de Avales — CAEDUC</h1><p style="color:#666;font-size:12px;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr style="background:#1e3a5f;color:white;"><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Razón Elim.</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p></div>`;await downloadPDF(html,`Reporte_Avales_${dateFrom}_${dateTo}`);};
+  const active=avales.filter(a=>!a.is_deleted);
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Reportes e Historial</h2><button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FileSpreadsheet size={18} /> Generar Reporte</button></div>
+      <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Reportes e Historial</h2><button onClick={()=>setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FileSpreadsheet size={18}/> Generar Reporte</button></div>
       <div className="grid grid-cols-4 gap-4">
         <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{avales.length}</p><p className="text-sm text-gray-500">Total Avales</p></div></Card>
         <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{active.filter(a=>a.status==='Aprobado').length}</p><p className="text-sm text-gray-500">Aprobadas</p></div></Card>
@@ -1325,16 +844,11 @@ const ReportesView = ({ avales, docs, oficios }) => {
         <Card><div className="text-center"><p className="text-3xl font-bold text-indigo-600">{oficios.length}</p><p className="text-sm text-gray-500">Oficios</p></div></Card>
       </div>
       <div className="grid md:grid-cols-2 gap-4">
-        <Card><h3 className="font-bold mb-2 text-indigo-700">Avales ({active.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{active.map(a => (<div key={a.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-medium">{a.activity_name}</span><span className="text-gray-400 text-xs ml-2">#{a.request_number}</span>{a.correlativo && <span className="text-indigo-600 text-xs ml-2">[{a.correlativo}]</span>}</div><Badge status={a.status} /></div>))}{active.length === 0 && <p className="text-gray-400 text-center py-8">Sin avales</p>}</div></Card>
-        <Card><h3 className="font-bold mb-2 text-indigo-700">Oficios Generados ({oficios.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{oficios.map(o => (<div key={o.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-semibold">{o.numero_oficio}</span><span className="text-gray-400 text-xs ml-2">{o.fecha}</span>{o.actividad_nombre && <span className="text-blue-500 text-xs ml-2">{o.actividad_nombre}</span>}</div><Badge status={o.estado} /></div>))}{oficios.length === 0 && <p className="text-gray-400 text-center py-8">Sin oficios</p>}</div></Card>
+        <Card><h3 className="font-bold mb-2 text-indigo-700">Avales ({active.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{active.map(a=>(<div key={a.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-medium">{a.activity_name}</span><span className="text-gray-400 text-xs ml-2">#{a.request_number}</span>{a.correlativo&&<span className="text-indigo-600 text-xs ml-2">[{a.correlativo}]</span>}</div><Badge status={a.status}/></div>))}{active.length===0&&<p className="text-gray-400 text-center py-8">Sin avales</p>}</div></Card>
+        <Card><h3 className="font-bold mb-2 text-indigo-700">Oficios ({oficios.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{oficios.map(o=>(<div key={o.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-semibold">{o.numero_oficio}</span><span className="text-gray-400 text-xs ml-2">{o.fecha}</span>{o.actividad_nombre&&<span className="text-blue-500 text-xs ml-2">{o.actividad_nombre}</span>}</div><Badge status={o.estado}/></div>))}{oficios.length===0&&<p className="text-gray-400 text-center py-8">Sin oficios</p>}</div></Card>
       </div>
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Generar Reporte" size="sm">
-        <div className="space-y-4">
-          <div><label className="block text-sm font-bold mb-1">Fecha Inicio</label><input type="date" className="w-full border p-2 rounded" value={dateFrom} onChange={e => setDateFrom(e.target.value)} /></div>
-          <div><label className="block text-sm font-bold mb-1">Fecha Fin</label><input type="date" className="w-full border p-2 rounded" value={dateTo} onChange={e => setDateTo(e.target.value)} /></div>
-          <div><label className="block text-sm font-bold mb-1">Formato</label><div className="flex gap-3"><label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='pdf'?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200'}`}><input type="radio" name="fmt" value="pdf" checked={reportFormat==='pdf'} onChange={() => setReportFormat('pdf')} className="sr-only" /><FileText size={20} className="mx-auto mb-1" /><span className="text-sm font-medium">PDF</span></label><label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='excel'?'border-green-500 bg-green-50 text-green-700':'border-gray-200'}`}><input type="radio" name="fmt" value="excel" checked={reportFormat==='excel'} onChange={() => setReportFormat('excel')} className="sr-only" /><FileSpreadsheet size={20} className="mx-auto mb-1" /><span className="text-sm font-medium">Excel (CSV)</span></label></div></div>
-          <button onClick={generateReport} disabled={generating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{generating ? 'Generando...' : 'Generar Reporte'}</button>
-        </div>
+      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Generar Reporte" size="sm">
+        <div className="space-y-4"><div><label className="block text-sm font-bold mb-1">Fecha Inicio</label><input type="date" className="w-full border p-2 rounded" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha Fin</label><input type="date" className="w-full border p-2 rounded" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Formato</label><div className="flex gap-3"><label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='pdf'?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200'}`}><input type="radio" name="fmt" value="pdf" checked={reportFormat==='pdf'} onChange={()=>setReportFormat('pdf')} className="sr-only"/><FileText size={20} className="mx-auto mb-1"/><span className="text-sm font-medium">PDF</span></label><label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='excel'?'border-green-500 bg-green-50 text-green-700':'border-gray-200'}`}><input type="radio" name="fmt" value="excel" checked={reportFormat==='excel'} onChange={()=>setReportFormat('excel')} className="sr-only"/><FileSpreadsheet size={20} className="mx-auto mb-1"/><span className="text-sm font-medium">Excel (CSV)</span></label></div></div><button onClick={generateReport} disabled={generating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{generating?'Generando...':'Generar Reporte'}</button></div>
       </Modal>
     </div>
   );
@@ -1344,192 +858,84 @@ const ReportesView = ({ avales, docs, oficios }) => {
 // SIDEBAR
 // ==========================================
 const Sidebar = ({ isOpen, toggle, current, setModule, logout }) => (
-  <div className={`bg-slate-800 text-white fixed h-full z-20 transition-all ${isOpen ? 'w-64' : 'w-20'}`}>
-    <div className="p-4 flex justify-between border-b border-slate-700">{isOpen && <h1 className="font-bold">CAEDUC App</h1>}<button onClick={toggle}><Menu size={20} /></button></div>
+  <div className={`bg-slate-800 text-white fixed h-full z-20 transition-all ${isOpen?'w-64':'w-20'}`}>
+    <div className="p-4 flex justify-between border-b border-slate-700">{isOpen&&<h1 className="font-bold">CAEDUC App</h1>}<button onClick={toggle}><Menu size={20}/></button></div>
     <nav className="p-2 space-y-2 mt-4">
-      <SidebarBtn icon={<CheckCircle />} label="Planificación" active={current==='planificacion'} onClick={() => setModule('planificacion')} isOpen={isOpen} />
-      <SidebarBtn icon={<Users />} label="Avales" active={current==='avales'} onClick={() => setModule('avales')} isOpen={isOpen} />
-      <SidebarBtn icon={<FileSignature />} label="Oficios" active={current==='oficios'} onClick={() => setModule('oficios')} isOpen={isOpen} />
-      <SidebarBtn icon={<Clock />} label="Reportes" active={current==='reportes'} onClick={() => setModule('reportes')} isOpen={isOpen} />
-      <SidebarBtn icon={<Settings />} label="Admin" active={current==='admin_config'} onClick={() => setModule('admin_config')} isOpen={isOpen} />
+      <SidebarBtn icon={<CheckCircle/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>
+      <SidebarBtn icon={<Users/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen}/>
+      <SidebarBtn icon={<FileSignature/>} label="Oficios" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>
+      <SidebarBtn icon={<BookOpen/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen}/>
+      <SidebarBtn icon={<Clock/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>
+      <SidebarBtn icon={<Settings/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
     </nav>
-    <button onClick={logout} className="absolute bottom-4 left-4 flex gap-2 text-red-300 hover:text-white"><LogOut /> {isOpen && "Salir"}</button>
+    <button onClick={logout} className="absolute bottom-4 left-4 flex gap-2 text-red-300 hover:text-white"><LogOut/> {isOpen&&"Salir"}</button>
   </div>
 );
 
 const SidebarBtn = ({ icon, label, active, onClick, isOpen }) => (
-  <button onClick={onClick} className={`flex items-center gap-3 p-3 w-full rounded ${active ? 'bg-blue-600' : 'hover:bg-slate-700'}`}>{icon} {isOpen && <span>{label}</span>}</button>
+  <button onClick={onClick} className={`flex items-center gap-3 p-3 w-full rounded ${active?'bg-blue-600':'hover:bg-slate-700'}`}>{icon} {isOpen&&<span>{label}</span>}</button>
 );
 
 // ==========================================
 // APP PRINCIPAL
 // ==========================================
 export default function CAEDUCApp() {
-  const [session, setSession] = useState(null);
-  const [userMode, setUserMode] = useState('public');
-  const [currentModule, setCurrentModule] = useState('planificacion');
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [authError, setAuthError] = useState(null);
-  const [activities, setActivities] = useState([]);
-  const [avales, setAvales] = useState([]);
-  const [members, setMembers] = useState([]);
-  const [internalDocs, setInternalDocs] = useState([]);
-  const [oficios, setOficios] = useState([]);
-  const [appSettings, setAppSettings] = useState({});
+  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('planificacion');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [activities,setActivities]=useState([]);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
 
-  // ── Estado para pre-llenar oficio desde Planificación ──
-  const [oficioPreFill, setOficioPreFill] = useState(null);
+  const fetchPublicSettings=useCallback(async()=>{try{const{data}=await supabase.from('app_settings').select('key, value');if(data){const m={};data.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}}catch(e){console.error(e);}},[]); 
 
-  const fetchPublicSettings = useCallback(async () => {
-    try { const { data } = await supabase.from('app_settings').select('key, value'); if (data) { const m = {}; data.forEach(r => { m[r.key] = r.value; }); setAppSettings(m); } } catch (e) { console.error(e); }
-  }, []);
+  useEffect(()=>{fetchPublicSettings();supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session){setUserMode('admin');fetchData();}});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{setSession(session);if(session){setUserMode('admin');fetchData();}else setUserMode('public');});return()=>subscription.unsubscribe();},[fetchPublicSettings]);
 
-  useEffect(() => {
-    fetchPublicSettings();
-    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); if (session) { setUserMode('admin'); fetchData(); } });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => { setSession(session); if (session) { setUserMode('admin'); fetchData(); } else setUserMode('public'); });
-    return () => subscription.unsubscribe();
-  }, [fetchPublicSettings]);
+  const fetchData=async()=>{setLoading(true);try{const{data:act}=await supabase.from('activities').select('*').order('created_at',{ascending:false});const{data:avl}=await supabase.from('avales').select('*').order('created_at',{ascending:false});const{data:mem}=await supabase.from('profiles').select('*');const{data:docs}=await supabase.from('internal_documents').select('*');const{data:ofi}=await supabase.from('oficios').select('*').order('created_at',{ascending:false});const{data:settings}=await supabase.from('app_settings').select('key, value');if(act)setActivities(act);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}}catch(e){console.error(e);}setLoading(false);};
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const { data: act } = await supabase.from('activities').select('*').order('created_at', { ascending: false });
-      const { data: avl } = await supabase.from('avales').select('*').order('created_at', { ascending: false });
-      const { data: mem } = await supabase.from('profiles').select('*');
-      const { data: docs } = await supabase.from('internal_documents').select('*');
-      const { data: ofi } = await supabase.from('oficios').select('*').order('created_at', { ascending: false });
-      const { data: settings } = await supabase.from('app_settings').select('key, value');
-      if (act) setActivities(act); if (avl) setAvales(avl); if (mem) setMembers(mem); if (docs) setInternalDocs(docs);
-      if (ofi) setOficios(ofi);
-      if (settings) { const m = {}; settings.forEach(r => { m[r.key] = r.value; }); setAppSettings(m); }
-    } catch (e) { console.error(e); }
-    setLoading(false);
-  };
+  const handleLogin=async(email,password)=>{setLoading(true);setAuthError(null);const{data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setAuthError(error.message);else{setSession(data.session);setUserMode('admin');fetchData();}setLoading(false);};
+  const handleLogout=async()=>{await supabase.auth.signOut();setSession(null);setUserMode('public');setAuthError(null);};
 
-  const handleLogin = async (email, password) => {
-    setLoading(true); setAuthError(null);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthError(error.message); else { setSession(data.session); setUserMode('admin'); fetchData(); }
-    setLoading(false);
-  };
+  const submitAval=async(formData,file1)=>{let formUrl=null;if(file1){const{data:f1,error:ue}=await supabase.storage.from('avales-files').upload(`forms/${Date.now()}_${file1.name}`,file1);if(ue){alert("Error archivo: "+ue.message);return null;}if(f1)formUrl=f1.path;}const{data:inserted,error}=await supabase.from('avales').insert([{applicant_name:formData.applicantName,institution:formData.institution,activity_name:formData.activityName,activity_date:formData.activityDate,email:formData.email,activity_type:formData.activityType,duration:formData.duration,modality:formData.modality,schedule:formData.schedule,platform:formData.platform,topic:formData.topic,target_audience:formData.targetAudience,form_url:formUrl,status:'En Proceso'}]).select('request_number');if(error){alert(error.message);return null;}return inserted?.[0]?.request_number||null;};
 
-  const handleLogout = async () => { await supabase.auth.signOut(); setSession(null); setUserMode('public'); setAuthError(null); };
+  const updateAval=async(id,updates)=>{const{error}=await supabase.from('avales').update(updates).eq('id',id);if(error)alert(error.message);else fetchData();};
+  const deleteAval=async(id,reason)=>{const{error}=await supabase.from('avales').update({is_deleted:true,deletion_reason:reason}).eq('id',id);if(error)alert(error.message);else fetchData();};
+  const updateMember=async(id,updates)=>{const{error}=await supabase.from('profiles').update(updates).eq('id',id);if(error)throw error;else await fetchData();};
+  const updateSetting=async(key,value)=>{const{error}=await supabase.from('app_settings').update({value,updated_at:new Date().toISOString()}).eq('key',key);if(error){const{error:ie}=await supabase.from('app_settings').insert([{key,value}]);if(ie)throw ie;}setAppSettings(prev=>({...prev,[key]:value}));};
 
-  const createActivity = async (fd) => {
-    const { data, error } = await supabase.from('activities').insert([fd]).select();
-    if (error) { alert(error.message); return; }
-    let tasks = [];
-    Object.keys(TASK_TEMPLATES).forEach(role => { TASK_TEMPLATES[role].forEach(t => { tasks.push({ activity_id: data[0].id, title: t.title, description: t.desc, role, assigned_to: members.find(m => m.role === role)?.name || "Sin asignar" }); }); });
-    if (tasks.length > 0) await supabase.from('tasks').insert(tasks);
-    fetchData();
-  };
+  const createOficio=async(data)=>{const{error}=await supabase.from('oficios').insert([data]);if(error){alert('Error al crear oficio: '+error.message);return;}fetchData();};
+  const updateOficio=async(id,data)=>{const{estado,...rest}=data;const{error}=await supabase.from('oficios').update({...rest,estado,updated_at:new Date().toISOString()}).eq('id',id);if(error){alert('Error al actualizar: '+error.message);return;}fetchData();};
+  const deleteOficio=async(id)=>{const{error}=await supabase.from('oficios').delete().eq('id',id);if(error){alert('Error al eliminar: '+error.message);return;}fetchData();};
 
-  const submitAval = async (formData, file1) => {
-    let formUrl = null;
-    if (file1) { const { data: f1, error: ue } = await supabase.storage.from('avales-files').upload(`forms/${Date.now()}_${file1.name}`, file1); if (ue) { alert("Error archivo: " + ue.message); return null; } if (f1) formUrl = f1.path; }
-    const { data: inserted, error } = await supabase.from('avales').insert([{
-      applicant_name: formData.applicantName, institution: formData.institution, activity_name: formData.activityName,
-      activity_date: formData.activityDate, email: formData.email, activity_type: formData.activityType,
-      duration: formData.duration, modality: formData.modality, schedule: formData.schedule,
-      platform: formData.platform, topic: formData.topic, target_audience: formData.targetAudience,
-      form_url: formUrl, status: 'En Proceso'
-    }]).select('request_number');
-    if (error) { alert(error.message); return null; }
-    return inserted?.[0]?.request_number || null;
-  };
-
-  const registerDoc = async (d) => { const { error } = await supabase.from('internal_documents').insert([d]); if (error) alert(error.message); else fetchData(); };
-  const updateAval = async (id, updates) => { const { error } = await supabase.from('avales').update(updates).eq('id', id); if (error) alert(error.message); else fetchData(); };
-  const deleteAval = async (id, reason) => { const { error } = await supabase.from('avales').update({ is_deleted: true, deletion_reason: reason }).eq('id', id); if (error) alert(error.message); else fetchData(); };
-  const updateMember = async (id, updates) => { const { error } = await supabase.from('profiles').update(updates).eq('id', id); if (error) throw error; else await fetchData(); };
-  const updateSetting = async (key, value) => {
-    const { error } = await supabase.from('app_settings').update({ value, updated_at: new Date().toISOString() }).eq('key', key);
-    if (error) { const { error: ie } = await supabase.from('app_settings').insert([{ key, value }]); if (ie) throw ie; }
-    setAppSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  const createOficio = async (data) => {
-    const { error } = await supabase.from('oficios').insert([data]);
-    if (error) { alert('Error al crear oficio: ' + error.message); return; }
-    fetchData();
-  };
-  const updateOficio = async (id, data) => {
-    const { estado, ...rest } = data;
-    const { error } = await supabase.from('oficios').update({ ...rest, estado, updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) { alert('Error al actualizar: ' + error.message); return; }
-    fetchData();
-  };
-  const deleteOficio = async (id) => {
-    const { error } = await supabase.from('oficios').delete().eq('id', id);
-    if (error) { alert('Error al eliminar: ' + error.message); return; }
-    fetchData();
-  };
-
-  // ── Handler: Planificación → Oficios con datos pre-llenados ──
-  const handleNavigateToOficios = (activityData) => {
-    // Mapear campos de planificacion_actividades al formato que espera OficioFormModal
-    setOficioPreFill({
-      actividad_nombre: activityData.actividad || '',
-      actividad_tipo:   activityData.tipo       || '',
-      actividad_fecha:  activityData.fecha       || '',
-      actividad_duracion: '',
-      actividad_modalidad: activityData.sede_modalidad || '',
-      actividad_sede:   activityData.t3_lugar    || activityData.sede_modalidad || '',
-      // Metadatos de contexto (para el banner informativo)
-      _source_trimestre: activityData.trimestre  || '',
-      _source_area:      activityData.area       || '',
-    });
-    setCurrentModule('oficios');
-  };
+  const handleNavigateToOficios=(activityData)=>{setOficioPreFill({actividad_nombre:activityData.actividad||'',actividad_tipo:activityData.tipo||'',actividad_fecha:activityData.fecha||'',actividad_duracion:'',actividad_modalidad:activityData.sede_modalidad||'',actividad_sede:activityData.t3_lugar||activityData.sede_modalidad||'',_source_trimestre:activityData.trimestre||'',_source_area:activityData.area||''});setCurrentModule('oficios');};
 
   return (
     <div className="flex min-h-screen bg-gray-100 font-sans text-gray-800">
-      {userMode === 'admin' && (
-        <Sidebar
-          isOpen={isSidebarOpen}
-          toggle={() => setSidebarOpen(!isSidebarOpen)}
+      {userMode==='admin'&&(
+        <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)}
           current={currentModule}
-          setModule={(mod) => {
-            // Limpiar pre-fill si navega manualmente a otro módulo
-            if (mod !== 'oficios') setOficioPreFill(null);
-            setCurrentModule(mod);
-          }}
-          logout={handleLogout}
-        />
+          setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}}
+          logout={handleLogout}/>
       )}
-      <main className={`flex-1 p-8 transition-all ${userMode === 'admin' ? (isSidebarOpen ? 'ml-64' : 'ml-20') : ''}`}>
-        {userMode === 'public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings} />}
-        {userMode === 'external' && <ExternalAvalesView submitAval={submitAval} onBack={() => setUserMode('public')} appSettings={appSettings} />}
-        {userMode === 'consultar_estado' && <ConsultarEstadoView onBack={() => setUserMode('public')} appSettings={appSettings} />}
-        {userMode === 'verificar_aval' && <VerificarAvalView onBack={() => setUserMode('public')} />}
-        {userMode === 'admin' && (
+      <main className={`flex-1 p-8 transition-all ${userMode==='admin'?(isSidebarOpen?'ml-64':'ml-20'):''}`}>
+        {userMode==='public'&&<LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
+        {userMode==='external'&&<ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
+        {userMode==='consultar_estado'&&<ConsultarEstadoView onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
+        {userMode==='verificar_aval'&&<VerificarAvalView onBack={()=>setUserMode('public')}/>}
+        {userMode==='admin'&&(
           <>
-            {(currentModule === 'planificacion' || currentModule === 'dashboard') && (
-              <PlanificacionCAEDUCView
-                onNavigateOficios={handleNavigateToOficios}
-              />
+            {(currentModule==='planificacion'||currentModule==='dashboard')&&(
+              <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios}/>
             )}
-            {currentModule === 'avales' && (
-              <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} />
+            {currentModule==='avales'&&(
+              <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings}/>
             )}
-            {currentModule === 'oficios' && (
-              <OficiosAdminView
-                oficios={oficios}
-                onCreateOficio={createOficio}
-                onUpdateOficio={updateOficio}
-                onDeleteOficio={deleteOficio}
-                appSettings={appSettings}
-                preFillData={oficioPreFill}
-                onClearPreFill={() => setOficioPreFill(null)}
-              />
+            {currentModule==='oficios'&&(
+              <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>
             )}
-            {currentModule === 'reportes' && (
-              <ReportesView avales={avales} docs={internalDocs} oficios={oficios} />
+            {currentModule==='agendas'&&(
+              <AgendasView/>
             )}
-            {currentModule === 'admin_config' && (
-              <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember} />
+            {currentModule==='reportes'&&(
+              <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>
+            )}
+            {currentModule==='admin_config'&&(
+              <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember}/>
             )}
           </>
         )}
