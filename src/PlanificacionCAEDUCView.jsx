@@ -129,7 +129,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const [gastoRubroModal,setGastoRubroModal] = useState(null);
   const [editingArea,setEditingArea]     = useState(null);
   const [respForm,setRespForm]           = useState({responsable:'',email:'',telefono:''});
-  const [filters,setFilters]             = useState({trimestre:'',area:'',estado:'activas'});
+  const [filters,setFilters]             = useState({trimestre:'',area:'',estado:'activas',anio:String(new Date().getFullYear())});
 
   const fetchAll = useCallback(async()=>{
     setLoading(true);
@@ -273,10 +273,22 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     responsable_nombre:getRespName(a.area),
     lineas_gasto:gastosAct.filter(g=>g.actividad_id===a.id),
   }));
+  // Años disponibles para el filtro (extraídos de las fechas de las actividades)
+  const aniosDisponibles = [...new Set(
+    actividades
+      .map(a=>{ const m=String(a.fecha||'').match(/(\d{4})$/); return m?m[1]:null; })
+      .filter(Boolean)
+  )].sort();
+
   const filteredActs = enriched
     .filter(a=>{
       if(filters.trimestre&&a.trimestre!==filters.trimestre)return false;
       if(filters.area&&a.area!==filters.area)return false;
+      // Filtro por año: comparar con el año en la fecha de la actividad
+      if(filters.anio){
+        const anioAct = String(a.fecha||'').match(/(\d{4})$/)?.[1]||'';
+        if(anioAct!==filters.anio)return false;
+      }
       // 'activas' = oculta Completado y Cancelado (comportamiento por defecto)
       if(filters.estado==='activas'){
         if(a.estado_general==='Completado'||a.estado_general==='Cancelado')return false;
@@ -531,8 +543,21 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               <option value="Completado">Solo Completadas</option>
               <option value="Cancelado">Solo Canceladas</option>
             </select>
-            {(filters.trimestre||filters.area||filters.estado!=='activas')&&(
-              <button onClick={()=>setFilters({trimestre:'',area:'',estado:'activas'})} className="text-xs text-red-500 underline">Restablecer</button>
+            {/* Filtro por año — botones rápidos */}
+            <div className="flex items-center gap-1 flex-wrap">
+              {aniosDisponibles.map(a=>(
+                <button key={a} onClick={()=>setFilters({...filters,anio:filters.anio===a?'':a})}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    filters.anio===a
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                  }`}>
+                  {a}{a===String(new Date().getFullYear())?' ★':''}
+                </button>
+              ))}
+            </div>
+            {(filters.trimestre||filters.area||filters.estado!=='activas'||filters.anio!==String(new Date().getFullYear()))&&(
+              <button onClick={()=>setFilters({trimestre:'',area:'',estado:'activas',anio:String(new Date().getFullYear())})} className="text-xs text-red-500 underline">Restablecer</button>
             )}
             <span className="ml-auto text-xs text-gray-400">{filteredActs.length} actividades</span>
             <button onClick={()=>setActModal({mode:'new',data:{}})}
@@ -867,12 +892,28 @@ const formatFechaDisplay = (isoDate) => {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 };
 
+// Convierte texto "21 mar 2026" → "2026-03-21" para el input type="date"
+const fechaTextoToISO = (textoFecha) => {
+  if (!textoFecha) return '';
+  // Ya está en ISO
+  if (/^\d{4}-\d{2}-\d{2}/.test(textoFecha)) return textoFecha.substring(0,10);
+  const MONTHS = {ene:'01',feb:'02',mar:'03',abr:'04',may:'05',jun:'06',
+                  jul:'07',ago:'08',sep:'09',oct:'10',nov:'11',dic:'12'};
+  const m = textoFecha.match(/(\d{1,2})\s+([a-záéíóú]{3})\s+(\d{4})/i);
+  if (m) {
+    const d = String(m[1]).padStart(2,'0');
+    const mo = MONTHS[m[2].toLowerCase()] || '01';
+    return `${m[3]}-${mo}-${d}`;
+  }
+  return '';
+};
+
 function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDeleteGasto,gastosLines}){
   const [fd,setFd]=useState({
     trimestre:initialData?.trimestre||TRIMESTRES[0],
     area:initialData?.area||AREAS[0],actividad:initialData?.actividad||'',
     tipo:initialData?.tipo||TIPOS[0],
-    fecha:initialData?.fecha||'',          // Ahora guarda ISO YYYY-MM-DD internamente
+    fecha:fechaTextoToISO(initialData?.fecha||''),  // Convierte "21 mar 2026" → "2026-03-21" para el date picker
     monto:initialData?.monto||0,monto_gastado:initialData?.monto_gastado||0,
     estado_general:initialData?.estado_general||'Pendiente',
     sede_modalidad:initialData?.sede_modalidad||'',id:initialData?.id,
@@ -1118,8 +1159,8 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-        <div className="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-xl">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md flex flex-col" style={{maxHeight:'90vh'}}>
+        <div className="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-xl shrink-0">
           <div>
             <h3 className="text-base font-bold text-gray-800">Presupuesto Aprobado por Año</h3>
             <p className="text-xs text-gray-500 mt-0.5">Monto fijo autorizado. No aumenta al agregar actividades.</p>
@@ -1127,7 +1168,7 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
           <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-red-500"/></button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
           {/* Info box */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
             <Info size={14} className="shrink-0 mt-0.5"/>
