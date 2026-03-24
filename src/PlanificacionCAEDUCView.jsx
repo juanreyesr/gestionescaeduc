@@ -120,6 +120,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const [gastosRubro,setGastosRubro]     = useState([]);
   const [gastosAct,setGastosAct]         = useState([]);
   const [fondos,setFondos]               = useState([]);
+  const [presAnual,setPresAnual]         = useState([]);   // [{anio, monto, id, notas}]
+  const [editPresModal,setEditPresModal] = useState(false);
   const [actModal,setActModal]           = useState(null);
   const [deleteActId,setDeleteActId]     = useState(null);
   const [taskModal,setTaskModal]         = useState(null);
@@ -131,13 +133,14 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 
   const fetchAll = useCallback(async()=>{
     setLoading(true);
-    const [r1,r2,r3,r4,r5,r6]=await Promise.all([
+    const [r1,r2,r3,r4,r5,r6,r7]=await Promise.all([
       supabase.from('planificacion_responsables').select('*').order('area'),
       supabase.from('planificacion_actividades').select('*').order('numero',{nullsFirst:false}).order('created_at',{ascending:true}),
       supabase.from('planificacion_rubros').select('*').eq('activo',true).order('orden'),
       supabase.from('planificacion_gastos_rubro').select('*').order('created_at'),
       supabase.from('planificacion_gastos_actividad').select('*').order('created_at'),
       supabase.from('planificacion_fondos_adicionales').select('*').order('created_at'),
+      supabase.from('planificacion_presupuesto_anual').select('*').order('anio'),
     ]);
     if(r1.data)setResponsables(r1.data);
     if(r2.data)setActividades(r2.data);
@@ -145,6 +148,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     if(r4.data)setGastosRubro(r4.data);
     if(r5.data)setGastosAct(r5.data);
     if(r6.data)setFondos(r6.data);
+    if(r7.data)setPresAnual(r7.data);
     setLoading(false);
   },[]);
 
@@ -156,10 +160,27 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const totalRubAsig   = rubros.reduce((s,r)=>s+Number(r.monto_asignado||0),0);
   const totalRubGast   = gastosRubro.reduce((s,g)=>s+Number(g.monto||0),0);
   const totalFondos    = fondos.reduce((s,f)=>s+Number(f.monto||0),0);
-  const presBase       = totalActAsig+totalRubAsig;
-  const totalDisp      = presBase+totalFondos;
   const totalGast      = totalActGast+totalRubGast;
-  const saldo          = totalDisp-totalGast;
+
+  // Presupuesto base = monto fijo aprobado por año (NO suma de actividades)
+  const anioActual     = new Date().getFullYear();
+  const presAnualActual= presAnual.find(p=>p.anio===anioActual) || presAnual[presAnual.length-1] || {monto:0,anio:anioActual};
+  const presBase       = Number(presAnualActual.monto||0);
+  // Total disponible = presupuesto aprobado + fondos adicionales
+  const totalDisp      = presBase + totalFondos;
+  const saldo          = totalDisp - totalGast;
+
+  // Guardar/actualizar presupuesto anual
+  const savePresAnual  = async(anio, monto, notas) => {
+    const existing = presAnual.find(p=>p.anio===anio);
+    if(existing){
+      await supabase.from('planificacion_presupuesto_anual')
+        .update({monto, notas, updated_at:new Date().toISOString()}).eq('id',existing.id);
+    } else {
+      await supabase.from('planificacion_presupuesto_anual').insert([{anio, monto, notas}]);
+    }
+    await fetchAll();
+  };
 
   const getRespName = area=>(responsables.find(r=>r.area===area)||{}).responsable||'Sin asignar';
 
@@ -421,22 +442,56 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       </div>
 
       {/* Budget cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        {[
-          {label:'Presupuesto base',   val:presBase,     color:'text-slate-700',  bg:'bg-slate-50',  icon:<Package size={17}/>},
-          {label:'Fondos adicionales', val:totalFondos,  color:'text-blue-700',   bg:'bg-blue-50',   icon:<PlusCircle size={17}/>},
-          {label:'Total disponible',   val:totalDisp,    color:'text-green-700',  bg:'bg-green-50',  icon:<DollarSign size={17}/>},
-          {label:'Total ejecutado',    val:totalGast,    color:'text-red-600',    bg:'bg-red-50',    icon:<MinusCircle size={17}/>},
-          {label:'Saldo disponible',   val:saldo,        color:saldo>=0?'text-green-700':'text-red-700', bg:saldo>=0?'bg-green-50':'bg-red-50', icon:<Receipt size={17}/>},
-          {label:'% Ejecutado',        val:null,         color:'text-violet-700', bg:'bg-violet-50', icon:<TrendingUp size={17}/>},
-        ].map(({label,val,color,bg,icon},i)=>(
-          <div key={i} className={`${bg} rounded-xl p-3 border flex flex-col gap-1`}>
-            <div className={`${color} flex items-center gap-1 text-xs font-semibold`}>{icon}<span>{label}</span></div>
-            <div className={`text-lg font-black ${color}`}>
-              {val!==null?fmtShort(val):`${totalDisp>0?Math.round((totalGast/totalDisp)*100):0}%`}
-            </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+
+        {/* Presupuesto base — con botón editar */}
+        <div className="bg-slate-50 rounded-xl p-3 border flex flex-col gap-1 col-span-2 md:col-span-1">
+          <div className="text-slate-600 flex items-center justify-between">
+            <div className="flex items-center gap-1 text-xs font-semibold"><Package size={15}/><span>Presupuesto {presAnualActual.anio}</span></div>
+            <button onClick={()=>setEditPresModal(true)}
+              title="Modificar presupuesto aprobado"
+              className="text-slate-400 hover:text-blue-600 transition-colors">
+              <Edit3 size={13}/>
+            </button>
           </div>
-        ))}
+          <div className="text-lg font-black text-slate-700">{fmtShort(presBase)}</div>
+          <div className="text-xs text-slate-400">Aprobado {presAnualActual.anio}</div>
+        </div>
+
+        {/* Fondos adicionales */}
+        <div className="bg-blue-50 rounded-xl p-3 border flex flex-col gap-1">
+          <div className="text-blue-700 flex items-center gap-1 text-xs font-semibold"><PlusCircle size={15}/><span>Fondos extra</span></div>
+          <div className="text-lg font-black text-blue-700">{fmtShort(totalFondos)}</div>
+          <div className="text-xs text-blue-400">{fondos.length} ingreso{fondos.length!==1?'s':''}</div>
+        </div>
+
+        {/* Total disponible */}
+        <div className="bg-green-50 rounded-xl p-3 border flex flex-col gap-1">
+          <div className="text-green-700 flex items-center gap-1 text-xs font-semibold"><DollarSign size={15}/><span>Total disponible</span></div>
+          <div className="text-lg font-black text-green-700">{fmtShort(totalDisp)}</div>
+          <div className="text-xs text-green-500">base + fondos extra</div>
+        </div>
+
+        {/* Total ejecutado */}
+        <div className="bg-red-50 rounded-xl p-3 border flex flex-col gap-1">
+          <div className="text-red-600 flex items-center gap-1 text-xs font-semibold"><MinusCircle size={15}/><span>Ejecutado</span></div>
+          <div className="text-lg font-black text-red-600">{fmtShort(totalGast)}</div>
+          <div className="text-xs text-red-400">gastos registrados</div>
+        </div>
+
+        {/* Saldo */}
+        <div className={`${saldo>=0?'bg-green-50':'bg-red-50'} rounded-xl p-3 border flex flex-col gap-1`}>
+          <div className={`${saldo>=0?'text-green-700':'text-red-700'} flex items-center gap-1 text-xs font-semibold`}><Receipt size={15}/><span>Saldo</span></div>
+          <div className={`text-lg font-black ${saldo>=0?'text-green-700':'text-red-700'}`}>{fmtShort(saldo)}</div>
+          <div className={`text-xs ${saldo>=0?'text-green-400':'text-red-400'}`}>{saldo>=0?'disponible':'déficit'}</div>
+        </div>
+
+        {/* % Ejecutado */}
+        <div className="bg-violet-50 rounded-xl p-3 border flex flex-col gap-1">
+          <div className="text-violet-700 flex items-center gap-1 text-xs font-semibold"><TrendingUp size={15}/><span>Avance</span></div>
+          <div className="text-lg font-black text-violet-700">{totalDisp>0?Math.round((totalGast/totalDisp)*100):0}%</div>
+          <div className="text-xs text-violet-400">del presupuesto</div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -775,6 +830,19 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
           onNavigateOficios={onNavigateOficios}
         />
       )}
+
+      {/* ── Modal editar presupuesto anual ── */}
+      {editPresModal&&(
+        <EditPresAnualModal
+          presAnual={presAnual}
+          anioActual={anioActual}
+          presAnualActual={presAnualActual}
+          totalFondos={totalFondos}
+          totalGast={totalGast}
+          onSave={savePresAnual}
+          onClose={()=>setEditPresModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1009,6 +1077,150 @@ function FondoModal({onAdd,onClose}){
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+
+// ── Modal Editar Presupuesto Anual ──────────────────────────────────────────
+function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,totalGast,onSave,onClose}){
+  const [selectedAnio, setSelectedAnio] = useState(presAnualActual.anio || anioActual);
+  const [monto, setMonto]               = useState(String(presAnualActual.monto || ''));
+  const [notas, setNotas]               = useState(presAnualActual.notas || '');
+  const [saving, setSaving]             = useState(false);
+
+  // Cuando cambia el año, cargar el monto de ese año si existe
+  const handleAnioChange = (anio) => {
+    setSelectedAnio(Number(anio));
+    const found = presAnual.find(p=>p.anio===Number(anio));
+    setMonto(found ? String(found.monto) : '');
+    setNotas(found ? (found.notas||'') : '');
+  };
+
+  const handleSave = async(e) => {
+    e.preventDefault();
+    if(!monto||Number(monto)<=0){alert('El monto debe ser mayor a 0.');return;}
+    setSaving(true);
+    await onSave(Number(selectedAnio), Number(monto), notas);
+    setSaving(false);
+    onClose();
+  };
+
+  const totalDisp = Number(monto||0) + totalFondos;
+  const saldo     = totalDisp - totalGast;
+
+  // Años disponibles para editar: año actual ± 1 y los que ya existen
+  const aniosDisp = [...new Set([
+    anioActual - 1, anioActual, anioActual + 1,
+    ...presAnual.map(p=>p.anio)
+  ])].sort();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-xl">
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Presupuesto Aprobado por Año</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Monto fijo autorizado. No aumenta al agregar actividades.</p>
+          </div>
+          <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-red-500"/></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Info box */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
+            <Info size={14} className="shrink-0 mt-0.5"/>
+            <span>Este es el presupuesto aprobado para el año. Para aumentarlo, usa <strong>"Fondos Adicionales"</strong> (requiere origen y justificación). Las nuevas actividades se financian con el saldo disponible.</span>
+          </div>
+
+          <form onSubmit={handleSave} className="space-y-4">
+            {/* Año */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 mb-1 block">Año *</label>
+              <select className="w-full border p-2.5 rounded-lg text-sm font-medium"
+                value={selectedAnio} onChange={e=>handleAnioChange(e.target.value)}>
+                {aniosDisp.map(a=>(
+                  <option key={a} value={a}>
+                    {a}{a===anioActual?' (año actual)':''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Monto */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 mb-1 block">Presupuesto aprobado (Q) *</label>
+              <input required type="number" min="0" step="0.01" placeholder="0.00"
+                className="w-full border p-2.5 rounded-lg text-sm font-bold text-slate-800"
+                value={monto} onChange={e=>setMonto(e.target.value)}/>
+            </div>
+
+            {/* Notas */}
+            <div>
+              <label className="text-xs font-bold text-gray-600 mb-1 block">Notas / descripción</label>
+              <input type="text" placeholder="Ej: Presupuesto aprobado sesión ordinaria CPG..."
+                className="w-full border p-2.5 rounded-lg text-sm"
+                value={notas} onChange={e=>setNotas(e.target.value)}/>
+            </div>
+
+            {/* Preview de impacto */}
+            {monto && Number(monto)>0 && (
+              <div className="bg-gray-50 rounded-xl p-3 border space-y-1.5">
+                <p className="text-xs font-bold text-gray-600 mb-2">Vista previa con este monto:</p>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">Presupuesto base:</span>
+                  <span className="font-bold text-slate-700">Q{Number(monto).toLocaleString('es-GT',{minimumFractionDigits:2})}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">+ Fondos adicionales:</span>
+                  <span className="font-bold text-blue-600">Q{totalFondos.toLocaleString('es-GT',{minimumFractionDigits:2})}</span>
+                </div>
+                <div className="flex justify-between text-xs border-t pt-1.5">
+                  <span className="text-gray-600 font-semibold">= Total disponible:</span>
+                  <span className="font-bold text-green-700">Q{totalDisp.toLocaleString('es-GT',{minimumFractionDigits:2})}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-500">- Ejecutado:</span>
+                  <span className="font-bold text-red-500">Q{totalGast.toLocaleString('es-GT',{minimumFractionDigits:2})}</span>
+                </div>
+                <div className={`flex justify-between text-xs border-t pt-1.5 ${saldo>=0?'text-green-700':'text-red-700'}`}>
+                  <span className="font-bold">= Saldo {saldo>=0?'disponible':'déficit'}:</span>
+                  <span className="font-black">Q{Math.abs(saldo).toLocaleString('es-GT',{minimumFractionDigits:2})}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose}
+                className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-200">
+                Cancelar
+              </button>
+              <button type="submit" disabled={saving}
+                className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                <Save size={15}/>{saving?'Guardando...':'Guardar presupuesto'}
+              </button>
+            </div>
+          </form>
+
+          {/* Historial por año */}
+          {presAnual.length>0 && (
+            <div className="border-t pt-3">
+              <p className="text-xs font-bold text-gray-500 mb-2">Historial de presupuestos registrados:</p>
+              <div className="space-y-1.5">
+                {presAnual.map(p=>(
+                  <div key={p.id} className={`flex items-center justify-between text-xs px-3 py-2 rounded-lg ${p.anio===anioActual?'bg-blue-50 border border-blue-200':'bg-gray-50'}`}>
+                    <span className={`font-bold ${p.anio===anioActual?'text-blue-700':'text-gray-600'}`}>
+                      {p.anio}{p.anio===anioActual?' ← año actual':''}
+                    </span>
+                    <span className="font-black text-gray-700">Q{Number(p.monto).toLocaleString('es-GT',{minimumFractionDigits:2})}</span>
+                    {p.notas&&<span className="text-gray-400 max-w-24 truncate">{p.notas}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
