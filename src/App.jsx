@@ -6,7 +6,7 @@ import {
   FileSignature, Upload, Save, AlertTriangle, FileSpreadsheet,
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
-  Printer, FileDown, Send, Archive, FilePlus, Copy
+  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown
 } from 'lucide-react';
 import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
 import AgendasView from './AgendasView';
