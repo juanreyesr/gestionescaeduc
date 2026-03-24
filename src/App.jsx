@@ -573,33 +573,13 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
         <Card><div className="text-center"><p className="text-3xl font-bold text-yellow-600">{oficios.filter(o=>o.estado==='Borrador').length}</p><p className="text-sm text-gray-500">Borradores</p></div></Card>
         <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{oficios.filter(o=>o.estado==='Enviado').length}</p><p className="text-sm text-gray-500">Enviados</p></div></Card>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {oficios.map(o=>(
-          <Card key={o.id} className="hover:shadow-lg transition-shadow">
-            <div className="flex justify-between items-start gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap"><h3 className="font-bold text-lg text-gray-800">{o.numero_oficio}</h3><Badge status={o.estado}/></div>
-                <p className="text-gray-600 mt-1">{o.motivo}</p>
-                {o.actividad_nombre&&<p className="text-sm text-blue-600 font-medium mt-0.5">Actividad: {o.actividad_nombre}</p>}
-                <div className="flex items-center gap-3 mt-2 flex-wrap">
-                  <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={12}/> {o.fecha}</span>
-                  {o.monto&&<span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium">{o.monto}</span>}
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-2 shrink-0">
-                <div className="flex gap-1">
-                  <button onClick={()=>openOficioLetter(o,appSettings,'preview')} className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium"><Eye size={14}/> Vista Previa</button>
-                  <button onClick={()=>openOficioLetter(o,appSettings,'download')} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-indigo-700 flex items-center gap-1 font-medium"><Download size={14}/> PDF</button>
-                </div>
-                <button onClick={()=>handleEdit(o)} className="bg-gray-50 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1 font-medium"><Edit3 size={14}/> Editar</button>
-                <div className="flex gap-1">
-                  {o.estado==='Borrador'&&(<button onClick={()=>handleStatusChange(o,'Enviado')} className="bg-green-50 text-green-600 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1"><Send size={12}/> Enviado</button>)}
-                  {o.estado==='Enviado'&&(<button onClick={()=>handleStatusChange(o,'Archivado')} className="bg-gray-50 text-gray-500 px-2 py-1 rounded text-xs hover:bg-gray-100 flex items-center gap-1"><Archive size={12}/> Archivar</button>)}
-                  <button onClick={()=>setDeleteModal(o)} className="bg-red-50 text-red-500 px-2 py-1 rounded text-xs hover:bg-red-100 flex items-center gap-1"><Trash2 size={12}/> Eliminar</button>
-                </div>
-              </div>
-            </div>
-          </Card>
+          <OficioCard key={o.id} oficio={o} appSettings={appSettings}
+            onEdit={()=>handleEdit(o)}
+            onStatusChange={(s)=>handleStatusChange(o,s)}
+            onDelete={()=>setDeleteModal(o)}
+          />
         ))}
         {oficios.length===0&&(<div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4"/><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>)}
       </div>
@@ -617,6 +597,84 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
 // ==========================================
 // FORMULARIO OFICIO
 // ==========================================
+// ── Tarjeta colapsable de oficio ──────────────────────────────────────────────
+const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow overflow-hidden">
+      {/* Fila siempre visible — clic para expandir */}
+      <div className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+           onClick={() => setExpanded(e => !e)}>
+        {/* Número de oficio + estado */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-gray-800">{o.numero_oficio}</span>
+            <Badge status={o.estado}/>
+            <span className="text-xs text-gray-400 flex items-center gap-1">
+              <Calendar size={11}/>{o.fecha}
+            </span>
+          </div>
+          {/* Primera línea del motivo — siempre visible */}
+          <p className="text-sm text-gray-500 truncate mt-0.5">{o.motivo}</p>
+        </div>
+        {/* Indicador expandir/colapsar */}
+        <ChevronDown size={16} className={`text-gray-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}/>
+      </div>
+
+      {/* Contenido expandido */}
+      {expanded && (
+        <div className="border-t px-4 py-3 space-y-3 bg-gray-50">
+          {/* Detalle */}
+          <div className="space-y-1">
+            {o.actividad_nombre && (
+              <p className="text-sm text-blue-700 font-medium flex items-center gap-1">
+                <FileText size={13}/> {o.actividad_nombre}
+              </p>
+            )}
+            {o.monto && (
+              <span className="inline-block text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium border border-green-200">
+                {o.monto}
+              </span>
+            )}
+          </div>
+          {/* Acciones */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={(e)=>{e.stopPropagation();openOficioLetter(o,appSettings,'preview');}}
+              className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium">
+              <Eye size={13}/> Vista Previa
+            </button>
+            <button onClick={(e)=>{e.stopPropagation();openOficioLetter(o,appSettings,'download');}}
+              className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-indigo-700 flex items-center gap-1 font-medium">
+              <Download size={13}/> PDF
+            </button>
+            <button onClick={(e)=>{e.stopPropagation();onEdit();}}
+              className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-200 flex items-center gap-1 font-medium">
+              <Edit3 size={13}/> Editar
+            </button>
+            {o.estado==='Borrador' && (
+              <button onClick={(e)=>{e.stopPropagation();onStatusChange('Enviado');}}
+                className="bg-green-50 text-green-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-green-100 flex items-center gap-1">
+                <Send size={12}/> Enviado
+              </button>
+            )}
+            {o.estado==='Enviado' && (
+              <button onClick={(e)=>{e.stopPropagation();onStatusChange('Archivado');}}
+                className="bg-gray-50 text-gray-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1">
+                <Archive size={12}/> Archivar
+              </button>
+            )}
+            <button onClick={(e)=>{e.stopPropagation();onDelete();}}
+              className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 ml-auto">
+              <Trash2 size={12}/> Eliminar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, existingCount, appSettings }) => {
   const today = new Date().toISOString().split('T')[0];
   const suggestedNum = 'Of. ' + String((existingCount||0)+1).padStart(3,'0') + '.CAEDUC';
@@ -627,10 +685,9 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
     if (!isOpen) return;
     setCurrentStep(1);
     if (preFillData && !initialData) {
-        setFd({ numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:'', monto:'', monto_detalle:'', justificacion:'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
-      } else {
-        setFd({ numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:(()=>{ const m=initialData?.motivo||MOTIVOS_OFICIO[0]; return MOTIVOS_OFICIO.includes(m)?m:'Otro (personalizado)'; })(), motivo_custom:(()=>{ const m=initialData?.motivo||''; return MOTIVOS_OFICIO.includes(m)?'':m; })(), actividad_nombre:initialData?(initialData.actividad_nombre||''):'', actividad_tipo:initialData?(initialData.actividad_tipo||''):'', actividad_fecha:initialData?(initialData.actividad_fecha||''):'', actividad_duracion:initialData?(initialData.actividad_duracion||''):'', actividad_modalidad:initialData?(initialData.actividad_modalidad||''):'', actividad_sede:initialData?(initialData.actividad_sede||''):'', actividad_descripcion:initialData?(initialData.actividad_descripcion||''):'', monto:initialData?(initialData.monto||''):'', monto_detalle:initialData?(initialData.monto_detalle||''):'', justificacion:initialData?(initialData.justificacion||''):'', solicitud_puntual:initialData?(initialData.solicitud_puntual||''):'', cuerpo_personalizado:initialData?(initialData.cuerpo_personalizado||''):'', estado:initialData?(initialData.estado||'Borrador'):'Borrador' });
-      }
+      setFd({ numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:'', monto:'', monto_detalle:'', justificacion:'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
+    } else {
+      setFd({ numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:(()=>{ const m=initialData?.motivo||MOTIVOS_OFICIO[0]; return MOTIVOS_OFICIO.includes(m)?m:'Otro (personalizado)'; })(), motivo_custom:(()=>{ const m=initialData?.motivo||''; return MOTIVOS_OFICIO.includes(m)?'':m; })(), actividad_nombre:initialData?(initialData.actividad_nombre||''):'', actividad_tipo:initialData?(initialData.actividad_tipo||''):'', actividad_fecha:initialData?(initialData.actividad_fecha||''):'', actividad_duracion:initialData?(initialData.actividad_duracion||''):'', actividad_modalidad:initialData?(initialData.actividad_modalidad||''):'', actividad_sede:initialData?(initialData.actividad_sede||''):'', actividad_descripcion:initialData?(initialData.actividad_descripcion||''):'', monto:initialData?(initialData.monto||''):'', monto_detalle:initialData?(initialData.monto_detalle||''):'', justificacion:initialData?(initialData.justificacion||''):'', solicitud_puntual:initialData?(initialData.solicitud_puntual||''):'', cuerpo_personalizado:initialData?(initialData.cuerpo_personalizado||''):'', estado:initialData?(initialData.estado||'Borrador'):'Borrador' });
     }
   }, [isOpen, initialData, preFillData]);
   if (!isOpen||!fd) return null;
