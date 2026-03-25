@@ -406,7 +406,7 @@ export default function AgendasView() {
                 aprobada ? 'bg-green-100 text-green-800 border-green-300'
                          : 'bg-yellow-100 text-yellow-800 border-yellow-300'
               }`}>
-                {aprobada ? <span className="flex items-center gap-1"><Lock size={11}/> Aprobada</span>
+                {aprobada ? <span className="flex items-center gap-1"><Lock size={11}/> Aprobada — editable con registro</span>
                           : <span className="flex items-center gap-1"><Unlock size={11}/> Borrador</span>}
               </span>
             </div>
@@ -428,6 +428,12 @@ export default function AgendasView() {
                 <CheckCircle size={15}/> Aprobar agenda
               </button>
             )}
+            {aprobada && (
+              <button onClick={() => handleSave('Aprobada')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-1.5 text-sm">
+                <Save size={15}/> Guardar cambios
+              </button>
+            )}
             <button
               onClick={() => generateAgendaPDF(activeAgenda, puntosCalc)}
               className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 flex items-center gap-1.5 text-sm">
@@ -444,13 +450,13 @@ export default function AgendasView() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className="text-xs font-bold text-gray-500 mb-1 block">No. de Sesión</label>
-              <input type="number" disabled={aprobada} className="w-full border p-2.5 rounded-lg text-sm font-bold"
+              <input type="number"  className="w-full border p-2.5 rounded-lg text-sm font-bold"
                 value={activeAgenda.numero_sesion}
                 onChange={e => setActiveAgenda(a => ({ ...a, numero_sesion: e.target.value }))}/>
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 mb-1 block">Fecha</label>
-              <input type="date" disabled={aprobada} className="w-full border p-2.5 rounded-lg text-sm cursor-pointer"
+              <input type="date"  className="w-full border p-2.5 rounded-lg text-sm cursor-pointer"
                 value={activeAgenda.fecha_iso || todayISO()}
                 onChange={e => {
                   const iso = e.target.value;
@@ -466,13 +472,13 @@ export default function AgendasView() {
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 mb-1 block">Hora de inicio</label>
-              <input type="time" disabled={aprobada} className="w-full border p-2.5 rounded-lg text-sm cursor-pointer"
+              <input type="time"  className="w-full border p-2.5 rounded-lg text-sm cursor-pointer"
                 value={activeAgenda.hora_inicio}
                 onChange={e => setActiveAgenda(a => ({ ...a, hora_inicio: e.target.value }))}/>
             </div>
             <div>
               <label className="text-xs font-bold text-gray-500 mb-1 block">Modalidad</label>
-              <select disabled={aprobada} className="w-full border p-2.5 rounded-lg text-sm"
+              <select  className="w-full border p-2.5 rounded-lg text-sm"
                 value={activeAgenda.modalidad}
                 onChange={e => setActiveAgenda(a => ({ ...a, modalidad: e.target.value }))}>
                 {MODALIDADES.map(m => <option key={m}>{m}</option>)}
@@ -480,14 +486,14 @@ export default function AgendasView() {
             </div>
             <div className="col-span-2">
               <label className="text-xs font-bold text-gray-500 mb-1 block">Lugar / Plataforma</label>
-              <input disabled={aprobada} className="w-full border p-2.5 rounded-lg text-sm"
+              <input  className="w-full border p-2.5 rounded-lg text-sm"
                 placeholder="Ej: Zoom, Sede Central CPG..."
                 value={activeAgenda.lugar}
                 onChange={e => setActiveAgenda(a => ({ ...a, lugar: e.target.value }))}/>
             </div>
             <div className="col-span-2">
               <label className="text-xs font-bold text-gray-500 mb-1 block">Notas generales</label>
-              <input disabled={aprobada} className="w-full border p-2.5 rounded-lg text-sm"
+              <input  className="w-full border p-2.5 rounded-lg text-sm"
                 placeholder="Observaciones opcionales..."
                 value={activeAgenda.notas}
                 onChange={e => setActiveAgenda(a => ({ ...a, notas: e.target.value }))}/>
@@ -540,24 +546,32 @@ export default function AgendasView() {
         </div>
 
         {/* Botones de guardado al fondo */}
-        {!aprobada && (
-          <div className="flex gap-3 pt-2 pb-6">
-            <button onClick={() => setView('lista')}
-              className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200">
-              Cancelar
-            </button>
+        <div className="flex gap-3 pt-2 pb-6">
+          <button onClick={() => setView('lista')}
+            className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200">
+            Volver
+          </button>
+          {!aprobada && (
             <button onClick={() => handleSave('Borrador')}
               className="flex-1 bg-yellow-400 text-yellow-900 py-3 rounded-xl font-bold hover:bg-yellow-500 flex items-center justify-center gap-2">
               <Save size={16}/> Guardar borrador
             </button>
+          )}
+          {!aprobada && (
             <button onClick={() => {
               if (window.confirm('¿Aprobar esta agenda? Quedará en el registro oficial.')) handleSave('Aprobada');
             }}
               className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 flex items-center justify-center gap-2">
               <CheckCircle size={16}/> Aprobar agenda
             </button>
-          </div>
-        )}
+          )}
+          {aprobada && (
+            <button onClick={() => handleSave('Aprobada')}
+              className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
+              <Save size={16}/> Guardar cambios
+            </button>
+          )}
+        </div>
         {aprobada && (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
             <Lock size={18} className="text-blue-600 shrink-0 mt-0.5"/>
@@ -751,16 +765,45 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
           </div>
         </div>
       )}
-      {/* Vista de solo lectura cuando está aprobada */}
+      {/* Vista cuando está aprobada — todos los campos editables */}
       {expanded && aprobada && (
-        <div className="px-4 pb-4 border-t pt-3 space-y-2">
-          {punto.descripcion && <p className="text-xs text-gray-500">{punto.descripcion}</p>}
-          {punto.notas_seguimiento && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
-              <p className="text-xs font-bold text-amber-700 mb-1">📋 Notas de seguimiento y resolución</p>
-              <p className="text-xs text-amber-800 whitespace-pre-wrap">{punto.notas_seguimiento}</p>
+        <div className="px-4 pb-4 border-t pt-3 space-y-3">
+          <div>
+            <label className="text-xs font-bold text-gray-500 mb-1 block">Tema</label>
+            <input className="w-full border p-2 rounded-lg text-sm"
+              value={punto.tema}
+              onChange={e => onChange('tema', e.target.value)}/>
+          </div>
+          {punto.descripcion !== undefined && (
+            <div>
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Descripción</label>
+              <textarea rows={2} className="w-full border p-2 rounded-lg text-sm resize-none"
+                value={punto.descripcion || ''}
+                onChange={e => onChange('descripcion', e.target.value)}/>
             </div>
           )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Responsable</label>
+              <input className="w-full border p-2 rounded-lg text-sm"
+                value={punto.responsable || ''}
+                onChange={e => onChange('responsable', e.target.value)}/>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-500 mb-1 block">Duración (min)</label>
+              <input type="number" min="0" className="w-full border p-2 rounded-lg text-sm font-bold"
+                value={punto.duracion_min || ''}
+                onChange={e => onChange('duracion_min', Number(e.target.value))}/>
+            </div>
+          </div>
+          <div className="border-t mt-2 pt-3">
+            <label className="text-xs font-bold text-amber-700 mb-1 block">📋 Notas de seguimiento y resolución</label>
+            <textarea rows={3}
+              className="w-full border border-amber-200 bg-amber-50 p-2 rounded-lg text-sm resize-none"
+              placeholder="Acuerdos, resoluciones, pendientes..."
+              value={punto.notas_seguimiento || ''}
+              onChange={e => onChange('notas_seguimiento', e.target.value)}/>
+          </div>
         </div>
       )}
     </div>
