@@ -325,62 +325,75 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   // Reporte PDF
   const generateReport = ()=>{
     const pctEjec=totalDisp>0?Math.round((totalGast/totalDisp)*100):0;
+
+    // Rows: constrained columns
     const rowsActs=actividades.map((a,i)=>{
       const lineas=gastosAct.filter(g=>g.actividad_id===a.id);
       const gast=Number(a.monto_gastado||0);
       const disp=Number(a.monto||0)-gast;
+      const estadoColor=a.estado_general==='Completado'?'#166534':a.estado_general==='En proceso'?'#1e40af':a.estado_general==='Cancelado'?'#4b5563':'#854d0e';
+      const estadoBg=a.estado_general==='Completado'?'#dcfce7':a.estado_general==='En proceso'?'#dbeafe':a.estado_general==='Cancelado'?'#f3f4f6':'#fef9c3';
       return `
-        <tr style="background:${i%2===0?'#f9fafb':'white'}">
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${a.numero||''}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${a.trimestre||''}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;font-weight:600;">${a.area||''}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${a.actividad||''}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${a.fecha||''}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">Q${fmt(a.monto)}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;">Q${fmt(gast)}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};">Q${fmt(disp)}</td>
-          <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">
-            <span style="padding:2px 6px;border-radius:9999px;font-size:9px;font-weight:700;background:${a.estado_general==='Completado'?'#dcfce7':a.estado_general==='En proceso'?'#dbeafe':'#fef9c3'};color:${a.estado_general==='Completado'?'#166534':a.estado_general==='En proceso'?'#1e40af':'#854d0e'};">${a.estado_general||'Pendiente'}</span>
+        <tr style="background:${i%2===0?'#f9fafb':'white'};">
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${a.trimestre||''}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;font-weight:600;white-space:nowrap;">${(a.area||'').replace('/','/ ')}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;max-width:200px;word-wrap:break-word;">${a.actividad||''}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${a.fecha||''}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap;">Q${fmt(a.monto)}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;white-space:nowrap;">Q${fmt(gast)}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};white-space:nowrap;">Q${fmt(disp)}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">
+            <span style="padding:1px 5px;border-radius:9999px;font-size:8px;font-weight:700;background:${estadoBg};color:${estadoColor};">${a.estado_general||'Pendiente'}</span>
           </td>
         </tr>
-        ${lineas.length>0?`<tr><td colspan="9" style="padding:3px 8px 6px 24px;background:#f1f5f9;"><span style="font-size:9px;color:#475569;">Detalle gastos: </span>${lineas.map(l=>`<span style="font-size:9px;color:#334155;margin-right:10px;">• ${l.descripcion}: Q${fmt(l.monto)}${l.fecha?' ('+l.fecha+')':''}</span>`).join('')}</td></tr>`:''}
+        ${lineas.length>0?`<tr><td colspan="8" style="padding:2px 5px 4px 16px;background:#f1f5f9;border-bottom:1px solid #e5e7eb;"><span style="font-size:8px;color:#475569;font-weight:600;">Gastos: </span>${lineas.map(l=>`<span style="font-size:8px;color:#334155;margin-right:8px;">• ${l.descripcion}: Q${fmt(l.monto)}${l.fecha?' ('+l.fecha+')':''}</span>`).join('')}</td></tr>`:''}
       `;
     }).join('');
+
     const rowsRubros=rubros.map(r=>{
       const lineas=gastosRubro.filter(g=>g.rubro_id===r.id);
       const gast=lineas.reduce((s,g)=>s+Number(g.monto||0),0);
       const disp=Number(r.monto_asignado||0)-gast;
       return `
         <tr style="background:#eff6ff;">
-          <td colspan="2" style="padding:6px 8px;font-size:10px;font-weight:700;border-bottom:1px solid #dbeafe;">${r.nombre}</td>
-          <td style="padding:6px 8px;font-size:10px;text-align:right;font-weight:700;border-bottom:1px solid #dbeafe;">Q${fmt(r.monto_asignado)}</td>
-          <td style="padding:6px 8px;font-size:10px;text-align:right;color:#dc2626;border-bottom:1px solid #dbeafe;">Q${fmt(gast)}</td>
-          <td style="padding:6px 8px;font-size:10px;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};font-weight:700;border-bottom:1px solid #dbeafe;">Q${fmt(disp)}</td>
+          <td colspan="3" style="padding:5px;font-size:9px;font-weight:700;border-bottom:1px solid #dbeafe;">${r.nombre}</td>
+          <td style="padding:5px;font-size:9px;border-bottom:1px solid #dbeafe;"></td>
+          <td style="padding:5px;font-size:9px;text-align:right;font-weight:700;border-bottom:1px solid #dbeafe;">Q${fmt(r.monto_asignado)}</td>
+          <td style="padding:5px;font-size:9px;text-align:right;color:#dc2626;border-bottom:1px solid #dbeafe;">Q${fmt(gast)}</td>
+          <td style="padding:5px;font-size:9px;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};font-weight:700;border-bottom:1px solid #dbeafe;">Q${fmt(disp)}</td>
+          <td style="border-bottom:1px solid #dbeafe;"></td>
         </tr>
-        ${lineas.map(l=>`<tr><td colspan="5" style="padding:3px 8px 3px 20px;background:#f8fafc;font-size:9px;color:#475569;border-bottom:1px solid #f1f5f9;">• ${l.descripcion}: <strong>Q${fmt(l.monto)}</strong>${l.fecha?' — '+l.fecha:''}</td></tr>`).join('')}
+        ${lineas.map(l=>`<tr><td colspan="8" style="padding:2px 5px 3px 16px;background:#f8fafc;font-size:8px;color:#475569;border-bottom:1px solid #f1f5f9;">• ${l.descripcion}: <strong>Q${fmt(l.monto)}</strong>${l.fecha?' — '+l.fecha:''}</td></tr>`).join('')}
       `;
     }).join('');
+
     const rowsFondos=fondos.map(f=>`
       <tr>
-        <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${f.fecha||''}</td>
-        <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;font-weight:600;">Q${fmt(f.monto)}</td>
-        <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${f.origen||''}</td>
-        <td style="padding:5px 8px;font-size:10px;border-bottom:1px solid #e5e7eb;">${f.razon||''}</td>
+        <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;">${f.fecha||''}</td>
+        <td style="padding:4px 5px;font-size:9px;font-weight:600;border-bottom:1px solid #e5e7eb;">Q${fmt(f.monto)}</td>
+        <td colspan="4" style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;">${f.origen||''}</td>
+        <td colspan="2" style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;color:#6b7280;">${f.razon||''}</td>
       </tr>
     `).join('');
+
+    const thStyle = 'background:#1e3a5f;color:white;padding:5px;font-size:9px;text-align:left;';
+
     const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC 2026</title>
-    <style>@page{size:letter;margin:0.5in;}body{font-family:Arial,sans-serif;color:#111;background:white;font-size:11px;}
-    h1{font-size:18px;color:#1e3a5f;margin:0 0 4px;}h2{font-size:13px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:4px;margin:20px 0 8px;}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px;}th{background:#1e3a5f;color:white;padding:6px 8px;font-size:10px;text-align:left;}
-    .card{display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:10px 16px;margin:4px;text-align:center;min-width:110px;}
-    .card .val{font-size:16px;font-weight:800;}.card .lbl{font-size:9px;color:#6b7280;margin-top:2px;}
-    .page-break{page-break-before:always;}</style></head><body>
-    <div style="border-bottom:3px solid #1e3a5f;padding-bottom:10px;margin-bottom:16px;">
-      <h1>Reporte de Ejecución Presupuestaria</h1>
-      <p style="color:#6b7280;font-size:11px;margin:0;">CAEDUC 2026 — Colegio de Psicólogos de Guatemala &nbsp;|&nbsp; Generado: ${nowTs()}</p>
+    <style>
+      @page{size:letter landscape;margin:0.4in;}
+      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;}
+      h1{font-size:15px;color:#1e3a5f;margin:0 0 3px;}
+      h2{font-size:11px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:3px;margin:14px 0 6px;}
+      table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;}
+      .card{display:inline-block;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:3px;text-align:center;min-width:90px;}
+      .card .val{font-size:13px;font-weight:800;}.card .lbl{font-size:8px;color:#6b7280;}
+    </style></head><body>
+    <div style="border-bottom:3px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
+      <h1>Reporte de Ejecución Presupuestaria — CAEDUC 2026</h1>
+      <p style="color:#6b7280;font-size:9px;margin:0;">Colegio de Psicólogos de Guatemala &nbsp;|&nbsp; Generado: ${nowTs()}</p>
     </div>
-    <h2>Resumen General</h2>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
       <div class="card"><div class="val" style="color:#1e3a5f;">Q${fmt(presBase)}</div><div class="lbl">Presupuesto Base</div></div>
       <div class="card"><div class="val" style="color:#2563eb;">Q${fmt(totalFondos)}</div><div class="lbl">Fondos Adicionales</div></div>
       <div class="card"><div class="val" style="color:#16a34a;">Q${fmt(totalDisp)}</div><div class="lbl">Total Disponible</div></div>
@@ -388,43 +401,80 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       <div class="card"><div class="val" style="color:${saldo>=0?'#16a34a':'#dc2626'};">Q${fmt(saldo)}</div><div class="lbl">Saldo Disponible</div></div>
       <div class="card"><div class="val" style="color:#7c3aed;">${pctEjec}%</div><div class="lbl">% Ejecutado</div></div>
     </div>
+
     <h2>Actividades Planificadas (${actividades.length})</h2>
-    <table><thead><tr><th>#</th><th>Trimestre</th><th>Área</th><th>Actividad</th><th>Fecha</th>
-      <th style="text-align:right;">Asignado</th><th style="text-align:right;">Gastado</th>
-      <th style="text-align:right;">Disponible</th><th>Estado</th></tr></thead>
-    <tbody>${rowsActs}</tbody>
-    <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
-      <td colspan="5" style="padding:6px 8px;font-size:10px;">TOTAL ACTIVIDADES</td>
-      <td style="padding:6px 8px;font-size:10px;text-align:right;">Q${fmt(totalActAsig)}</td>
-      <td style="padding:6px 8px;font-size:10px;text-align:right;">Q${fmt(totalActGast)}</td>
-      <td style="padding:6px 8px;font-size:10px;text-align:right;">Q${fmt(totalActAsig-totalActGast)}</td><td></td>
-    </tr></tfoot></table>
-    <div class="page-break"></div>
+    <table style="table-layout:fixed;">
+      <colgroup>
+        <col style="width:12%"/>
+        <col style="width:13%"/>
+        <col style="width:30%"/>
+        <col style="width:9%"/>
+        <col style="width:9%"/>
+        <col style="width:9%"/>
+        <col style="width:9%"/>
+        <col style="width:9%"/>
+      </colgroup>
+      <thead><tr>
+        <th style="${thStyle}">Trimestre</th>
+        <th style="${thStyle}">Área</th>
+        <th style="${thStyle}">Actividad</th>
+        <th style="${thStyle}">Fecha</th>
+        <th style="${thStyle}text-align:right;">Asignado</th>
+        <th style="${thStyle}text-align:right;">Gastado</th>
+        <th style="${thStyle}text-align:right;">Disponible</th>
+        <th style="${thStyle}">Estado</th>
+      </tr></thead>
+      <tbody>${rowsActs}</tbody>
+      <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
+        <td colspan="4" style="padding:5px;font-size:9px;">TOTAL ACTIVIDADES</td>
+        <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActAsig)}</td>
+        <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActGast)}</td>
+        <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActAsig-totalActGast)}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+
     <h2>Rubros Especiales</h2>
-    <table><thead><tr><th colspan="2">Rubro</th><th style="text-align:right;">Asignado</th>
-      <th style="text-align:right;">Gastado</th><th style="text-align:right;">Disponible</th></tr></thead>
-    <tbody>${rowsRubros}</tbody>
-    <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
-      <td colspan="2" style="padding:6px 8px;font-size:10px;">TOTAL RUBROS</td>
-      <td style="padding:6px 8px;font-size:10px;text-align:right;">Q${fmt(totalRubAsig)}</td>
-      <td style="padding:6px 8px;font-size:10px;text-align:right;">Q${fmt(totalRubGast)}</td>
-      <td style="padding:6px 8px;font-size:10px;text-align:right;">Q${fmt(totalRubAsig-totalRubGast)}</td>
-    </tr></tfoot></table>
+    <table style="table-layout:fixed;">
+      <colgroup><col style="width:12%"/><col style="width:13%"/><col style="width:30%"/><col style="width:9%"/><col style="width:9%"/><col style="width:9%"/><col style="width:9%"/><col style="width:9%"/></colgroup>
+      <thead><tr>
+        <th colspan="4" style="${thStyle}">Rubro</th>
+        <th style="${thStyle}text-align:right;">Asignado</th>
+        <th style="${thStyle}text-align:right;">Gastado</th>
+        <th style="${thStyle}text-align:right;">Disponible</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rowsRubros}</tbody>
+      <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
+        <td colspan="4" style="padding:5px;font-size:9px;">TOTAL RUBROS</td>
+        <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalRubAsig)}</td>
+        <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalRubGast)}</td>
+        <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalRubAsig-totalRubGast)}</td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+
     ${fondos.length>0?`
-    <h2>Fondos Adicionales Recibidos</h2>
-    <table><thead><tr><th>Fecha</th><th>Monto</th><th>Origen</th><th>Razón / Justificación</th></tr></thead>
-    <tbody>${rowsFondos}</tbody>
-    <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
-      <td style="padding:6px 8px;font-size:10px;">TOTAL</td>
-      <td style="padding:6px 8px;font-size:10px;">Q${fmt(totalFondos)}</td><td colspan="2"></td>
-    </tr></tfoot></table>`:''}
-    <div style="margin-top:24px;border-top:2px solid #e5e7eb;padding-top:12px;display:flex;justify-content:space-between;align-items:flex-end;">
-      <div style="font-size:9px;color:#9ca3af;">Reporte generado automáticamente por CAEDUC App<br>colegiodepsicologos.org.gt</div>
+    <h2>Fondos Adicionales</h2>
+    <table style="table-layout:fixed;">
+      <colgroup><col style="width:10%"/><col style="width:12%"/><col style="width:38%"/><col style="width:40%"/></colgroup>
+      <thead><tr><th style="${thStyle}" colspan="2">Fecha / Monto</th><th style="${thStyle}">Origen</th><th style="${thStyle}">Razón</th></tr></thead>
+      <tbody>${rowsFondos}</tbody>
+      <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
+        <td style="padding:5px;font-size:9px;">TOTAL</td>
+        <td style="padding:5px;font-size:9px;">Q${fmt(totalFondos)}</td>
+        <td colspan="2"></td>
+      </tr></tfoot>
+    </table>`:''}
+
+    <div style="margin-top:16px;border-top:2px solid #e5e7eb;padding-top:10px;display:flex;justify-content:space-between;align-items:flex-end;">
+      <div style="font-size:8px;color:#9ca3af;">CAEDUC App — colegiodepsicologos.org.gt</div>
       <div style="text-align:right;">
-        <div style="font-size:18px;font-weight:800;color:${saldo>=0?'#16a34a':'#dc2626'};">Saldo: Q${fmt(saldo)}</div>
-        <div style="font-size:9px;color:#6b7280;">${pctEjec}% del presupuesto ejecutado</div>
+        <div style="font-size:15px;font-weight:800;color:${saldo>=0?'#16a34a':'#dc2626'};">Saldo: Q${fmt(saldo)}</div>
+        <div style="font-size:8px;color:#6b7280;">${pctEjec}% del presupuesto ejecutado</div>
       </div>
-    </div></body></html>`;
+    </div>
+    </body></html>`;
     downloadReport(html,`Reporte_Ejecucion_CAEDUC_2026_${todayStr()}`);
   };
 
@@ -575,7 +625,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               return (
                 <div key={act.id} className={`bg-white rounded-xl shadow-sm border-l-4 ${c.border} hover:shadow-md transition-shadow`}>
                   <div className="p-3 flex items-start gap-3">
-                    <span className="text-xs font-bold text-gray-300 w-6 text-center shrink-0 mt-1">{act.numero}</span>
+                    <span className="text-xs font-bold text-gray-200 w-6 text-center shrink-0 mt-1">{idx+1}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-0.5">
                         <AreaTag area={act.area}/>
