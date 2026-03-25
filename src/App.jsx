@@ -11,9 +11,41 @@ import {
 import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
 import AgendasView from './AgendasView';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('CAEDUC: Variables de entorno faltantes. Verifica VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.');
+}
+
+const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder'
+);
+
+// ── Error Boundary para diagnóstico ──────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
+  componentDidCatch(error, info) { this.setState({ error, info }); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{padding:'40px',fontFamily:'monospace',background:'#fff3f3',minHeight:'100vh'}}>
+          <h1 style={{color:'#dc2626',fontSize:'24px',marginBottom:'16px'}}>⚠️ Error de la aplicación</h1>
+          <p style={{color:'#dc2626',fontWeight:'bold',marginBottom:'8px'}}>{this.state.error?.toString()}</p>
+          <pre style={{background:'#fee2e2',padding:'16px',borderRadius:'8px',overflow:'auto',fontSize:'12px',color:'#7f1d1d'}}>
+            {this.state.info?.componentStack}
+          </pre>
+          <p style={{marginTop:'16px',color:'#666',fontSize:'12px'}}>
+            Toma captura de este error y compártelo para diagnóstico.
+          </p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 
 const ROLES = ['Coordinadora','Subcoordinador','Secretaria','Prosecretaria','Gestor del Conocimiento','Vocal I','Vocal II'];
 const ACTIVITY_TYPES = ['Certificación','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
@@ -765,6 +797,7 @@ export default function CAEDUCApp() {
   const adminClass = userMode === 'admin' ? (isSidebarOpen ? 'ml-64' : 'ml-20') : '';
 
   return (
+    <ErrorBoundary>
     <div className="flex min-h-screen bg-gray-100 font-sans text-gray-800">
       {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout}/>}
       <main className={"flex-1 p-4 md:p-8 transition-all " + adminClass} style={{overflowX:'hidden',minWidth:0}}>
@@ -784,5 +817,6 @@ export default function CAEDUCApp() {
         )}
       </main>
     </div>
+    </ErrorBoundary>
   );
 }
