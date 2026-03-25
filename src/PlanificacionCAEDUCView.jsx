@@ -617,7 +617,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
           </div>
 
           <div className="space-y-2">
-            {filteredActs.map(act=>{
+            {filteredActs.map((act,idx)=>{
               const c=AREA_STYLE[act.area]||{};
               const asig=Number(act.monto||0);
               const gast=Number(act.monto_gastado||0);
