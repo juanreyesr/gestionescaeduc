@@ -82,6 +82,7 @@ const generateAgendaPDF = async (agenda, puntos) => {
         ${p.hora_inicio && p.hora_fin ? `${p.hora_inicio} a ${p.hora_fin}` : p.duracion_min ? `${p.duracion_min} min` : '—'}
       </td>
     </tr>
+    ${p.notas_seguimiento ? `<tr><td colspan="4" style="border:1px solid #d1d5db;padding:4px 10px 6px 24px;background:#fffbeb;"><span style="font-size:9px;font-weight:700;color:#92400e;">📋 Seguimiento: </span><span style="font-size:9px;color:#78350f;">${p.notas_seguimiento}</span></td></tr>` : ''}
   `).join('');
 
   const durTotal = totalDuracion(puntos);
@@ -236,6 +237,18 @@ export default function AgendasView() {
     // Recalcular tiempos antes de guardar
     const puntosCalc = recalcTimes(puntos, activeAgenda.hora_inicio);
 
+    // Si ya estaba aprobada y se vuelve a guardar = registrar edición
+    let editFields = {};
+    if (activeAgenda.estado === 'Aprobada' && agendaId) {
+      const { data: userData } = await supabase.auth.getUser();
+      const userName = userData?.user?.email || 'usuario';
+      editFields = {
+        editado_en:    new Date().toISOString(),
+        editado_por:   userName,
+        veces_editada: (activeAgenda.veces_editada || 0) + 1,
+      };
+    }
+
     // Upsert agenda
     const agendaData = {
       numero_sesion: activeAgenda.numero_sesion,
@@ -247,6 +260,7 @@ export default function AgendasView() {
       estado:        estadoDestino,
       notas:         activeAgenda.notas,
       updated_at:    new Date().toISOString(),
+      ...editFields,
     };
 
     if (agendaId) {
@@ -262,15 +276,16 @@ export default function AgendasView() {
     // Borrar puntos anteriores y reinsertar
     await supabase.from('caeduc_agenda_puntos').delete().eq('agenda_id', agendaId);
     const puntosToInsert = puntosCalc.map((p, i) => ({
-      agenda_id:    agendaId,
-      orden:        i + 1,
-      tema:         p.tema,
-      descripcion:  p.descripcion || '',
-      responsable:  p.responsable || '',
-      hora_inicio:  p.hora_inicio,
-      duracion_min: Number(p.duracion_min) || 0,
-      hora_fin:     p.hora_fin,
-      es_fijo:      p.es_fijo || false,
+      agenda_id:         agendaId,
+      orden:             i + 1,
+      tema:              p.tema,
+      descripcion:       p.descripcion || '',
+      responsable:       p.responsable || '',
+      hora_inicio:       p.hora_inicio,
+      duracion_min:      Number(p.duracion_min) || 0,
+      hora_fin:          p.hora_fin,
+      es_fijo:           p.es_fijo || false,
+      notas_seguimiento: p.notas_seguimiento || '',
     }));
     const { error: ep } = await supabase.from('caeduc_agenda_puntos').insert(puntosToInsert);
     if (ep) { alert('Error al guardar puntos: ' + ep.message); return; }
@@ -544,15 +559,22 @@ export default function AgendasView() {
           </div>
         )}
         {aprobada && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-            <Lock size={18} className="text-green-600 shrink-0"/>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+            <Lock size={18} className="text-blue-600 shrink-0 mt-0.5"/>
             <div className="flex-1">
-              <p className="text-sm font-bold text-green-800">Agenda aprobada — registro oficial</p>
-              <p className="text-xs text-green-600">Esta agenda ya fue aprobada y no puede modificarse.</p>
+              <p className="text-sm font-bold text-blue-800">Agenda aprobada — editable con registro</p>
+              <p className="text-xs text-blue-600">Cualquier cambio guardado quedará registrado con fecha y usuario.</p>
+              {activeAgenda.editado_en && (
+                <p className="text-xs text-orange-600 mt-1">
+                  ✏ Última edición: {new Date(activeAgenda.editado_en).toLocaleString('es-GT')}
+                  {activeAgenda.editado_por ? ` · ${activeAgenda.editado_por.split('@')[0]}` : ''}
+                  {activeAgenda.veces_editada > 1 ? ` (${activeAgenda.veces_editada} ediciones)` : ''}
+                </p>
+              )}
             </div>
-            <button onClick={() => setView('lista')}
-              className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-green-700 text-sm">
-              Volver a la lista
+            <button onClick={() => handleSave('Aprobada')}
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-blue-700 text-sm flex items-center gap-1.5">
+              <Save size={14}/> Guardar cambios
             </button>
           </div>
         )}
@@ -716,12 +738,29 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
               )}
             </div>
           </div>
+          {/* Notas de seguimiento y resolución */}
+          <div className="border-t mt-3 pt-3">
+            <label className="text-xs font-bold text-amber-700 mb-1 block flex items-center gap-1">
+              📋 Notas de seguimiento y resolución
+            </label>
+            <textarea rows={3}
+              className="w-full border border-amber-200 bg-amber-50 p-2 rounded-lg text-sm resize-none focus:ring-2 focus:ring-amber-300 focus:outline-none"
+              placeholder="Anotar aquí acuerdos, resoluciones, pendientes o notas de seguimiento de este punto..."
+              value={punto.notas_seguimiento || ''}
+              onChange={e => onChange('notas_seguimiento', e.target.value)}/>
+          </div>
         </div>
       )}
       {/* Vista de solo lectura cuando está aprobada */}
       {expanded && aprobada && (
-        <div className="px-4 pb-4 border-t pt-3 space-y-1">
+        <div className="px-4 pb-4 border-t pt-3 space-y-2">
           {punto.descripcion && <p className="text-xs text-gray-500">{punto.descripcion}</p>}
+          {punto.notas_seguimiento && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2">
+              <p className="text-xs font-bold text-amber-700 mb-1">📋 Notas de seguimiento y resolución</p>
+              <p className="text-xs text-amber-800 whitespace-pre-wrap">{punto.notas_seguimiento}</p>
+            </div>
+          )}
         </div>
       )}
     </div>
