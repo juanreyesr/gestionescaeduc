@@ -97,12 +97,13 @@ const downloadReport = async(html,filename) => {
     ov.innerHTML='<div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:sp 0.8s linear infinite;"></div><p style="font-size:15px;color:#374151;font-weight:600;">Generando reporte PDF...</p><style>@keyframes sp{to{transform:rotate(360deg)}}</style>';
     document.body.appendChild(ov);
     const ct=document.createElement('div');
-    ct.style.cssText='position:fixed;top:0;left:0;width:8.5in;background:white;z-index:99998;overflow:visible;';
+    // Landscape letter = 11in x 8.5in = 1056px x 816px at 96dpi
+    ct.style.cssText='position:fixed;top:0;left:0;width:1056px;max-width:1056px;background:white;z-index:99998;overflow:hidden;';
     document.body.appendChild(ct); ct.innerHTML=html;
     await new Promise(r=>setTimeout(r,1000));
     await h2p().set({margin:0,filename:filename+'.pdf',image:{type:'jpeg',quality:0.92},
-      html2canvas:{scale:2,useCORS:true,logging:false,scrollX:0,scrollY:0,width:ct.scrollWidth,height:ct.scrollHeight},
-      jsPDF:{unit:'in',format:'letter',orientation:'portrait'},
+      html2canvas:{scale:2,useCORS:true,logging:false,scrollX:0,scrollY:0,width:1056,height:ct.scrollHeight},
+      jsPDF:{unit:'in',format:'letter',orientation:'landscape'},
       pagebreak:{mode:['css','legacy']}
     }).from(ct).save();
     ct.parentNode&&ct.parentNode.removeChild(ct);
