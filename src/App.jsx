@@ -6,11 +6,12 @@ import {
   FileSignature, Upload, Save, AlertTriangle, FileSpreadsheet,
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
-  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown
+  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail
 } from 'lucide-react';
 import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
 import AgendasView from './AgendasView';
 import DirectorioView from './DirectorioView';
+import CartasSection from './CartasView';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -432,7 +433,7 @@ const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }
 
 // ── OficiosAdminView ───────────────────────────────────────────────────────────
 const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings, preFillData, onClearPreFill }) => {
-  const [showForm,setShowForm]=useState(false);const [editingOficio,setEditingOficio]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [deleting,setDeleting]=useState(false);
+  const [showForm,setShowForm]=useState(false);const [editingOficio,setEditingOficio]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [deleting,setDeleting]=useState(false);const [cartasTab,setCartasTab]=useState('oficios');
   useEffect(()=>{if(preFillData){setEditingOficio(null);setShowForm(true);}},[preFillData]);
   const handleNew=()=>{setEditingOficio(null);if(onClearPreFill)onClearPreFill();setShowForm(true);};
   const handleEdit=(o)=>{setEditingOficio(o);if(onClearPreFill)onClearPreFill();setShowForm(true);};
@@ -442,6 +443,19 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
   const handleStatusChange=async(oficio,newStatus)=>{await onUpdateOficio(oficio.id,{...oficio,estado:newStatus});};
   return (
     <div className="space-y-6">
+      {/* Tabs Oficios / Cartas */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl inline-flex">
+        <button onClick={() => setCartasTab('oficios')}
+          className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='oficios' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+          <FileSignature size={15}/> Oficios
+        </button>
+        <button onClick={() => setCartasTab('cartas')}
+          className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='cartas' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+          <Mail size={15}/> Cartas
+        </button>
+      </div>
+
+      {cartasTab === 'cartas' ? <CartasSection appSettings={appSettings}/> : (<>
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2><p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p></div>
         <button onClick={handleNew} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FilePlus size={20}/> Nuevo Oficio</button>
@@ -463,6 +477,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
           <div className="flex gap-3"><button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button></div>
         </div>
       </Modal>
+    </>)}
     </div>
   );
 };
@@ -745,7 +760,7 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout }) => (
     <nav className="p-2 space-y-2 mt-4">
       <SidebarBtn icon={<CheckCircle/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>
       <SidebarBtn icon={<Users/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen}/>
-      <SidebarBtn icon={<FileSignature/>} label="Oficios" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>
+      <SidebarBtn icon={<FileSignature/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>
       <SidebarBtn icon={<BookOpen/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen}/>
       <SidebarBtn icon={<Users/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>
       <SidebarBtn icon={<Clock/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>
