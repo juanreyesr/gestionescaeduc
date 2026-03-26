@@ -334,21 +334,22 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       const disp=Number(a.monto||0)-gast;
       const estadoColor=a.estado_general==='Completado'?'#166534':a.estado_general==='En proceso'?'#1e40af':a.estado_general==='Cancelado'?'#4b5563':'#854d0e';
       const estadoBg=a.estado_general==='Completado'?'#dcfce7':a.estado_general==='En proceso'?'#dbeafe':a.estado_general==='Cancelado'?'#f3f4f6':'#fef9c3';
-      const areaCorta = (s) => s ? s.replace('Organizacional/Indust.','Org/Indust.').replace('Social/Comunitario','Social/Com.').replace('Actividades CAEDUC','Act.CAEDUC').replace('Reunión CAEDUC','Reun.CAEDUC') : '';
+      const gastosInline=lineas.length>0?lineas.map(l=>`<span style="font-size:7.5px;color:#64748b;margin-right:6px;">• ${l.descripcion}: Q${fmt(l.monto)}${l.fecha?' ('+l.fecha+')':''}</span>`).join(''):'';
       return `
         <tr style="background:${i%2===0?'#f9fafb':'white'};">
-          <td style="padding:4px 5px;font-size:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;word-wrap:break-word;overflow-wrap:break-word;">${a.trimestre||''}</td>
-          <td style="padding:4px 5px;font-size:8px;border-bottom:1px solid #e5e7eb;font-weight:600;word-wrap:break-word;overflow-wrap:break-word;">${areaCorta(a.area)}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;word-wrap:break-word;overflow-wrap:break-word;">${a.actividad||''}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${a.fecha||''}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap;">Q${fmt(a.monto)}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;white-space:nowrap;">Q${fmt(gast)}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};white-space:nowrap;">Q${fmt(disp)}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">
-            <span style="padding:1px 5px;border-radius:9999px;font-size:8px;font-weight:700;background:${estadoBg};color:${estadoColor};">${a.estado_general||'Pendiente'}</span>
+          <td style="padding:4px 6px;font-size:9px;border-bottom:1px solid #e5e7eb;word-wrap:break-word;">
+            <div style="font-weight:600;line-height:1.3;">${a.actividad||''}</div>
+            <div style="font-size:7.5px;color:#6b7280;margin-top:1px;">${a.trimestre||''} &nbsp;·&nbsp; ${a.area||''}</div>
+            ${gastosInline?`<div style="margin-top:2px;">${gastosInline}</div>`:''}
+          </td>
+          <td style="padding:4px 6px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${a.fecha||''}</td>
+          <td style="padding:4px 6px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap;">Q${fmt(a.monto)}</td>
+          <td style="padding:4px 6px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;white-space:nowrap;">Q${fmt(gast)}</td>
+          <td style="padding:4px 6px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};white-space:nowrap;">Q${fmt(disp)}</td>
+          <td style="padding:4px 6px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">
+            <span style="padding:2px 6px;border-radius:9999px;font-size:8px;font-weight:700;background:${estadoBg};color:${estadoColor};">${a.estado_general||'Pendiente'}</span>
           </td>
         </tr>
-        ${lineas.length>0?`<tr><td colspan="8" style="padding:2px 5px 4px 16px;background:#f1f5f9;border-bottom:1px solid #e5e7eb;"><span style="font-size:8px;color:#475569;font-weight:600;">Gastos: </span>${lineas.map(l=>`<span style="font-size:8px;color:#334155;margin-right:8px;">• ${l.descripcion}: Q${fmt(l.monto)}${l.fecha?' ('+l.fecha+')':''}</span>`).join('')}</td></tr>`:''}
       `;
     }).join('');
 
@@ -365,7 +366,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
           <td style="padding:5px;font-size:9px;text-align:right;color:${disp>=0?'#16a34a':'#dc2626'};font-weight:700;border-bottom:1px solid #dbeafe;">Q${fmt(disp)}</td>
           <td style="border-bottom:1px solid #dbeafe;"></td>
         </tr>
-        ${lineas.map(l=>`<tr><td colspan="8" style="padding:2px 5px 3px 16px;background:#f8fafc;font-size:8px;color:#475569;border-bottom:1px solid #f1f5f9;">• ${l.descripcion}: <strong>Q${fmt(l.monto)}</strong>${l.fecha?' — '+l.fecha:''}</td></tr>`).join('')}
+        ${lineas.map(l=>`<tr><td colspan="6" style="padding:2px 5px 3px 16px;background:#f8fafc;font-size:8px;color:#475569;border-bottom:1px solid #f1f5f9;">• ${l.descripcion}: <strong>Q${fmt(l.monto)}</strong>${l.fecha?' — '+l.fecha:''}</td></tr>`).join('')}
       `;
     }).join('');
 
@@ -407,19 +408,16 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     <h2>Actividades Planificadas (${actividades.length})</h2>
     <table style="table-layout:fixed;">
       <colgroup>
-        <col style="width:10%"/>
+        <col style="width:44%"/>
         <col style="width:12%"/>
-        <col style="width:33%"/>
-        <col style="width:10%"/>
-        <col style="width:9%"/>
-        <col style="width:9%"/>
-        <col style="width:9%"/>
+        <col style="width:11%"/>
+        <col style="width:11%"/>
+        <col style="width:11%"/>
+        <col style="width:11%"/>
         <col style="width:9%"/>
       </colgroup>
       <thead><tr>
-        <th style="${thStyle}">Trimestre</th>
-        <th style="${thStyle}">Área</th>
-        <th style="${thStyle}">Actividad</th>
+        <th style="${thStyle}">Actividad / Área / Trimestre</th>
         <th style="${thStyle}">Fecha</th>
         <th style="${thStyle}text-align:right;">Asignado</th>
         <th style="${thStyle}text-align:right;">Gastado</th>
@@ -428,7 +426,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       </tr></thead>
       <tbody>${rowsActs}</tbody>
       <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
-        <td colspan="4" style="padding:5px;font-size:9px;">TOTAL ACTIVIDADES</td>
+        <td colspan="2" style="padding:5px;font-size:9px;">TOTAL ACTIVIDADES</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActAsig)}</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActGast)}</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActAsig-totalActGast)}</td>
