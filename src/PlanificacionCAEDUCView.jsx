@@ -384,13 +384,14 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC 2026</title>
     <style>
       @page{size:letter landscape;margin:0;}
-      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;padding:24px 30px;box-sizing:border-box;max-width:1056px;overflow-x:hidden;}
+      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;margin:0;padding:0;}
       h1{font-size:15px;color:#1e3a5f;margin:0 0 3px;}
       h2{font-size:11px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:3px;margin:14px 0 6px;}
       table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;max-width:100%;}
       .card{display:inline-block;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:3px;text-align:center;min-width:90px;}
       .card .val{font-size:13px;font-weight:800;}.card .lbl{font-size:8px;color:#6b7280;}
     </style></head><body>
+    <div style="padding:24px 30px;box-sizing:border-box;width:1056px;overflow:hidden;">
     <div style="border-bottom:3px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
       <h1>Reporte de Ejecución Presupuestaria — CAEDUC 2026</h1>
       <p style="color:#6b7280;font-size:9px;margin:0;">Colegio de Psicólogos de Guatemala &nbsp;|&nbsp; Generado: ${nowTs()}</p>
@@ -474,7 +475,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
         <div style="font-size:8px;color:#6b7280;">${pctEjec}% del presupuesto ejecutado</div>
       </div>
     </div>
-    </body></html>`;
+    </div></body></html>`;
     downloadReport(html,`Reporte_Ejecucion_CAEDUC_2026_${todayStr()}`);
   };
 
