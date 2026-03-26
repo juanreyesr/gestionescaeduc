@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
 import AgendasView from './AgendasView';
+import DirectorioView from './DirectorioView';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -746,6 +747,7 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout }) => (
       <SidebarBtn icon={<Users/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen}/>
       <SidebarBtn icon={<FileSignature/>} label="Oficios" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>
       <SidebarBtn icon={<BookOpen/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen}/>
+      <SidebarBtn icon={<Users/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>
       <SidebarBtn icon={<Clock/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>
       <SidebarBtn icon={<Settings/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
     </nav>
@@ -811,6 +813,7 @@ export default function CAEDUCApp() {
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='agendas' && <AgendasView/>}
+            {currentModule==='directorio' && <DirectorioView/>}
             {currentModule==='reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>}
             {currentModule==='admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember}/>}
           </>
