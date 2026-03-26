@@ -89,39 +89,13 @@ const loadHtml2Pdf = () => new Promise((res,rej)=>{
   s.onload=()=>res(window.html2pdf); s.onerror=()=>rej(new Error('html2pdf no cargó'));
   document.head.appendChild(s);
 });
-const downloadReport = async(html,filename) => {
-  // Overlay
-  const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(255,255,255,0.97);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
-  ov.innerHTML='<div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:sp 0.8s linear infinite;"></div><p style="font-size:15px;color:#374151;font-weight:600;">Generando reporte PDF...</p><style>@keyframes sp{to{transform:rotate(360deg)}}</style>';
-  document.body.appendChild(ov);
-  try {
-    const h2p=await loadHtml2Pdf();
-    // Use iframe to isolate CSS completely
-    const fr=document.createElement('iframe');
-    fr.style.cssText='position:fixed;top:0;left:0;width:1056px;height:5000px;border:none;z-index:99998;visibility:hidden;';
-    document.body.appendChild(fr);
-    fr.contentDocument.open();
-    fr.contentDocument.write(html);
-    fr.contentDocument.close();
-    await new Promise(r=>setTimeout(r,1400));
-    const target=fr.contentDocument.body;
-    target.style.margin='0';
-    target.style.padding='0';
-    const H=target.scrollHeight;
-    fr.style.height=H+'px';
-    await new Promise(r=>setTimeout(r,200));
-    await h2p().set({
-      margin:0,
-      filename:filename+'.pdf',
-      image:{type:'jpeg',quality:0.92},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false,scrollX:0,scrollY:0,width:1056,height:H,windowWidth:1056},
-      jsPDF:{unit:'in',format:'letter',orientation:'landscape'},
-      pagebreak:{mode:['css','legacy']}
-    }).from(target).save();
-    fr.parentNode&&fr.parentNode.removeChild(fr);
-  } catch(e){ console.error('PDF error:',e); alert('Error al generar PDF: '+e.message); }
-  ov.parentNode&&ov.parentNode.removeChild(ov);
+const downloadReport = (html, filename) => {
+  const w = window.open('', '_blank');
+  if (!w) { alert('Permite las ventanas emergentes para generar el reporte.'); return; }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { w.print(); }, 800);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -396,14 +370,17 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 
     const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC 2026</title>
     <style>
-      @page{size:letter landscape;margin:0;}
-      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;margin:0;padding:24px 30px;box-sizing:border-box;}
+      @page{size:letter landscape;margin:0.35in 0.4in;}
+      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;margin:0;padding:0;}
       h1{font-size:15px;color:#1e3a5f;margin:0 0 3px;}
       h2{font-size:11px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:3px;margin:14px 0 6px;}
       table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;max-width:100%;}
       .card{display:inline-block;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:3px;text-align:center;min-width:90px;}
       .card .val{font-size:13px;font-weight:800;}.card .lbl{font-size:8px;color:#6b7280;}
-    </style></head><body>
+    </style>
+  <script>window.onafterprint=()=>window.close();</script>
+  </head><body>
+    <div style="text-align:right;margin-bottom:8px;"><button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;padding:6px 16px;border-radius:4px;font-size:11px;cursor:pointer;font-family:Arial;">🖨️ Imprimir / Guardar PDF</button></div>
     <div style="border-bottom:3px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
       <h1>Reporte de Ejecución Presupuestaria — CAEDUC 2026</h1>
       <p style="color:#6b7280;font-size:9px;margin:0;">Colegio de Psicólogos de Guatemala &nbsp;|&nbsp; Generado: ${nowTs()}</p>
