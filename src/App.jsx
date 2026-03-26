@@ -49,7 +49,7 @@ class ErrorBoundary extends React.Component {
 }
 
 
-const ROLES = ['Coordinadora','Subcoordinador','Secretaria','Prosecretaria','Gestor del Conocimiento','Vocal I','Vocal II'];
+const ROLES = ['Coordinador(a)','Subcoordinador(a)','Secretario(a)','Prosecretario(a)','Gestor(a) del Conocimiento','Vocal I','Vocal II'];
 const ACTIVITY_TYPES = ['Certificación','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
 const MODALITIES = ['Virtual','Presencial','Híbrida'];
 const MOTIVOS_OFICIO = [
@@ -622,7 +622,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-wrap">
         {tabs.map(tab => <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all flex-1 justify-center ${activeTab===tab.id?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>{tab.icon} {tab.label}</button>)}
       </div>
-      {activeTab==='users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember}/>}
+      {activeTab==='users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember} onRefreshMembers={()=>{}}/>}
       {activeTab==='firmas' && <AdminFirmasTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
@@ -631,22 +631,221 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
   );
 };
 
-const AdminUsersTab = ({ members, onUpdateMember }) => {
-  const [showModal,setShowModal]=useState(false);const [editModal,setEditModal]=useState(null);const [newUser,setNewUser]=useState({email:'',password:'',name:'',role:ROLES[0]});const [editData,setEditData]=useState({});const [creating,setCreating]=useState(false);const [saving,setSaving]=useState(false);const [showPw,setShowPw]=useState(false);const [msg,setMsg]=useState(null);
-  const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}if(ad.user){const{error:pe}=await supabase.from('profiles').insert([{id:ad.user.id,name:newUser.name,role:newUser.role,email:newUser.email}]);if(pe)setMsg({type:'warning',text:'Auth OK pero error perfil: '+pe.message});else{setMsg({type:'success',text:`"${newUser.name}" creado.`});setNewUser({email:'',password:'',name:'',role:ROLES[0]});setShowModal(false);}}}catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
-  const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||ROLES[0],email:m.email||''});setEditModal(true);setMsg(null);};
+const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers }) => {
+  const [showModal,setShowModal]=useState(false);
+  const [editModal,setEditModal]=useState(null);
+  const [pwModal,setPwModal]=useState(null);
+  const [deleteModal,setDeleteModal]=useState(null);
+  const [newUser,setNewUser]=useState({email:'',password:'',name:'',role:ROLES[0]});
+  const [editData,setEditData]=useState({});
+  const [newRole,setNewRole]=useState('');
+  const [customRoles,setCustomRoles]=useState([]);
+  const [creating,setCreating]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [deleting,setDeleting]=useState(false);
+  const [showPw,setShowPw]=useState(false);
+  const [showNewPw,setShowNewPw]=useState(false);
+  const [newPassword,setNewPassword]=useState('');
+  const [savingPw,setSavingPw]=useState(false);
+  const [msg,setMsg]=useState(null);
+
+  // Load custom roles from app_settings
+  useEffect(()=>{
+    supabase.from('app_settings').select('value').eq('key','custom_roles').single()
+      .then(({data})=>{if(data?.value)setCustomRoles(JSON.parse(data.value)||[]);});
+  },[]);
+
+  const allRoles = [...ROLES, ...customRoles];
+
+  const saveCustomRoles = async (roles) => {
+    setCustomRoles(roles);
+    const val = JSON.stringify(roles);
+    const {error} = await supabase.from('app_settings').update({value:val}).eq('key','custom_roles');
+    if(error) await supabase.from('app_settings').insert([{key:'custom_roles',value:val}]);
+  };
+
+  const addCustomRole = () => {
+    const r = newRole.trim();
+    if(!r || allRoles.includes(r)) return;
+    saveCustomRoles([...customRoles, r]);
+    setNewRole('');
+  };
+
+  const removeCustomRole = (r) => saveCustomRoles(customRoles.filter(x=>x!==r));
+
+  const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}if(ad.user){const{error:pe}=await supabase.from('profiles').insert([{id:ad.user.id,name:newUser.name,role:newUser.role,email:newUser.email}]);if(pe)setMsg({type:'warning',text:'Auth OK pero error perfil: '+pe.message});else{setMsg({type:'success',text:`"${newUser.name}" creado.`});setNewUser({email:'',password:'',name:'',role:allRoles[0]});setShowModal(false);if(onRefreshMembers)onRefreshMembers();}}}catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
+
+  const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||allRoles[0],email:m.email||''});setEditModal(true);setMsg(null);};
+
   const handleEdit=async(e)=>{e.preventDefault();setSaving(true);setMsg(null);try{await onUpdateMember(editData.id,{name:editData.name,role:editData.role,email:editData.email});setMsg({type:'success',text:'Actualizado.'});setEditModal(null);}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
+
+  const handleChangePassword=async()=>{
+    if(newPassword.length<6){setMsg({type:'error',text:'Mínimo 6 caracteres.'});return;}
+    setSavingPw(true);setMsg(null);
+    try{
+      // Use admin API via Supabase Edge Function or service role
+      // For now update via profile note and show instructions
+      const{error}=await supabase.auth.admin?.updateUserById?.(pwModal.authId,{password:newPassword})
+        || await supabase.rpc('admin_change_password',{user_email:pwModal.email,new_password:newPassword});
+      if(error)throw error;
+      setMsg({type:'success',text:`Contraseña actualizada para ${pwModal.name}.`});
+      setPwModal(null);setNewPassword('');
+    }catch(err){
+      // Fallback: update via direct approach
+      setMsg({type:'error',text:'Para cambiar contraseña ve a Supabase Dashboard > Authentication > Users y busca: '+pwModal.email});
+    }
+    setSavingPw(false);
+  };
+
+  const handleDelete=async()=>{
+    setDeleting(true);
+    try{
+      await supabase.from('profiles').delete().eq('id',deleteModal.id);
+      setMsg({type:'success',text:`${deleteModal.name} eliminado del sistema.`});
+      setDeleteModal(null);
+      if(onRefreshMembers)onRefreshMembers();
+    }catch(err){setMsg({type:'error',text:err.message});}
+    setDeleting(false);
+  };
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center"><h3 className="text-lg font-bold text-gray-700">Usuarios</h3><button onClick={()=>{setShowModal(true);setMsg(null);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"><UserPlus size={18}/> Nuevo</button></div>
-      {msg && <div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700':msg.type==='warning'?'bg-yellow-50 text-yellow-700':'bg-red-50 text-red-700'} border`}>{msg.text}</div>}
-      <div className="grid gap-3">{members.map(m=><Card key={m.id} className="!shadow-sm"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm">{m.name?.charAt(0)?.toUpperCase()||'?'}</div><div><p className="font-semibold">{m.name||'Sin nombre'}</p><p className="text-xs text-gray-500">{m.email||''}</p></div></div><div className="flex items-center gap-2"><span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-xs font-medium">{m.role||'Sin rol'}</span><button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={14}/> Editar</button></div></div></Card>)}</div>
-      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm"><form onSubmit={handleCreate} className="space-y-4"><input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/><div className="relative"><input required type={showPw?'text':'password'} placeholder="Contraseña (min 6)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{ROLES.map(r=><option key={r}>{r}</option>)}</select><button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear'}</button></form></Modal>
-      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm"><form onSubmit={handleEdit} className="space-y-4"><div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role||ROLES[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>{ROLES.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar'}</button></form></Modal>
+    <div className="space-y-5">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-bold text-gray-700">Usuarios del Sistema</h3>
+        <button onClick={()=>{setShowModal(true);setMsg(null);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm font-medium"><UserPlus size={18}/> Nuevo usuario</button>
+      </div>
+
+      {msg && <div className={`p-3 rounded-lg text-sm border ${msg.type==='success'?'bg-green-50 text-green-700 border-green-200':msg.type==='warning'?'bg-yellow-50 text-yellow-700 border-yellow-200':'bg-red-50 text-red-700 border-red-200'}`}>{msg.text}</div>}
+
+      {/* Lista de usuarios */}
+      <div className="grid gap-2">
+        {members.map(m=>(
+          <Card key={m.id} className="!shadow-sm !p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{m.name?.charAt(0)?.toUpperCase()||'?'}</div>
+                <div className="min-w-0">
+                  <p className="font-semibold text-gray-800 truncate">{m.name||'Sin nombre'}</p>
+                  <p className="text-xs text-gray-500 truncate">{m.email||''}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium shrink-0">{m.role||'Sin rol'}</span>
+                <button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 shrink-0 font-medium"><Edit3 size={12}/> Editar</button>
+                <button onClick={()=>{setPwModal(m);setNewPassword('');setMsg(null);}} className="bg-amber-50 text-amber-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-100 flex items-center gap-1 shrink-0 font-medium"><Lock size={12}/> Contraseña</button>
+                <button onClick={()=>setDeleteModal(m)} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 shrink-0 font-medium"><Trash2 size={12}/> Eliminar</button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      {/* Gestión de Roles */}
+      <Card className="!shadow-sm">
+        <h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Settings size={16} className="text-blue-600"/> Roles disponibles</h4>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {ROLES.map(r=><span key={r} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}
+          {customRoles.map(r=>(
+            <span key={r} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+              {r}
+              <button onClick={()=>removeCustomRole(r)} className="ml-1 text-purple-400 hover:text-red-500"><X size={11}/></button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="Nuevo rol personalizado..."
+            value={newRole} onChange={e=>setNewRole(e.target.value)}
+            onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomRole();}}}/>
+          <button onClick={addCustomRole} disabled={!newRole.trim()} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"><Plus size={14}/> Agregar</button>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">Azul = predeterminados · Morado = personalizados (× para eliminar)</p>
+      </Card>
+
+      {/* Modal crear usuario */}
+      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/>
+          <input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/>
+          <div className="relative">
+            <input required type={showPw?'text':'password'} placeholder="Contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/>
+            <button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button>
+          </div>
+          <div>
+            <label className="block text-sm font-bold mb-1">Rol</label>
+            <select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>
+              {allRoles.map(r=><option key={r}>{r}</option>)}
+            </select>
+          </div>
+          <button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear usuario'}</button>
+        </form>
+      </Modal>
+
+      {/* Modal editar usuario */}
+      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm">
+        <form onSubmit={handleEdit} className="space-y-4">
+          <div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div>
+          <div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div>
+          <div>
+            <label className="block text-sm font-bold mb-1">Rol</label>
+            <select className="w-full border p-2.5 rounded-lg" value={editData.role||allRoles[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>
+              {allRoles.map(r=><option key={r}>{r}</option>)}
+            </select>
+          </div>
+          <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar cambios'}</button>
+        </form>
+      </Modal>
+
+      {/* Modal cambiar contraseña */}
+      <Modal isOpen={!!pwModal} onClose={()=>{setPwModal(null);setNewPassword('');}} title="Cambiar Contraseña" size="sm">
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-sm font-bold text-amber-800">{pwModal?.name}</p>
+            <p className="text-xs text-amber-600">{pwModal?.email}</p>
+          </div>
+          <div className="relative">
+            <input type={showNewPw?'text':'password'} placeholder="Nueva contraseña (mín 6 caracteres)"
+              minLength={6} className="w-full border p-2.5 rounded-lg pr-10"
+              value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
+            <button type="button" onClick={()=>setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showNewPw?<EyeOff size={18}/>:<Eye size={18}/>}</button>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 space-y-1">
+            <p className="font-bold">Opción A — Enviar reset por correo:</p>
+            <p>El usuario recibirá un enlace para crear su nueva contraseña.</p>
+            <p className="font-bold mt-1">Opción B — Desde Supabase Dashboard:</p>
+            <p>Authentication → Users → buscar {pwModal?.email} → Send password reset</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>{setPwModal(null);setNewPassword('');}} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold text-sm">Cancelar</button>
+            <button onClick={async()=>{
+              if(!pwModal?.email)return;
+              setSavingPw(true);
+              const{error}=await supabase.auth.resetPasswordForEmail(pwModal.email,{redirectTo:window.location.origin});
+              if(error)setMsg({type:'error',text:error.message});
+              else setMsg({type:'success',text:'✓ Email de reset enviado a '+pwModal.email});
+              setPwModal(null);setNewPassword('');setSavingPw(false);
+            }} disabled={savingPw} className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 disabled:opacity-50 text-sm flex items-center justify-center gap-1">
+              {savingPw?'Enviando...':'📧 Enviar reset por email'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal eliminar usuario */}
+      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Usuario" size="sm">
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-700 font-bold">{deleteModal?.name}</p>
+            <p className="text-red-500 text-sm">{deleteModal?.email} · {deleteModal?.role}</p>
+            <p className="text-red-600 text-sm mt-2">Se eliminará del directorio de usuarios. Esta acción no se puede deshacer.</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button>
+            <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
-
 const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
   const [saving,setSaving]=useState(false);const [msg,setMsg]=useState(null);
   const [f1,setF1]=useState({nombre:'',cargo:'',institucion:''});
