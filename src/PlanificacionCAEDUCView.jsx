@@ -381,8 +381,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 
     const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC 2026</title>
     <style>
-      @page{size:letter landscape;margin:0.4in;}
-      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;}
+      @page{size:letter landscape;margin:0;}
+      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;padding:30px 36px;box-sizing:border-box;}
       h1{font-size:15px;color:#1e3a5f;margin:0 0 3px;}
       h2{font-size:11px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:3px;margin:14px 0 6px;}
       table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;}
@@ -406,10 +406,10 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     <h2>Actividades Planificadas (${actividades.length})</h2>
     <table style="table-layout:fixed;">
       <colgroup>
+        <col style="width:10%"/>
         <col style="width:12%"/>
-        <col style="width:13%"/>
-        <col style="width:30%"/>
-        <col style="width:9%"/>
+        <col style="width:33%"/>
+        <col style="width:10%"/>
         <col style="width:9%"/>
         <col style="width:9%"/>
         <col style="width:9%"/>
