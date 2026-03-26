@@ -334,11 +334,12 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       const disp=Number(a.monto||0)-gast;
       const estadoColor=a.estado_general==='Completado'?'#166534':a.estado_general==='En proceso'?'#1e40af':a.estado_general==='Cancelado'?'#4b5563':'#854d0e';
       const estadoBg=a.estado_general==='Completado'?'#dcfce7':a.estado_general==='En proceso'?'#dbeafe':a.estado_general==='Cancelado'?'#f3f4f6':'#fef9c3';
+      const areaCorta = (s) => s ? s.replace('Organizacional/Indust.','Org/Indust.').replace('Social/Comunitario','Social/Com.').replace('Actividades CAEDUC','Act.CAEDUC').replace('Reunión CAEDUC','Reun.CAEDUC') : '';
       return `
         <tr style="background:${i%2===0?'#f9fafb':'white'};">
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${a.trimestre||''}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;font-weight:600;white-space:nowrap;">${(a.area||'').replace('/','/ ')}</td>
-          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;max-width:200px;word-wrap:break-word;">${a.actividad||''}</td>
+          <td style="padding:4px 5px;font-size:8px;border-bottom:1px solid #e5e7eb;color:#6b7280;word-wrap:break-word;overflow-wrap:break-word;">${a.trimestre||''}</td>
+          <td style="padding:4px 5px;font-size:8px;border-bottom:1px solid #e5e7eb;font-weight:600;word-wrap:break-word;overflow-wrap:break-word;">${areaCorta(a.area)}</td>
+          <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;word-wrap:break-word;overflow-wrap:break-word;">${a.actividad||''}</td>
           <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${a.fecha||''}</td>
           <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap;">Q${fmt(a.monto)}</td>
           <td style="padding:4px 5px;font-size:9px;border-bottom:1px solid #e5e7eb;text-align:right;color:#dc2626;white-space:nowrap;">Q${fmt(gast)}</td>
@@ -382,10 +383,10 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC 2026</title>
     <style>
       @page{size:letter landscape;margin:0;}
-      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;padding:30px 36px;box-sizing:border-box;}
+      body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;padding:24px 30px;box-sizing:border-box;max-width:1056px;overflow-x:hidden;}
       h1{font-size:15px;color:#1e3a5f;margin:0 0 3px;}
       h2{font-size:11px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:3px;margin:14px 0 6px;}
-      table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;}
+      table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;max-width:100%;}
       .card{display:inline-block;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:3px;text-align:center;min-width:90px;}
       .card .val{font-size:13px;font-weight:800;}.card .lbl{font-size:8px;color:#6b7280;}
     </style></head><body>
