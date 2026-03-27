@@ -249,7 +249,7 @@ const BackButton = ({ onClick, label = '← Volver al Menú Principal' }) => (
   </button>
 );
 
-// ── LoginView ──────────────────────────────────────────────────────────────────
+// ── LoginView (REDISEÑADO) ─────────────────────────────────────────────────────
 const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }) => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [email, setEmail] = useState('');
@@ -257,28 +257,166 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
   const youtubeUrl = appSettings?.youtube_tutorial_url || '';
   const reglamentoPath = appSettings?.reglamento_file_path || '';
   const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-6 relative">
-      <Card className="max-w-lg w-full border-t-8 border-t-green-600 hover:shadow-2xl transition-all">
-        <div className="flex flex-col items-center text-center space-y-5 py-8">
-          <img src="/logo-CAEDUC.png" alt="CAEDUC" className="w-32 h-32 object-contain" />
-          <div><h2 className="text-3xl font-bold text-gray-800 mb-2">Solicitud de Avales</h2><p className="text-gray-600 px-4">Portal oficial — CAEDUC</p></div>
-          <button onClick={() => setUserMode('external')} className="bg-green-600 text-white px-8 py-3 rounded-lg hover:bg-green-700 font-bold w-full">Ingresar al Portal de Solicitudes</button>
-          <button onClick={() => setUserMode('consultar_estado')} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-6 py-3 rounded-lg hover:bg-blue-100 font-semibold w-full justify-center border border-blue-200"><Search size={20}/> Consultar Estado</button>
-          <button onClick={() => setUserMode('verificar_aval')} className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-6 py-3 rounded-lg hover:bg-indigo-100 font-semibold w-full justify-center border border-indigo-200"><Shield size={20}/> Verificar Validez de Aval</button>
-          {reglamentoUrl && <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-purple-50 text-purple-700 px-6 py-3 rounded-lg hover:bg-purple-100 font-semibold w-full justify-center border border-purple-200"><BookOpen size={20}/> Descargar Reglamento</a>}
-          {youtubeUrl && <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-red-50 text-red-600 px-6 py-3 rounded-lg hover:bg-red-100 font-semibold w-full justify-center border border-red-200"><Play size={20} fill="currentColor"/> Ver Tutorial</a>}
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-blue-50 p-4 sm:p-6">
+      {/* Tarjeta principal */}
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
+        {/* Header con fondo institucional */}
+        <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 px-6 pt-8 pb-10 relative overflow-hidden">
+          {/* Decoración sutil */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+          {/* Logo institucional */}
+          <div className="relative flex flex-col items-center">
+            <img
+              src="/logo-CAEDUC.png"
+              alt="CAEDUC — Comisión de Acreditación y Educación Continua"
+              className="w-28 h-28 object-contain drop-shadow-lg"
+            />
+            <p className="text-white/50 text-xs tracking-widest uppercase mt-2">
+              Comisión de Acreditación y Educación Continua
+            </p>
+          </div>
         </div>
-      </Card>
-      <button onClick={() => setShowAdmin(true)} className="absolute bottom-4 text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"><Lock size={12}/> Acceso Administrativo</button>
+
+        {/* Curva decorativa */}
+        <div className="relative -mt-5">
+          <div className="bg-white rounded-t-3xl px-6 pt-6 pb-2">
+            <h2 className="text-2xl font-extrabold text-gray-800 text-center tracking-tight">
+              Solicitud de Avales
+            </h2>
+            <p className="text-sm text-gray-400 text-center mt-1 mb-6">
+              Portal oficial de gestión y acreditación
+            </p>
+
+            {/* Botón principal */}
+            <button
+              onClick={() => setUserMode('external')}
+              className="w-full bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold text-base transition-all shadow-sm shadow-green-200 flex items-center justify-center gap-2"
+            >
+              <FileText size={18} />
+              Ingresar al portal de solicitudes
+            </button>
+
+            {/* Acciones secundarias — grid 2 columnas */}
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <button
+                onClick={() => setUserMode('consultar_estado')}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                  <Search size={18} className="text-blue-600" />
+                </div>
+                <span className="text-xs font-semibold text-gray-700 text-center leading-tight">
+                  Consultar estado
+                </span>
+              </button>
+              <button
+                onClick={() => setUserMode('verificar_aval')}
+                className="flex flex-col items-center gap-2 py-4 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                  <Shield size={18} className="text-green-600" />
+                </div>
+                <span className="text-xs font-semibold text-gray-700 text-center leading-tight">
+                  Verificar validez
+                </span>
+              </button>
+            </div>
+
+            {/* Reglamento y Tutorial */}
+            <div className="space-y-2.5 mt-4">
+              {reglamentoUrl && (
+                <a
+                  href={reglamentoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-all"
+                >
+                  <BookOpen size={18} className="text-purple-600 shrink-0" />
+                  <span className="text-sm font-semibold text-purple-700">Descargar reglamento</span>
+                  <Download size={14} className="text-purple-400 ml-auto" />
+                </a>
+              )}
+              {youtubeUrl && (
+                <a
+                  href={youtubeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 transition-all"
+                >
+                  <div className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+                    <Play size={12} className="text-white ml-0.5" fill="white" />
+                  </div>
+                  <span className="text-sm font-semibold text-red-600">Ver tutorial del proceso</span>
+                </a>
+              )}
+            </div>
+
+            {/* Separador */}
+            <div className="border-t border-gray-200 my-5" />
+
+            {/* Botón de acceso administrativo — VISIBLE */}
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border-2 border-slate-700 text-slate-700 font-bold text-sm hover:bg-slate-700 hover:text-white transition-all active:scale-[0.98]"
+            >
+              <Lock size={15} />
+              Acceso administrativo
+            </button>
+
+            {/* Footer */}
+            <p className="text-center text-xs text-gray-300 mt-5 mb-3">
+              © {new Date().getFullYear()} CAEDUC — Colegio de Psicólogos de Guatemala
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de login admin */}
       <Modal isOpen={showAdmin} onClose={() => setShowAdmin(false)} title="Acceso Comisión" size="sm">
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(email, password); }} className="space-y-4">
-          <input type="email" placeholder="Email" className="w-full p-2 border rounded" value={email} onChange={e => setEmail(e.target.value)} required/>
-          <input type="password" placeholder="Contraseña" className="w-full p-2 border rounded" value={password} onChange={e => setPassword(e.target.value)} required/>
-          {authError && <p className="text-red-500 text-sm">{authError}</p>}
-          <button type="submit" disabled={loading} className="w-full bg-blue-800 text-white py-2 rounded font-bold hover:bg-blue-900">{loading ? 'Entrando...' : 'Iniciar Sesión'}</button>
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2">
+            <Lock size={18} className="text-slate-500 shrink-0" />
+            <p className="text-sm text-slate-600">
+              Acceso exclusivo para miembros de la comisión CAEDUC.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Correo electrónico</label>
+            <input type="email" placeholder="usuario@ejemplo.com" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-all" value={email} onChange={e => setEmail(e.target.value)} required/>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Contraseña</label>
+            <input type="password" placeholder="••••••••" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-all" value={password} onChange={e => setPassword(e.target.value)} required/>
+          </div>
+          {authError && (
+            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
+              <AlertCircle size={16} className="text-red-500 shrink-0" />
+              <p className="text-red-600 text-sm">{authError}</p>
+            </div>
+          )}
+          <button type="submit" disabled={loading} className="w-full bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
+            {loading ? (
+              <><RefreshCw size={16} className="animate-spin" /> Ingresando...</>
+            ) : (
+              <><Lock size={16} /> Iniciar sesión</>
+            )}
+          </button>
         </form>
       </Modal>
+
+      {/* Animación CSS inline */}
+      <style>{`
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out both;
+        }
+      `}</style>
     </div>
   );
 };
@@ -443,7 +581,6 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
   const handleStatusChange=async(oficio,newStatus)=>{await onUpdateOficio(oficio.id,{...oficio,estado:newStatus});};
   return (
     <div className="space-y-6">
-      {/* Tabs Oficios / Cartas */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl inline-flex">
         <button onClick={() => setCartasTab('oficios')}
           className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='oficios' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
@@ -454,7 +591,6 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
           <Mail size={15}/> Cartas
         </button>
       </div>
-
       {cartasTab === 'cartas' ? <CartasSection appSettings={appSettings}/> : (<>
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2><p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p></div>
@@ -632,217 +768,26 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
 };
 
 const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers }) => {
-  const [showModal,setShowModal]=useState(false);
-  const [editModal,setEditModal]=useState(null);
-  const [pwModal,setPwModal]=useState(null);
-  const [deleteModal,setDeleteModal]=useState(null);
-  const [newUser,setNewUser]=useState({email:'',password:'',name:'',role:ROLES[0]});
-  const [editData,setEditData]=useState({});
-  const [newRole,setNewRole]=useState('');
-  const [customRoles,setCustomRoles]=useState([]);
-  const [creating,setCreating]=useState(false);
-  const [saving,setSaving]=useState(false);
-  const [deleting,setDeleting]=useState(false);
-  const [showPw,setShowPw]=useState(false);
-  const [showNewPw,setShowNewPw]=useState(false);
-  const [newPassword,setNewPassword]=useState('');
-  const [savingPw,setSavingPw]=useState(false);
-  const [msg,setMsg]=useState(null);
-
-  // Load custom roles from app_settings
-  useEffect(()=>{
-    supabase.from('app_settings').select('value').eq('key','custom_roles').single()
-      .then(({data})=>{if(data?.value)setCustomRoles(JSON.parse(data.value)||[]);});
-  },[]);
-
+  const [showModal,setShowModal]=useState(false);const [editModal,setEditModal]=useState(null);const [pwModal,setPwModal]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [newUser,setNewUser]=useState({email:'',password:'',name:'',role:ROLES[0]});const [editData,setEditData]=useState({});const [newRole,setNewRole]=useState('');const [customRoles,setCustomRoles]=useState([]);const [creating,setCreating]=useState(false);const [saving,setSaving]=useState(false);const [deleting,setDeleting]=useState(false);const [showPw,setShowPw]=useState(false);const [showNewPw,setShowNewPw]=useState(false);const [newPassword,setNewPassword]=useState('');const [savingPw,setSavingPw]=useState(false);const [msg,setMsg]=useState(null);
+  useEffect(()=>{supabase.from('app_settings').select('value').eq('key','custom_roles').single().then(({data})=>{if(data?.value)setCustomRoles(JSON.parse(data.value)||[]);});},[]);
   const allRoles = [...ROLES, ...customRoles];
-
-  const saveCustomRoles = async (roles) => {
-    setCustomRoles(roles);
-    const val = JSON.stringify(roles);
-    const {error} = await supabase.from('app_settings').update({value:val}).eq('key','custom_roles');
-    if(error) await supabase.from('app_settings').insert([{key:'custom_roles',value:val}]);
-  };
-
-  const addCustomRole = () => {
-    const r = newRole.trim();
-    if(!r || allRoles.includes(r)) return;
-    saveCustomRoles([...customRoles, r]);
-    setNewRole('');
-  };
-
+  const saveCustomRoles = async (roles) => {setCustomRoles(roles);const val = JSON.stringify(roles);const {error} = await supabase.from('app_settings').update({value:val}).eq('key','custom_roles');if(error) await supabase.from('app_settings').insert([{key:'custom_roles',value:val}]);};
+  const addCustomRole = () => {const r = newRole.trim();if(!r || allRoles.includes(r)) return;saveCustomRoles([...customRoles, r]);setNewRole('');};
   const removeCustomRole = (r) => saveCustomRoles(customRoles.filter(x=>x!==r));
-
   const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}if(ad.user){const{error:pe}=await supabase.from('profiles').insert([{id:ad.user.id,name:newUser.name,role:newUser.role,email:newUser.email}]);if(pe)setMsg({type:'warning',text:'Auth OK pero error perfil: '+pe.message});else{setMsg({type:'success',text:`"${newUser.name}" creado.`});setNewUser({email:'',password:'',name:'',role:allRoles[0]});setShowModal(false);if(onRefreshMembers)onRefreshMembers();}}}catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
-
   const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||allRoles[0],email:m.email||''});setEditModal(true);setMsg(null);};
-
   const handleEdit=async(e)=>{e.preventDefault();setSaving(true);setMsg(null);try{await onUpdateMember(editData.id,{name:editData.name,role:editData.role,email:editData.email});setMsg({type:'success',text:'Actualizado.'});setEditModal(null);}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
-
-  const handleChangePassword=async()=>{
-    if(newPassword.length<6){setMsg({type:'error',text:'Mínimo 6 caracteres.'});return;}
-    setSavingPw(true);setMsg(null);
-    try{
-      // Use admin API via Supabase Edge Function or service role
-      // For now update via profile note and show instructions
-      const{error}=await supabase.auth.admin?.updateUserById?.(pwModal.authId,{password:newPassword})
-        || await supabase.rpc('admin_change_password',{user_email:pwModal.email,new_password:newPassword});
-      if(error)throw error;
-      setMsg({type:'success',text:`Contraseña actualizada para ${pwModal.name}.`});
-      setPwModal(null);setNewPassword('');
-    }catch(err){
-      // Fallback: update via direct approach
-      setMsg({type:'error',text:'Para cambiar contraseña ve a Supabase Dashboard > Authentication > Users y busca: '+pwModal.email});
-    }
-    setSavingPw(false);
-  };
-
-  const handleDelete=async()=>{
-    setDeleting(true);
-    try{
-      await supabase.from('profiles').delete().eq('id',deleteModal.id);
-      setMsg({type:'success',text:`${deleteModal.name} eliminado del sistema.`});
-      setDeleteModal(null);
-      if(onRefreshMembers)onRefreshMembers();
-    }catch(err){setMsg({type:'error',text:err.message});}
-    setDeleting(false);
-  };
+  const handleDelete=async()=>{setDeleting(true);try{await supabase.from('profiles').delete().eq('id',deleteModal.id);setMsg({type:'success',text:`${deleteModal.name} eliminado del sistema.`});setDeleteModal(null);if(onRefreshMembers)onRefreshMembers();}catch(err){setMsg({type:'error',text:err.message});}setDeleting(false);};
   return (
     <div className="space-y-5">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-bold text-gray-700">Usuarios del Sistema</h3>
-        <button onClick={()=>{setShowModal(true);setMsg(null);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm font-medium"><UserPlus size={18}/> Nuevo usuario</button>
-      </div>
-
+      <div className="flex justify-between items-center"><h3 className="text-lg font-bold text-gray-700">Usuarios del Sistema</h3><button onClick={()=>{setShowModal(true);setMsg(null);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm font-medium"><UserPlus size={18}/> Nuevo usuario</button></div>
       {msg && <div className={`p-3 rounded-lg text-sm border ${msg.type==='success'?'bg-green-50 text-green-700 border-green-200':msg.type==='warning'?'bg-yellow-50 text-yellow-700 border-yellow-200':'bg-red-50 text-red-700 border-red-200'}`}>{msg.text}</div>}
-
-      {/* Lista de usuarios */}
-      <div className="grid gap-2">
-        {members.map(m=>(
-          <Card key={m.id} className="!shadow-sm !p-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{m.name?.charAt(0)?.toUpperCase()||'?'}</div>
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-800 truncate">{m.name||'Sin nombre'}</p>
-                  <p className="text-xs text-gray-500 truncate">{m.email||''}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                <span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium shrink-0">{m.role||'Sin rol'}</span>
-                <button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 shrink-0 font-medium"><Edit3 size={12}/> Editar</button>
-                <button onClick={()=>{setPwModal(m);setNewPassword('');setMsg(null);}} className="bg-amber-50 text-amber-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-100 flex items-center gap-1 shrink-0 font-medium"><Lock size={12}/> Contraseña</button>
-                <button onClick={()=>setDeleteModal(m)} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 shrink-0 font-medium"><Trash2 size={12}/> Eliminar</button>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Gestión de Roles */}
-      <Card className="!shadow-sm">
-        <h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Settings size={16} className="text-blue-600"/> Roles disponibles</h4>
-        <div className="flex flex-wrap gap-2 mb-3">
-          {ROLES.map(r=><span key={r} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}
-          {customRoles.map(r=>(
-            <span key={r} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-              {r}
-              <button onClick={()=>removeCustomRole(r)} className="ml-1 text-purple-400 hover:text-red-500"><X size={11}/></button>
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input className="flex-1 border p-2 rounded-lg text-sm" placeholder="Nuevo rol personalizado..."
-            value={newRole} onChange={e=>setNewRole(e.target.value)}
-            onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomRole();}}}/>
-          <button onClick={addCustomRole} disabled={!newRole.trim()} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"><Plus size={14}/> Agregar</button>
-        </div>
-        <p className="text-xs text-gray-400 mt-2">Azul = predeterminados · Morado = personalizados (× para eliminar)</p>
-      </Card>
-
-      {/* Modal crear usuario */}
-      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/>
-          <input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/>
-          <div className="relative">
-            <input required type={showPw?'text':'password'} placeholder="Contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/>
-            <button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button>
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Rol</label>
-            <select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>
-              {allRoles.map(r=><option key={r}>{r}</option>)}
-            </select>
-          </div>
-          <button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear usuario'}</button>
-        </form>
-      </Modal>
-
-      {/* Modal editar usuario */}
-      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm">
-        <form onSubmit={handleEdit} className="space-y-4">
-          <div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div>
-          <div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Rol</label>
-            <select className="w-full border p-2.5 rounded-lg" value={editData.role||allRoles[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>
-              {allRoles.map(r=><option key={r}>{r}</option>)}
-            </select>
-          </div>
-          <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar cambios'}</button>
-        </form>
-      </Modal>
-
-      {/* Modal cambiar contraseña */}
-      <Modal isOpen={!!pwModal} onClose={()=>{setPwModal(null);setNewPassword('');}} title="Cambiar Contraseña" size="sm">
-        <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <p className="text-sm font-bold text-amber-800">{pwModal?.name}</p>
-            <p className="text-xs text-amber-600">{pwModal?.email}</p>
-          </div>
-          <div className="relative">
-            <input type={showNewPw?'text':'password'} placeholder="Nueva contraseña (mín 6 caracteres)"
-              minLength={6} className="w-full border p-2.5 rounded-lg pr-10"
-              value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
-            <button type="button" onClick={()=>setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showNewPw?<EyeOff size={18}/>:<Eye size={18}/>}</button>
-          </div>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 space-y-1">
-            <p className="font-bold">Opción A — Enviar reset por correo:</p>
-            <p>El usuario recibirá un enlace para crear su nueva contraseña.</p>
-            <p className="font-bold mt-1">Opción B — Desde Supabase Dashboard:</p>
-            <p>Authentication → Users → buscar {pwModal?.email} → Send password reset</p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={()=>{setPwModal(null);setNewPassword('');}} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold text-sm">Cancelar</button>
-            <button onClick={async()=>{
-              if(!pwModal?.email)return;
-              setSavingPw(true);
-              const{error}=await supabase.auth.resetPasswordForEmail(pwModal.email,{redirectTo:window.location.origin});
-              if(error)setMsg({type:'error',text:error.message});
-              else setMsg({type:'success',text:'✓ Email de reset enviado a '+pwModal.email});
-              setPwModal(null);setNewPassword('');setSavingPw(false);
-            }} disabled={savingPw} className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 disabled:opacity-50 text-sm flex items-center justify-center gap-1">
-              {savingPw?'Enviando...':'📧 Enviar reset por email'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal eliminar usuario */}
-      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Usuario" size="sm">
-        <div className="space-y-4">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-700 font-bold">{deleteModal?.name}</p>
-            <p className="text-red-500 text-sm">{deleteModal?.email} · {deleteModal?.role}</p>
-            <p className="text-red-600 text-sm mt-2">Se eliminará del directorio de usuarios. Esta acción no se puede deshacer.</p>
-          </div>
-          <div className="flex gap-3">
-            <button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button>
-            <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button>
-          </div>
-        </div>
-      </Modal>
+      <div className="grid gap-2">{members.map(m=>(<Card key={m.id} className="!shadow-sm !p-4"><div className="flex items-center justify-between gap-3 flex-wrap"><div className="flex items-center gap-3 flex-1 min-w-0"><div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{m.name?.charAt(0)?.toUpperCase()||'?'}</div><div className="min-w-0"><p className="font-semibold text-gray-800 truncate">{m.name||'Sin nombre'}</p><p className="text-xs text-gray-500 truncate">{m.email||''}</p></div></div><div className="flex items-center gap-2 flex-wrap justify-end"><span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium shrink-0">{m.role||'Sin rol'}</span><button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 shrink-0 font-medium"><Edit3 size={12}/> Editar</button><button onClick={()=>{setPwModal(m);setNewPassword('');setMsg(null);}} className="bg-amber-50 text-amber-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-100 flex items-center gap-1 shrink-0 font-medium"><Lock size={12}/> Contraseña</button><button onClick={()=>setDeleteModal(m)} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 shrink-0 font-medium"><Trash2 size={12}/> Eliminar</button></div></div></Card>))}</div>
+      <Card className="!shadow-sm"><h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Settings size={16} className="text-blue-600"/> Roles disponibles</h4><div className="flex flex-wrap gap-2 mb-3">{ROLES.map(r=><span key={r} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}{customRoles.map(r=>(<span key={r} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">{r}<button onClick={()=>removeCustomRole(r)} className="ml-1 text-purple-400 hover:text-red-500"><X size={11}/></button></span>))}</div><div className="flex gap-2"><input className="flex-1 border p-2 rounded-lg text-sm" placeholder="Nuevo rol personalizado..." value={newRole} onChange={e=>setNewRole(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomRole();}}}/><button onClick={addCustomRole} disabled={!newRole.trim()} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"><Plus size={14}/> Agregar</button></div><p className="text-xs text-gray-400 mt-2">Azul = predeterminados · Morado = personalizados (× para eliminar)</p></Card>
+      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm"><form onSubmit={handleCreate} className="space-y-4"><input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/><div className="relative"><input required type={showPw?'text':'password'} placeholder="Contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear usuario'}</button></form></Modal>
+      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm"><form onSubmit={handleEdit} className="space-y-4"><div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role||allRoles[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar cambios'}</button></form></Modal>
+      <Modal isOpen={!!pwModal} onClose={()=>{setPwModal(null);setNewPassword('');}} title="Cambiar Contraseña" size="sm"><div className="space-y-4"><div className="bg-amber-50 border border-amber-200 rounded-lg p-3"><p className="text-sm font-bold text-amber-800">{pwModal?.name}</p><p className="text-xs text-amber-600">{pwModal?.email}</p></div><div className="relative"><input type={showNewPw?'text':'password'} placeholder="Nueva contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/><button type="button" onClick={()=>setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showNewPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 space-y-1"><p className="font-bold">Opción A — Enviar reset por correo:</p><p>El usuario recibirá un enlace para crear su nueva contraseña.</p><p className="font-bold mt-1">Opción B — Desde Supabase Dashboard:</p><p>Authentication → Users → buscar {pwModal?.email} → Send password reset</p></div><div className="flex gap-3"><button onClick={()=>{setPwModal(null);setNewPassword('');}} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold text-sm">Cancelar</button><button onClick={async()=>{if(!pwModal?.email)return;setSavingPw(true);const{error}=await supabase.auth.resetPasswordForEmail(pwModal.email,{redirectTo:window.location.origin});if(error)setMsg({type:'error',text:error.message});else setMsg({type:'success',text:'✓ Email de reset enviado a '+pwModal.email});setPwModal(null);setNewPassword('');setSavingPw(false);}} disabled={savingPw} className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 disabled:opacity-50 text-sm flex items-center justify-center gap-1">{savingPw?'Enviando...':'📧 Enviar reset por email'}</button></div></div></Modal>
+      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Usuario" size="sm"><div className="space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-bold">{deleteModal?.name}</p><p className="text-red-500 text-sm">{deleteModal?.email} · {deleteModal?.role}</p><p className="text-red-600 text-sm mt-2">Se eliminará del directorio de usuarios. Esta acción no se puede deshacer.</p></div><div className="flex gap-3"><button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button></div></div></Modal>
     </div>
   );
 };
