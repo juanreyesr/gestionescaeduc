@@ -257,6 +257,8 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
   const youtubeUrl = appSettings?.youtube_tutorial_url || '';
   const reglamentoPath = appSettings?.reglamento_file_path || '';
   const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
+  const logoPath = appSettings?.logo_path || '';
+  const logoUrl = logoPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${logoPath}` : '/logo-CAEDUC.png';
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-blue-50 p-4 sm:p-6">
@@ -270,7 +272,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
           {/* Logo institucional */}
           <div className="relative flex flex-col items-center">
             <img
-              src="/logo-CAEDUC.png"
+              src={logoUrl}
               alt="CAEDUC — Comisión de Acreditación y Educación Continua"
               className="w-28 h-28 object-contain drop-shadow-lg"
             />
