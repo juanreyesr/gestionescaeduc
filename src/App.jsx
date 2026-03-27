@@ -274,7 +274,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
             <img
               src={logoUrl}
               alt="CAEDUC — Comisión de Acreditación y Educación Continua"
-              className="w-28 h-28 object-contain drop-shadow-lg"
+              className="w-50 h-50 object-contain drop-shadow-lg"
             />
             <p className="text-white/50 text-xs tracking-widest uppercase mt-2">
               Comisión de Acreditación y Educación Continua
