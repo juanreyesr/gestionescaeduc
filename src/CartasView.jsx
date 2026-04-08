@@ -13,6 +13,13 @@ const supabase = createClient(
 );
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 
+// Construye URL de storage soportando paths relativos Y URLs completas (post-migración)
+const buildStorageUrl = (path, bucket) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
+};
+
 // ── Utilidades ────────────────────────────────────────────────────────────────
 const formatDateLong = (iso) => {
   if (!iso) return '—';
@@ -54,12 +61,10 @@ const generateCartaInvitacionHTML = (campos, settings = {}) => {
   const f1Name  = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
   const f1Cargo = settings.firmante1_cargo  || 'Coordinador';
   const f1Inst  = settings.firmante1_institucion || 'Comisión de Acreditación y Educación Continua, Colegio de Psicólogos de Guatemala';
-  const f1FirmaUrl = settings.firmante1_firma_path
-    ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.firmante1_firma_path}` : '';
-  const selloUrl = settings.sello_path
-    ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.sello_path}` : '';
+  const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
+  const selloUrl   = buildStorageUrl(settings.sello_path, 'firmas-sellos');
   const membreteUrl = settings.membrete_path
-    ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.membrete_path}`
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
     : '/fondo-oficios.jpg';
 
   const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
@@ -121,7 +126,7 @@ const generateCartaInvitacionHTML = (campos, settings = {}) => {
       body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
       @media print{.no-print{display:none!important;}}
     </style>
-    <script>window.onafterprint=()=>{};</script>
+    <script>window.onafterprint=()=>{};<\/script>
   </head><body>
     <div class="no-print">${printButton}</div>
     <div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;">
@@ -315,7 +320,6 @@ function NuevaCartaModal({ isOpen, onClose, onSave, appSettings, saving, editDat
           <button onClick={onClose}><X size={22} className="text-gray-400 hover:text-red-500"/></button>
         </div>
         <div className="p-5 max-h-[80vh] overflow-y-auto">
-          {/* Paso 1: elegir plantilla */}
           {step===1 && !editData && (
             <div className="space-y-3">
               <p className="text-sm text-gray-500 mb-4">Selecciona el tipo de carta:</p>
@@ -332,11 +336,9 @@ function NuevaCartaModal({ isOpen, onClose, onSave, appSettings, saving, editDat
               <p className="text-xs text-gray-400 text-center pt-2">Próximamente más plantillas</p>
             </div>
           )}
-          {/* Paso 2: formulario */}
           {(step===2 || editData) && FormComponent && (
             <form onSubmit={e=>{e.preventDefault();editData?setStep(3):setStep(3);}} className="space-y-5">
               <FormComponent campos={campos} onChange={setCampos}/>
-              {/* Solicitante (interno, no aparece en carta) */}
               <div className="bg-amber-50 rounded-xl p-3 border border-amber-200 flex items-center gap-2">
                 <User size={14} className="text-amber-600 shrink-0"/>
                 <div>
@@ -354,7 +356,6 @@ function NuevaCartaModal({ isOpen, onClose, onSave, appSettings, saving, editDat
               </div>
             </form>
           )}
-          {/* Paso 3: preview y guardar */}
           {step===3 && (
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1.5">
@@ -417,7 +418,6 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Header */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
@@ -451,7 +451,6 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
               </div>
             )}
           </div>
-          {/* Acciones */}
           <div className="flex gap-1 shrink-0 flex-col items-end">
             <div className="flex gap-1">
               <button onClick={openCarta} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Ver/Imprimir">
@@ -467,7 +466,6 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
           </div>
         </div>
 
-        {/* Estado toggles */}
         <div className="flex gap-3 mt-3 flex-wrap">
           <label className="flex items-center gap-2 cursor-pointer select-none group">
             <div onClick={() => setEstado(carta.estado === 'Enviada' || carta.estado === 'Recibida' ? 'Pendiente' : 'Enviada')}
@@ -492,7 +490,6 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
         </div>
       </div>
 
-      {/* Checklist documentos */}
       {carta.estado === 'Recibida' && expanded && (
         <div className="border-t px-4 pb-4 pt-3 bg-green-50">
           <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1"><CheckCircle size={12}/> Documentos recibidos en la respuesta</p>
@@ -586,14 +583,12 @@ export default function CartasSection({ appSettings }) {
       JSON.stringify(c.campos||{}).toLowerCase().includes(q);
   });
 
-  // Stats
   const pendientes = cartas.filter(c => c.estado === 'Pendiente').length;
   const enviadas   = cartas.filter(c => c.estado === 'Enviada').length;
   const recibidas  = cartas.filter(c => c.estado === 'Recibida').length;
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between">
         <div>
           <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Mail size={18} className="text-rose-600"/> Cartas</h3>
@@ -605,7 +600,6 @@ export default function CartasSection({ appSettings }) {
         </button>
       </div>
 
-      {/* Stats */}
       {cartas.length > 0 && (
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
@@ -623,7 +617,6 @@ export default function CartasSection({ appSettings }) {
         </div>
       )}
 
-      {/* Búsqueda */}
       <div className="relative">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
         <input className="w-full border p-2.5 pl-9 rounded-xl text-sm"
@@ -631,7 +624,6 @@ export default function CartasSection({ appSettings }) {
           value={search} onChange={e => setSearch(e.target.value)}/>
       </div>
 
-      {/* Empty state */}
       {!loading && cartas.length === 0 && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm text-center py-16">
           <Mail size={48} className="text-gray-200 mx-auto mb-3"/>
@@ -644,7 +636,6 @@ export default function CartasSection({ appSettings }) {
         </div>
       )}
 
-      {/* Lista */}
       <div className="space-y-2">
         {filtered.map(carta => (
           <CartaCard
@@ -662,7 +653,6 @@ export default function CartasSection({ appSettings }) {
         <p className="text-center text-gray-400 py-8">No se encontraron cartas con ese criterio.</p>
       )}
 
-      {/* Modal nueva/editar */}
       <NuevaCartaModal
         isOpen={showModal}
         onClose={() => { setShowModal(false); setEditData(null); }}
@@ -673,7 +663,6 @@ export default function CartasSection({ appSettings }) {
         currentUserEmail={currentUser?.email || ''}
       />
 
-      {/* Modal eliminar */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
