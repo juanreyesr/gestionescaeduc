@@ -1,18 +1,27 @@
-// src/DirectorioView.jsx — Directorio y Procedimientos CAEDUC
-import React, { useState, useEffect, useCallback } from 'react';
+// src/DirectorioView.jsx — Directorio, Proveedores y Procedimientos CAEDUC
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
-  Users, BookOpen, Plus, Search, Edit3, Trash2, X, Save,
+  Users, Plus, Search, Edit3, Trash2, X, Save,
   Phone, Mail, MapPin, User, Building2, ChevronDown, ChevronUp,
-  ClipboardList, Clock, AlertCircle, GripVertical, CheckCircle
+  ClipboardList, Clock, AlertCircle, CheckCircle,
+  ShoppingBag, Tag, Upload, Eye, Settings,
+  FileText, RefreshCw, Filter
 } from 'lucide-react';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co',
   import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder'
 );
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const buildStorageUrl = (path, bucket) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
+};
+
+// ── Helpers compartidos ────────────────────────────────────────────────────────
 const DEPARTAMENTOS_GT = [
   'Alta Verapaz','Baja Verapaz','Chimaltenango','Chiquimula','El Progreso',
   'Escuintla','Guatemala','Huehuetenango','Izabal','Jalapa','Jutiapa',
@@ -48,51 +57,877 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   );
 };
 
-// ── PersonaForm ───────────────────────────────────────────────────────────────
-const PERSONA_EMPTY = { nombre:'', cargo:'', email:'', telefono:'', departamento:'', delegacion:'' };
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECCIÓN PROVEEDORES ────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 
-function PersonaForm({ initial, onSave, onClose, saving }) {
+// ── Gestión de Categorías ─────────────────────────────────────────────────────
+function CategoriasManagerModal({ isOpen, onClose, categorias, onRefresh }) {
+  const [newNombre, setNewNombre]       = useState('');
+  const [editingId, setEditingId]       = useState(null);
+  const [editingNombre, setEditingNombre] = useState('');
+  const [saving, setSaving]             = useState(false);
+  const [deleting, setDeleting]         = useState(null);
+
+  if (!isOpen) return null;
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    const nombre = newNombre.trim();
+    if (!nombre) return;
+    const existe = categorias.some(c => c.nombre.toLowerCase() === nombre.toLowerCase());
+    if (existe) { alert('Ya existe una categoría con ese nombre.'); return; }
+    setSaving(true);
+    await supabase.from('proveedor_categorias').insert([{ nombre }]);
+    setNewNombre('');
+    await onRefresh();
+    setSaving(false);
+  };
+
+  const handleEdit = async (id) => {
+    const nombre = editingNombre.trim();
+    if (!nombre) return;
+    const existe = categorias.some(c => c.nombre.toLowerCase() === nombre.toLowerCase() && c.id !== id);
+    if (existe) { alert('Ya existe una categoría con ese nombre.'); return; }
+    setSaving(true);
+    await supabase.from('proveedor_categorias').update({ nombre }).eq('id', id);
+    setEditingId(null);
+    await onRefresh();
+    setSaving(false);
+  };
+
+  const handleDelete = async (cat) => {
+    if (!window.confirm(`¿Eliminar la categoría "${cat.nombre}"?\nLos proveedores de esta categoría quedarán sin categoría asignada.`)) return;
+    setDeleting(cat.id);
+    await supabase.from('proveedor_categorias').delete().eq('id', cat.id);
+    await onRefresh();
+    setDeleting(null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div className="flex justify-between items-center p-5 border-b">
+          <div>
+            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Tag size={18} className="text-emerald-600"/> Categorías de Proveedores
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Las categorías aquí definidas aparecen al crear proveedores.
+            </p>
+          </div>
+          <button onClick={onClose}><X size={22} className="text-gray-400 hover:text-red-500"/></button>
+        </div>
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+          {/* Agregar nueva */}
+          <form onSubmit={handleAdd} className="flex gap-2">
+            <input
+              required
+              className="flex-1 border p-2.5 rounded-lg text-sm"
+              placeholder="Nueva categoría (ej: Fotografía)..."
+              value={newNombre}
+              onChange={e => setNewNombre(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={saving || !newNombre.trim()}
+              className="bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1 text-sm shrink-0"
+            >
+              <Plus size={15}/> Agregar
+            </button>
+          </form>
+
+          {/* Listado */}
+          <div className="space-y-1.5">
+            {categorias.length === 0 && (
+              <p className="text-center text-gray-400 py-6 text-sm">
+                Sin categorías. Agrega la primera arriba.
+              </p>
+            )}
+            {categorias.map(cat => (
+              <div key={cat.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2.5 border">
+                <Tag size={13} className="text-emerald-500 shrink-0"/>
+                {editingId === cat.id ? (
+                  <input
+                    className="flex-1 border p-1.5 rounded text-sm focus:ring-2 focus:ring-emerald-300 focus:outline-none"
+                    value={editingNombre}
+                    onChange={e => setEditingNombre(e.target.value)}
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleEdit(cat.id); }
+                      if (e.key === 'Escape') setEditingId(null);
+                    }}
+                  />
+                ) : (
+                  <span className="flex-1 text-sm font-medium text-gray-700">{cat.nombre}</span>
+                )}
+                {editingId === cat.id ? (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => handleEdit(cat.id)}
+                      disabled={saving}
+                      className="text-emerald-500 hover:text-emerald-700 p-1"
+                      title="Confirmar"
+                    >
+                      <CheckCircle size={15}/>
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="text-gray-400 hover:text-gray-600 p-1" title="Cancelar">
+                      <X size={15}/>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => { setEditingId(cat.id); setEditingNombre(cat.nombre); }}
+                      className="text-gray-400 hover:text-blue-500 p-1"
+                      title="Editar"
+                    >
+                      <Edit3 size={13}/>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(cat)}
+                      disabled={deleting === cat.id}
+                      className="text-gray-400 hover:text-red-500 p-1 disabled:opacity-40"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={13}/>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-gray-400 text-center pt-1">
+            Editar con lápiz · Confirmar con ✓ · Cancelar con Esc
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Formulario de Proveedor ────────────────────────────────────────────────────
+const PROVEEDOR_EMPTY = {
+  nombre: '', categoria_id: '', ciudad: '',
+  contacto: '', telefono: '', email: '', direccion: '', notas: ''
+};
+
+function ProveedorFormModal({ isOpen, onClose, onSave, initial, categorias, saving }) {
+  const [fd, setFd] = useState(PROVEEDOR_EMPTY);
+
+  useEffect(() => {
+    if (isOpen) setFd(initial ? { ...initial } : PROVEEDOR_EMPTY);
+  }, [isOpen, initial]);
+
+  const upd = (k, v) => setFd(p => ({ ...p, [k]: v }));
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl my-4">
+        <div className="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-xl">
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <ShoppingBag size={18} className="text-emerald-600"/>
+            {initial ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+          </h3>
+          <button onClick={onClose}><X size={22} className="text-gray-400 hover:text-red-500"/></button>
+        </div>
+        <div className="p-5 max-h-[80vh] overflow-y-auto">
+          <form onSubmit={e => { e.preventDefault(); onSave(fd); }} className="space-y-4">
+
+            {/* Datos del proveedor */}
+            <div className="bg-emerald-50 rounded-xl p-4 space-y-3 border border-emerald-100">
+              <h4 className="font-bold text-emerald-800 text-sm">Datos del proveedor</h4>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Nombre del proveedor *</label>
+                <input
+                  required
+                  className="w-full border p-2.5 rounded-lg text-sm"
+                  placeholder="Ej: Restaurante El Portal, Hotel Los Arcos, Imprenta XYZ..."
+                  value={fd.nombre}
+                  onChange={e => upd('nombre', e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">
+                    Tipo / Categoría *
+                    {categorias.length === 0 && (
+                      <span className="text-amber-500 font-normal ml-1">(agrega categorías primero)</span>
+                    )}
+                  </label>
+                  <select
+                    required
+                    className="w-full border p-2.5 rounded-lg text-sm"
+                    value={fd.categoria_id}
+                    onChange={e => upd('categoria_id', e.target.value)}
+                  >
+                    <option value="">Seleccionar categoría...</option>
+                    {categorias.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Ciudad</label>
+                  <input
+                    className="w-full border p-2.5 rounded-lg text-sm"
+                    placeholder="Ej: Guatemala, Chimaltenango..."
+                    value={fd.ciudad}
+                    onChange={e => upd('ciudad', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Información de contacto */}
+            <div className="bg-blue-50 rounded-xl p-4 space-y-3 border border-blue-100">
+              <h4 className="font-bold text-blue-800 text-sm">Información de contacto</h4>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Nombre del contacto</label>
+                <input
+                  className="w-full border p-2.5 rounded-lg text-sm"
+                  placeholder="Persona a quien contactar..."
+                  value={fd.contacto}
+                  onChange={e => upd('contacto', e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Teléfono</label>
+                  <input
+                    className="w-full border p-2.5 rounded-lg text-sm"
+                    placeholder="+(502) 0000-0000"
+                    value={fd.telefono}
+                    onChange={e => upd('telefono', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Correo electrónico</label>
+                  <input
+                    type="email"
+                    className="w-full border p-2.5 rounded-lg text-sm"
+                    placeholder="correo@ejemplo.com"
+                    value={fd.email}
+                    onChange={e => upd('email', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Dirección física</label>
+                <input
+                  className="w-full border p-2.5 rounded-lg text-sm"
+                  placeholder="Calle, colonia, zona, ciudad..."
+                  value={fd.direccion}
+                  onChange={e => upd('direccion', e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Notas */}
+            <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+              <label className="block text-xs font-bold text-amber-700 mb-1">
+                📝 Notas (recomendaciones del menú, condiciones especiales, observaciones)
+              </label>
+              <textarea
+                rows={3}
+                className="w-full border p-2.5 rounded-lg text-sm resize-none"
+                placeholder="Ej: El menú ejecutivo incluye entrada, plato fuerte y postre. Mínimo 20 personas. Recomendado el pollo en salsa verde..."
+                value={fd.notas}
+                onChange={e => upd('notas', e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Save size={16}/>
+                {saving ? 'Guardando...' : 'Guardar proveedor'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tarjeta de Proveedor ───────────────────────────────────────────────────────
+function ProveedorCard({ proveedor, categorias, onEdit, onDelete, onMenuUpload, onMenuDelete }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const categoria = categorias.find(c => c.id === proveedor.categoria_id);
+  const menuUrl   = proveedor.menu_path
+    ? buildStorageUrl(proveedor.menu_path, 'proveedores-menus')
+    : null;
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const esImagen = file.type.startsWith('image/');
+    const esPdf    = file.type === 'application/pdf';
+    if (!esImagen && !esPdf) {
+      setUploadMsg({ type: 'error', text: 'Solo PDF o imagen (JPG, PNG, etc.)' });
+      return;
+    }
+    setUploading(true);
+    setUploadMsg(null);
+    const ok = await onMenuUpload(proveedor, file);
+    setUploading(false);
+    if (!ok) setUploadMsg({ type: 'error', text: 'Error al subir el archivo.' });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const isPdf   = proveedor.menu_type === 'pdf';
+  const isImage = proveedor.menu_type === 'image';
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+
+      {/* Cuerpo */}
+      <div className="p-4 flex-1 space-y-3">
+
+        {/* Header: categoría + ciudad + acciones */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+              {categoria ? (
+                <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  {categoria.nombre}
+                </span>
+              ) : (
+                <span className="bg-gray-100 text-gray-400 text-xs px-2 py-0.5 rounded-full">
+                  Sin categoría
+                </span>
+              )}
+              {proveedor.ciudad && (
+                <span className="text-xs text-gray-500 flex items-center gap-0.5">
+                  <MapPin size={10}/>{proveedor.ciudad}
+                </span>
+              )}
+            </div>
+            <h3 className="font-bold text-gray-800 text-base leading-snug">{proveedor.nombre}</h3>
+          </div>
+          <div className="flex gap-1 shrink-0 mt-0.5">
+            <button
+              onClick={() => onEdit(proveedor)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Editar"
+            >
+              <Edit3 size={13}/>
+            </button>
+            <button
+              onClick={() => onDelete(proveedor)}
+              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Eliminar"
+            >
+              <Trash2 size={13}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Datos de contacto */}
+        <div className="space-y-1">
+          {proveedor.contacto && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <User size={11} className="text-gray-400 shrink-0"/>
+              <span>{proveedor.contacto}</span>
+            </div>
+          )}
+          {proveedor.telefono && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Phone size={11} className="text-gray-400 shrink-0"/>
+              <a href={`tel:${proveedor.telefono}`} className="hover:text-blue-600 transition-colors">
+                {proveedor.telefono}
+              </a>
+            </div>
+          )}
+          {proveedor.email && (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Mail size={11} className="text-gray-400 shrink-0"/>
+              <a href={`mailto:${proveedor.email}`} className="hover:text-blue-600 transition-colors truncate">
+                {proveedor.email}
+              </a>
+            </div>
+          )}
+          {proveedor.direccion && (
+            <div className="flex items-start gap-2 text-xs text-gray-600">
+              <MapPin size={11} className="text-gray-400 shrink-0 mt-0.5"/>
+              <span className="leading-relaxed">{proveedor.direccion}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Notas */}
+        {proveedor.notas && (
+          <div className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            <p className="text-xs text-amber-800 leading-relaxed">{proveedor.notas}</p>
+          </div>
+        )}
+
+        {/* Mensaje de error upload */}
+        {uploadMsg && (
+          <div className={`text-xs rounded-lg px-3 py-1.5 ${
+            uploadMsg.type === 'error'
+              ? 'bg-red-50 text-red-600 border border-red-100'
+              : 'bg-green-50 text-green-600 border border-green-100'
+          }`}>
+            {uploadMsg.text}
+          </div>
+        )}
+      </div>
+
+      {/* Sección de menú / cotización */}
+      <div className="border-t bg-gray-50 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+
+          {/* Indicador de archivo */}
+          <div className="flex items-center gap-1.5">
+            <FileText
+              size={14}
+              className={proveedor.menu_path ? (isPdf ? 'text-red-500' : 'text-purple-500') : 'text-gray-300'}
+            />
+            <span className="text-xs font-semibold text-gray-600">
+              {proveedor.menu_path
+                ? (isPdf ? 'Menú / Cotización PDF' : 'Menú / Imagen')
+                : 'Menú / Cotización'}
+            </span>
+          </div>
+
+          {/* Botones de acción */}
+          <div className="flex gap-1.5 flex-wrap">
+            {proveedor.menu_path ? (
+              <>
+                {/* Ver — abre en nueva pestaña */}
+                <button
+                  onClick={() => menuUrl && window.open(menuUrl, '_blank', 'noopener')}
+                  className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1 transition-colors"
+                  title="Ver menú / cotización"
+                >
+                  <Eye size={11}/> Ver
+                </button>
+
+                {/* Actualizar */}
+                <label
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                    uploading
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-amber-500 text-white hover:bg-amber-600'
+                  }`}
+                  title="Reemplazar menú / cotización"
+                >
+                  <Upload size={11}/>
+                  {uploading ? '...' : 'Actualizar'}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,image/*"
+                    onChange={handleFileChange}
+                    disabled={uploading}
+                  />
+                </label>
+
+                {/* Borrar */}
+                <button
+                  onClick={() => onMenuDelete(proveedor)}
+                  className="bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-red-200 flex items-center gap-1 transition-colors"
+                  title="Eliminar menú / cotización"
+                >
+                  <Trash2 size={11}/> Borrar
+                </button>
+              </>
+            ) : (
+              /* Cargar (primer archivo) */
+              <label
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                  uploading
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                }`}
+                title="Cargar menú / cotización"
+              >
+                <Upload size={11}/>
+                {uploading ? 'Cargando...' : 'Cargar menú'}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,image/*"
+                  onChange={handleFileChange}
+                  disabled={uploading}
+                />
+              </label>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sección principal Proveedores ─────────────────────────────────────────────
+function ProveedoresSection() {
+  const [proveedores, setProveedores]           = useState([]);
+  const [categorias, setCategorias]             = useState([]);
+  const [loading, setLoading]                   = useState(true);
+  const [showForm, setShowForm]                 = useState(false);
+  const [editItem, setEditItem]                 = useState(null);
+  const [deleteModal, setDeleteModal]           = useState(null);
+  const [showCategoriasManager, setShowCategoriasManager] = useState(false);
+  const [saving, setSaving]                     = useState(false);
+  const [searchCategoria, setSearchCategoria]   = useState('');
+  const [searchCiudad, setSearchCiudad]         = useState('');
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    const [{ data: provs }, { data: cats }] = await Promise.all([
+      supabase.from('proveedores').select('*').order('nombre'),
+      supabase.from('proveedor_categorias').select('*').order('nombre'),
+    ]);
+    if (provs) setProveedores(provs);
+    if (cats)  setCategorias(cats);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ── CRUD proveedores ──────────────────────────────────────────────────────
+  const handleSave = async (fd) => {
+    setSaving(true);
+    const { id, menu_path, menu_type, created_at, updated_at, ...cleanData } = fd;
+    if (id) {
+      await supabase.from('proveedores')
+        .update({ ...cleanData, updated_at: new Date().toISOString() })
+        .eq('id', id);
+    } else {
+      await supabase.from('proveedores').insert([cleanData]);
+    }
+    await fetchAll();
+    setShowForm(false);
+    setEditItem(null);
+    setSaving(false);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteModal) return;
+    if (deleteModal.menu_path) {
+      await supabase.storage.from('proveedores-menus').remove([deleteModal.menu_path]);
+    }
+    await supabase.from('proveedores').delete().eq('id', deleteModal.id);
+    await fetchAll();
+    setDeleteModal(null);
+  };
+
+  // ── Gestión de menú / archivo ─────────────────────────────────────────────
+  const handleMenuUpload = async (proveedor, file) => {
+    const esImagen = file.type.startsWith('image/');
+    const esPdf    = file.type === 'application/pdf';
+    if (!esImagen && !esPdf) return false;
+
+    // Eliminar archivo previo si existe
+    if (proveedor.menu_path) {
+      await supabase.storage.from('proveedores-menus').remove([proveedor.menu_path]);
+    }
+
+    const ext  = file.name.split('.').pop();
+    const path = `proveedor_${proveedor.id}_${Date.now()}.${ext}`;
+    const { data, error } = await supabase.storage
+      .from('proveedores-menus')
+      .upload(path, file, { upsert: true });
+
+    if (error) { console.error(error); return false; }
+
+    await supabase.from('proveedores').update({
+      menu_path: data.path,
+      menu_type: esImagen ? 'image' : 'pdf',
+      updated_at: new Date().toISOString(),
+    }).eq('id', proveedor.id);
+
+    await fetchAll();
+    return true;
+  };
+
+  const handleMenuDelete = async (proveedor) => {
+    if (!window.confirm('¿Eliminar el menú/cotización de este proveedor?')) return;
+    if (proveedor.menu_path) {
+      await supabase.storage.from('proveedores-menus').remove([proveedor.menu_path]);
+    }
+    await supabase.from('proveedores').update({
+      menu_path: null,
+      menu_type: null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', proveedor.id);
+    await fetchAll();
+  };
+
+  // ── Filtrado dinámico ─────────────────────────────────────────────────────
+  const filtered = proveedores.filter(p => {
+    const cat       = categorias.find(c => c.id === p.categoria_id);
+    const catNombre = cat?.nombre || '';
+    const matchCat   = !searchCategoria ||
+      catNombre.toLowerCase().includes(searchCategoria.toLowerCase());
+    const matchCiudad = !searchCiudad ||
+      (p.ciudad || '').toLowerCase().includes(searchCiudad.toLowerCase());
+    return matchCat && matchCiudad;
+  });
+
+  const hayFiltros = searchCategoria || searchCiudad;
+  const conMenu    = proveedores.filter(p => p.menu_path).length;
+  const ciudades   = [...new Set(proveedores.map(p => p.ciudad).filter(Boolean))].length;
+
+  return (
+    <div className="space-y-4">
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row gap-3 justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <ShoppingBag size={20} className="text-emerald-600"/>
+            Directorio de Proveedores
+          </h2>
+          <p className="text-sm text-gray-500">
+            {proveedores.length} proveedor{proveedores.length !== 1 ? 'es' : ''} · {conMenu} con menú/cotización
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCategoriasManager(true)}
+            className="bg-gray-100 text-gray-600 px-3 py-2.5 rounded-xl font-bold hover:bg-gray-200 flex items-center gap-2 text-sm border border-gray-200"
+          >
+            <Settings size={15}/> Categorías
+          </button>
+          <button
+            onClick={() => { setEditItem(null); setShowForm(true); }}
+            className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-emerald-700 flex items-center gap-2"
+          >
+            <Plus size={18}/> Nuevo proveedor
+          </button>
+        </div>
+      </div>
+
+      {/* Estadísticas */}
+      {proveedores.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-emerald-600">{proveedores.length}</p>
+            <p className="text-xs text-emerald-700 font-medium">Proveedores</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-blue-600">{categorias.length}</p>
+            <p className="text-xs text-blue-700 font-medium">Categorías</p>
+          </div>
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-purple-600">{ciudades}</p>
+            <p className="text-xs text-purple-700 font-medium">Ciudades</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+            <p className="text-2xl font-black text-amber-600">{conMenu}</p>
+            <p className="text-xs text-amber-700 font-medium">Con menú / PDF</p>
+          </div>
+        </div>
+      )}
+
+      {/* Filtros dinámicos */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Tag size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+          <input
+            className="w-full border p-2.5 pl-9 rounded-xl text-sm"
+            placeholder="Filtrar por tipo de proveedor..."
+            value={searchCategoria}
+            onChange={e => setSearchCategoria(e.target.value)}
+          />
+        </div>
+        <div className="relative flex-1">
+          <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+          <input
+            className="w-full border p-2.5 pl-9 rounded-xl text-sm"
+            placeholder="Filtrar por ciudad..."
+            value={searchCiudad}
+            onChange={e => setSearchCiudad(e.target.value)}
+          />
+        </div>
+        {hayFiltros && (
+          <button
+            onClick={() => { setSearchCategoria(''); setSearchCiudad(''); }}
+            className="text-xs text-red-500 hover:text-red-700 underline px-2 whitespace-nowrap self-center"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
+      {/* Contador de resultados al filtrar */}
+      {hayFiltros && (
+        <p className="text-xs text-gray-500 flex items-center gap-1.5">
+          <Filter size={11}/>
+          Mostrando {filtered.length} de {proveedores.length} proveedores
+        </p>
+      )}
+
+      {/* Estado vacío — sin proveedores */}
+      {!loading && proveedores.length === 0 && (
+        <div className="bg-white rounded-xl border text-center py-16">
+          <ShoppingBag size={48} className="text-gray-200 mx-auto mb-3"/>
+          <p className="text-gray-400 text-lg font-medium">Sin proveedores registrados</p>
+          <p className="text-gray-400 text-sm mb-6">
+            Agrega proveedores para gestionar tu directorio de contactos, menús y cotizaciones.
+          </p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 inline-flex items-center gap-2"
+          >
+            <Plus size={16}/> Agregar primer proveedor
+          </button>
+        </div>
+      )}
+
+      {/* Sin resultados después de filtrar */}
+      {!loading && proveedores.length > 0 && filtered.length === 0 && (
+        <div className="text-center py-12 text-gray-400 bg-white rounded-xl border">
+          <Search size={32} className="mx-auto mb-2 opacity-30"/>
+          <p className="font-medium">Sin resultados para los filtros aplicados</p>
+          <p className="text-sm mt-1">Prueba con otro tipo de proveedor o ciudad.</p>
+        </div>
+      )}
+
+      {/* Grid de tarjetas */}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <RefreshCw size={28} className="text-emerald-500 animate-spin"/>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map(p => (
+            <ProveedorCard
+              key={p.id}
+              proveedor={p}
+              categorias={categorias}
+              onEdit={item => { setEditItem(item); setShowForm(true); }}
+              onDelete={setDeleteModal}
+              onMenuUpload={handleMenuUpload}
+              onMenuDelete={handleMenuDelete}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Modal formulario */}
+      <ProveedorFormModal
+        isOpen={showForm}
+        onClose={() => { setShowForm(false); setEditItem(null); }}
+        onSave={handleSave}
+        initial={editItem}
+        categorias={categorias}
+        saving={saving}
+      />
+
+      {/* Modal eliminar */}
+      {deleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="font-bold text-lg">Eliminar proveedor</h3>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-1">
+              <p className="text-red-700 font-medium">
+                ¿Eliminar a <strong>{deleteModal.nombre}</strong>?
+              </p>
+              {deleteModal.menu_path && (
+                <p className="text-red-500 text-sm">
+                  También se eliminará el menú/cotización adjunto.
+                </p>
+              )}
+              <p className="text-red-400 text-xs">Esta acción no se puede deshacer.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteModal(null)}
+                className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal gestión de categorías */}
+      <CategoriasManagerModal
+        isOpen={showCategoriasManager}
+        onClose={() => setShowCategoriasManager(false)}
+        categorias={categorias}
+        onRefresh={fetchAll}
+      />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECCIÓN DIRECTORIO (sin cambios) ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+const PersonaForm = ({ initial, onSave, onClose, saving }) => {
+  const PERSONA_EMPTY = { nombre:'', cargo:'', email:'', telefono:'', departamento:'', delegacion:'' };
   const [fd, setFd] = useState(initial || PERSONA_EMPTY);
   const upd = (k, v) => setFd(p => ({ ...p, [k]: v }));
   return (
     <form onSubmit={e => { e.preventDefault(); onSave(fd); }} className="space-y-4">
-      <div className="grid grid-cols-1 gap-4">
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Nombre completo *</label>
+        <input required className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Licda. Ana López de García"
+          value={fd.nombre} onChange={e => upd('nombre', e.target.value)}/>
+      </div>
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Cargo *</label>
+        <input list="cargos-list" required className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Delegada Departamental"
+          value={fd.cargo} onChange={e => upd('cargo', e.target.value)}/>
+        <datalist id="cargos-list">{CARGOS_SUGERIDOS.map(c => <option key={c} value={c}/>)}</datalist>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Nombre completo *</label>
-          <input required className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Licda. Ana López de García"
-            value={fd.nombre} onChange={e => upd('nombre', e.target.value)}/>
-        </div>
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Cargo *</label>
-          <input list="cargos-list" required className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Delegada Departamental"
-            value={fd.cargo} onChange={e => upd('cargo', e.target.value)}/>
-          <datalist id="cargos-list">{CARGOS_SUGERIDOS.map(c => <option key={c} value={c}/>)}</datalist>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Correo electrónico</label>
-            <input type="email" className="w-full border p-2.5 rounded-lg text-sm" placeholder="ejemplo@correo.com"
-              value={fd.email} onChange={e => upd('email', e.target.value)}/>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Teléfono</label>
-            <input className="w-full border p-2.5 rounded-lg text-sm" placeholder="+(502) 0000-0000"
-              value={fd.telefono} onChange={e => upd('telefono', e.target.value)}/>
-          </div>
+          <label className="block text-sm font-bold text-gray-700 mb-1">Correo electrónico</label>
+          <input type="email" className="w-full border p-2.5 rounded-lg text-sm" placeholder="ejemplo@correo.com"
+            value={fd.email} onChange={e => upd('email', e.target.value)}/>
         </div>
         <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Departamento *</label>
-          <select required className="w-full border p-2.5 rounded-lg text-sm"
-            value={fd.departamento} onChange={e => upd('departamento', e.target.value)}>
-            <option value="">Seleccionar departamento...</option>
-            {DEPARTAMENTOS_GT.map(d => <option key={d}>{d}</option>)}
-          </select>
+          <label className="block text-sm font-bold text-gray-700 mb-1">Teléfono</label>
+          <input className="w-full border p-2.5 rounded-lg text-sm" placeholder="+(502) 0000-0000"
+            value={fd.telefono} onChange={e => upd('telefono', e.target.value)}/>
         </div>
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">Delegación / Sub Sede</label>
-          <input className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Sub Sede Cobán, Delegación Escuintla..."
-            value={fd.delegacion} onChange={e => upd('delegacion', e.target.value)}/>
-        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Departamento *</label>
+        <select required className="w-full border p-2.5 rounded-lg text-sm"
+          value={fd.departamento} onChange={e => upd('departamento', e.target.value)}>
+          <option value="">Seleccionar departamento...</option>
+          {DEPARTAMENTOS_GT.map(d => <option key={d}>{d}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-1">Delegación / Sub Sede</label>
+        <input className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Sub Sede Cobán, Delegación Escuintla..."
+          value={fd.delegacion} onChange={e => upd('delegacion', e.target.value)}/>
       </div>
       <div className="flex gap-3 pt-2">
         <button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button>
@@ -102,9 +937,8 @@ function PersonaForm({ initial, onSave, onClose, saving }) {
       </div>
     </form>
   );
-}
+};
 
-// ── DirectorioSection ─────────────────────────────────────────────────────────
 function DirectorioSection() {
   const [personas, setPersonas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -141,9 +975,6 @@ function DirectorioSection() {
     await fetchPersonas(); setDeleteModal(null);
   };
 
-  const openEdit = (p) => { setEditItem(p); setShowModal(true); };
-
-  // Filter
   const filtered = personas.filter(p => {
     const q = search.toLowerCase();
     const matchSearch = !q || p.nombre?.toLowerCase().includes(q) || p.cargo?.toLowerCase().includes(q) ||
@@ -152,7 +983,6 @@ function DirectorioSection() {
     return matchSearch && matchDept;
   });
 
-  // Group by departamento
   const grouped = filtered.reduce((acc, p) => {
     const d = p.departamento || 'Sin departamento';
     if (!acc[d]) acc[d] = [];
@@ -160,12 +990,10 @@ function DirectorioSection() {
     return acc;
   }, {});
   const sortedDepts = Object.keys(grouped).sort();
-
   const toggleDept = (d) => setExpandedDept(prev => ({ ...prev, [d]: !prev[d] }));
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><Users size={20} className="text-blue-600"/> Directorio de Delegaciones y Sub Sedes</h2>
@@ -176,8 +1004,6 @@ function DirectorioSection() {
           <Plus size={18}/> Agregar persona
         </button>
       </div>
-
-      {/* Filtros */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -189,8 +1015,6 @@ function DirectorioSection() {
           {DEPARTAMENTOS_GT.map(d => <option key={d}>{d}</option>)}
         </select>
       </div>
-
-      {/* Empty state */}
       {!loading && personas.length === 0 && (
         <Card className="text-center py-16">
           <Users size={48} className="text-gray-200 mx-auto mb-3"/>
@@ -201,10 +1025,8 @@ function DirectorioSection() {
           </button>
         </Card>
       )}
-
-      {/* Grouped by departamento */}
       {sortedDepts.map(dept => {
-        const isOpen = expandedDept[dept] !== false; // open by default
+        const isOpen = expandedDept[dept] !== false;
         return (
           <div key={dept} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <button onClick={() => toggleDept(dept)} className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50">
@@ -234,7 +1056,7 @@ function DirectorioSection() {
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      <button onClick={() => openEdit(p)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={14}/></button>
+                      <button onClick={() => { setEditItem(p); setShowModal(true); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit3 size={14}/></button>
                       <button onClick={() => setDeleteModal(p)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={14}/></button>
                     </div>
                   </div>
@@ -244,19 +1066,13 @@ function DirectorioSection() {
           </div>
         );
       })}
-
-      {/* No results */}
       {!loading && personas.length > 0 && filtered.length === 0 && (
         <div className="text-center py-10 text-gray-400">No se encontraron resultados para tu búsqueda.</div>
       )}
-
-      {/* Modal agregar/editar */}
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); setEditItem(null); }}
         title={editItem ? 'Editar persona' : 'Agregar persona al directorio'} size="md">
         <PersonaForm initial={editItem} onSave={handleSave} onClose={() => { setShowModal(false); setEditItem(null); }} saving={saving}/>
       </Modal>
-
-      {/* Modal eliminar */}
       <Modal isOpen={!!deleteModal} onClose={() => setDeleteModal(null)} title="Eliminar contacto" size="sm">
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -273,7 +1089,10 @@ function DirectorioSection() {
   );
 }
 
-// ── ProcedimientosSection ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SECCIÓN PROCEDIMIENTOS (sin cambios) ──────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
 const PASO_EMPTY = { dirigido_a: '', anticipacion: '', condiciones: '' };
 
 function PasoRow({ paso, idx, total, onChange, onRemove, onMove }) {
@@ -309,7 +1128,7 @@ function PasoRow({ paso, idx, total, onChange, onRemove, onMove }) {
       <div>
         <label className="block text-xs font-bold text-gray-500 mb-1 flex items-center gap-1"><AlertCircle size={10}/> Condiciones especiales (opcional)</label>
         <textarea rows={2} className="w-full border p-2 rounded-lg text-sm resize-none"
-          placeholder="Ej: Requiere 3 cotizaciones comparativas, adjuntar factura, aprobación de Junta Directiva..."
+          placeholder="Ej: Requiere 3 cotizaciones comparativas, adjuntar factura..."
           value={paso.condiciones} onChange={e => onChange('condiciones', e.target.value)}/>
       </div>
     </div>
@@ -321,15 +1140,13 @@ function ProcedimientoForm({ initial, onSave, onClose, saving }) {
   const [descripcion, setDescripcion] = useState(initial?.descripcion || '');
   const [pasos, setPasos] = useState(initial?.pasos?.length ? initial.pasos : [{ ...PASO_EMPTY }]);
 
-  const addPaso = () => setPasos(p => [...p, { ...PASO_EMPTY }]);
+  const addPaso    = () => setPasos(p => [...p, { ...PASO_EMPTY }]);
   const removePaso = (idx) => setPasos(p => p.filter((_, i) => i !== idx));
   const updatePaso = (idx, field, val) => setPasos(p => p.map((paso, i) => i === idx ? { ...paso, [field]: val } : paso));
-  const movePaso = (idx, dir) => {
-    const n = [...pasos];
-    const ni = idx + dir;
+  const movePaso   = (idx, dir) => {
+    const n = [...pasos]; const ni = idx + dir;
     if (ni < 0 || ni >= n.length) return;
-    [n[idx], n[ni]] = [n[ni], n[idx]];
-    setPasos(n);
+    [n[idx], n[ni]] = [n[ni], n[idx]]; setPasos(n);
   };
 
   return (
@@ -440,13 +1257,11 @@ function ProcedimientosSection() {
           <Plus size={18}/> Nuevo procedimiento
         </button>
       </div>
-
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
         <input className="w-full border p-2.5 pl-9 rounded-xl text-sm" placeholder="Buscar procedimiento..."
           value={search} onChange={e => setSearch(e.target.value)}/>
       </div>
-
       {!loading && procs.length === 0 && (
         <Card className="text-center py-16">
           <ClipboardList size={48} className="text-gray-200 mx-auto mb-3"/>
@@ -457,7 +1272,6 @@ function ProcedimientosSection() {
           </button>
         </Card>
       )}
-
       <div className="space-y-3">
         {filtered.map(proc => {
           const isOpen = !!expanded[proc.id];
@@ -468,8 +1282,7 @@ function ProcedimientosSection() {
                   <ClipboardList size={16}/>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <button onClick={() => setExpanded(prev => ({ ...prev, [proc.id]: !prev[proc.id] }))}
-                    className="text-left w-full">
+                  <button onClick={() => setExpanded(prev => ({ ...prev, [proc.id]: !prev[proc.id] }))} className="text-left w-full">
                     <p className="font-bold text-gray-800">{proc.titulo}</p>
                     {proc.descripcion && <p className="text-sm text-gray-500 mt-0.5">{proc.descripcion}</p>}
                     <p className="text-xs text-purple-600 mt-1 font-medium">{proc.pasos?.length || 0} pasos &nbsp;·&nbsp; {isOpen ? 'Ver menos ▲' : 'Ver pasos ▼'}</p>
@@ -507,13 +1320,11 @@ function ProcedimientosSection() {
           );
         })}
       </div>
-
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); setEditItem(null); }}
         title={editItem ? 'Editar procedimiento' : 'Nuevo procedimiento'} size="lg">
         <ProcedimientoForm initial={editItem} onSave={handleSave}
           onClose={() => { setShowModal(false); setEditItem(null); }} saving={saving}/>
       </Modal>
-
       <Modal isOpen={!!deleteModal} onClose={() => setDeleteModal(null)} title="Eliminar procedimiento" size="sm">
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -530,7 +1341,10 @@ function ProcedimientosSection() {
   );
 }
 
-// ── Main DirectorioView ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// ── COMPONENTE PRINCIPAL ───────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
 export default function DirectorioView() {
   const [activeTab, setActiveTab] = useState('directorio');
 
@@ -538,17 +1352,34 @@ export default function DirectorioView() {
     <div className="space-y-6">
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-auto sm:inline-flex">
-        <button onClick={() => setActiveTab('directorio')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${activeTab === 'directorio' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-          <Users size={16}/> Directorio
+        <button
+          onClick={() => setActiveTab('directorio')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
+            activeTab === 'directorio' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Users size={15}/> Directorio
         </button>
-        <button onClick={() => setActiveTab('procedimientos')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${activeTab === 'procedimientos' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-          <ClipboardList size={16}/> Procedimientos
+        <button
+          onClick={() => setActiveTab('proveedores')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
+            activeTab === 'proveedores' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <ShoppingBag size={15}/> Proveedores
+        </button>
+        <button
+          onClick={() => setActiveTab('procedimientos')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
+            activeTab === 'procedimientos' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <ClipboardList size={15}/> Procedimientos
         </button>
       </div>
 
-      {activeTab === 'directorio' && <DirectorioSection/>}
+      {activeTab === 'directorio'     && <DirectorioSection/>}
+      {activeTab === 'proveedores'    && <ProveedoresSection/>}
       {activeTab === 'procedimientos' && <ProcedimientosSection/>}
     </div>
   );
