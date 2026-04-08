@@ -16,6 +16,13 @@ import CartasSection from './CartasView';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Construye URL de storage soportando paths relativos Y URLs completas (post-migración)
+const buildStorageUrl = (path, bucket) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
+};
+
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('CAEDUC: Variables de entorno faltantes. Verifica VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en Vercel.');
 }
@@ -142,12 +149,12 @@ const previewHTML = (html) => {
 const generateApprovalLetterHTML = (aval, settings = {}) => {
   const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
   const f1Cargo = settings.firmante1_cargo || 'Coordinador';
-  const f1FirmaUrl = settings.firmante1_firma_path ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.firmante1_firma_path}` : '';
+  const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
   const f2Name = settings.firmante2_nombre || 'Mgtr. Luisa Mazariegos';
   const f2Cargo = settings.firmante2_cargo || 'Secretaria';
-  const f2FirmaUrl = settings.firmante2_firma_path ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.firmante2_firma_path}` : '';
-  const selloUrl = settings.sello_path ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.sello_path}` : '';
-  const logoUrl = settings.logo_path ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.logo_path}` : '';
+  const f2FirmaUrl = buildStorageUrl(settings.firmante2_firma_path, 'firmas-sellos');
+  const selloUrl = buildStorageUrl(settings.sello_path, 'firmas-sellos');
+  const logoUrl = buildStorageUrl(settings.logo_path, 'firmas-sellos');
   const fmtDate = (ds) => { if (!ds) return '—'; const mo=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const d=new Date(ds+'T12:00:00'); return `${d.getDate()} de ${mo[d.getMonth()]} de ${d.getFullYear()}`; };
   const fmtReq = (ds) => { if (!ds) return '—'; const mo=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; const d=new Date(ds); return `${String(d.getDate()).padStart(2,'0')} de ${mo[d.getMonth()]} de ${d.getFullYear()}`; };
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Aprobación ${aval.correlativo||''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;}.page{width:8.5in;height:11in;margin:0 auto;padding:0;position:relative;background:white;overflow:hidden;}.deco-left{position:absolute;left:0;top:200px;width:18px;height:300px;}.deco-left div{width:8px;margin-bottom:4px;border-radius:4px;}.deco-left div:nth-child(1){height:60px;background:#E91E63;}.deco-left div:nth-child(2){height:60px;background:#9C27B0;}.deco-left div:nth-child(3){height:60px;background:#2196F3;}.deco-left div:nth-child(4){height:60px;background:#4CAF50;}.content{padding:50px 70px 40px 70px;position:relative;z-index:1;}.title{text-align:center;font-size:24px;font-weight:800;color:#1a5276;letter-spacing:2px;margin:20px 0 30px 0;}.footer{position:absolute;bottom:0;left:0;right:0;border-top:2px solid #eee;padding:15px 30px;display:flex;justify-content:space-between;font-size:8.5px;color:#777;background:white;}.footer-col{text-align:center;flex:1;padding:0 5px;}.footer-col strong{display:block;color:#1a5276;font-size:9px;margin-bottom:2px;}.footer-bottom{position:absolute;bottom:5px;left:0;right:0;text-align:center;font-size:9px;color:#1a5276;font-weight:600;}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body><div class="page"><div class="deco-left"><div></div><div></div><div></div><div></div></div><div class="content">${logoUrl?`<img src="${logoUrl}" alt="Logo" style="height:90px;width:auto;"/>`:'<div></div>'}<div class="title">APROBACIÓN DE AVAL</div><div style="text-align:right;color:#E91E63;font-weight:600;margin-bottom:25px;font-size:14px;">Guatemala, ${fmtDate(aval.approval_date)}</div><div style="margin-bottom:25px;font-size:14px;line-height:1.6;">Estimado(a) <span style="color:#E91E63;font-weight:600;">${aval.applicant_name||'—'}</span><br><span style="color:#E91E63;font-weight:600;">${aval.institution||''}</span></div><p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;">Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.</p><p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;">Por medio de la presente carta se extiende la aprobación a su solicitud recibida el <span style="color:#E91E63;font-weight:700;">${fmtReq(aval.created_at)}</span>, con el Aval <span style="color:#E91E63;font-weight:700;">${aval.correlativo||'—'}</span>.</p><div style="margin:15px 0 20px 0;font-size:13.5px;line-height:2;"><div><span style="font-weight:600;">Actividad:</span> <span style="color:#E91E63;font-weight:600;">${aval.activity_type||'—'}</span></div><div><span style="font-weight:600;">Duración:</span> <span style="color:#E91E63;font-weight:600;">${aval.duration||'—'}</span></div><div><span style="font-weight:600;">Modalidad:</span> <span style="color:#E91E63;font-weight:600;">${aval.modality||'—'}</span></div><div><span style="font-weight:600;">Fecha y hora:</span> <span style="color:#E91E63;font-weight:600;">${aval.schedule||aval.activity_date||'—'}</span></div><div><span style="font-weight:600;">Lugar/Plataforma:</span> <span style="color:#E91E63;font-weight:600;">${aval.platform||'—'}</span></div><div><span style="font-weight:600;">Tema:</span> <span style="color:#E91E63;font-weight:600;">${aval.topic||aval.activity_name||'—'}</span></div></div><p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-top:15px;">Agradecemos su trabajo y esfuerzo en la promoción del crecimiento continuo de los profesionales. Solicitamos incluir el número de AVAL en el material correspondiente.</p><div style="margin-top:30px;display:flex;justify-content:space-between;align-items:flex-end;">${f1FirmaUrl?`<div style="text-align:center;"><img src="${f1FirmaUrl}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/><div style="width:220px;border-top:1px solid #333;padding-top:5px;"><div style="font-weight:700;font-size:13px;">${f1Name}</div><div style="font-size:12px;color:#555;">${f1Cargo} – CAEDUC</div></div></div>`:'<div></div>'}<div>${selloUrl?`<img src="${selloUrl}" alt="Sello" style="height:110px;width:auto;opacity:0.85;"/>`:'<div></div>'}</div>${f2FirmaUrl?`<div style="text-align:center;"><img src="${f2FirmaUrl}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/><div style="width:220px;border-top:1px solid #333;padding-top:5px;"><div style="font-weight:700;font-size:13px;">${f2Name}</div><div style="font-size:12px;color:#555;">${f2Cargo} – CAEDUC</div></div></div>`:'<div></div>'}</div></div><div class="footer"><div class="footer-col"><strong>Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div><div class="footer-col"><strong>Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel Of. 105<br>+(502) 7764-7109</div><div class="footer-col"><strong>Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div><div class="footer-col"><strong>Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div></div><div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div></div></body></html>`;
@@ -171,10 +178,10 @@ const generateOficioHTML = (oficio, settings = {}) => {
   const f1Name  = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
   const f1Cargo = settings.firmante1_cargo  || 'Coordinador';
   const f1Inst  = settings.firmante1_institucion || 'Comisión de Acreditación Educación Continua, Colegio de Psicólogos de Guatemala';
-  const f1FirmaUrl = settings.firmante1_firma_path ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.firmante1_firma_path}` : '';
-  const selloUrl   = settings.sello_path            ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.sello_path}`           : '';
+  const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
+  const selloUrl   = buildStorageUrl(settings.sello_path, 'firmas-sellos');
   const membreteUrl = settings.membrete_path
-    ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${settings.membrete_path}`
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
     : '/fondo-oficios.jpg';
   const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
   const isRecursos = (oficio.motivo || '').includes('recursos') || (oficio.motivo || '').includes('Aprobación');
@@ -249,27 +256,23 @@ const BackButton = ({ onClick, label = '← Volver al Menú Principal' }) => (
   </button>
 );
 
-// ── LoginView (REDISEÑADO) ─────────────────────────────────────────────────────
+// ── LoginView ─────────────────────────────────────────────────────────────────
 const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }) => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const youtubeUrl = appSettings?.youtube_tutorial_url || '';
   const reglamentoPath = appSettings?.reglamento_file_path || '';
-  const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
+  const reglamentoUrl = reglamentoPath ? buildStorageUrl(reglamentoPath, 'reglamento-avales') : null;
   const logoPath = appSettings?.logo_path || '';
-  const logoUrl = logoPath ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${logoPath}` : '/logo-CAEDUC.png';
+  const logoUrl = logoPath ? buildStorageUrl(logoPath, 'firmas-sellos') : '/logo-CAEDUC.png';
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-blue-50 p-4 sm:p-6">
-      {/* Tarjeta principal */}
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
-        {/* Header con fondo institucional */}
         <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 px-6 pt-8 pb-10 relative overflow-hidden">
-          {/* Decoración sutil */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-          {/* Logo institucional */}
           <div className="relative flex flex-col items-center">
             <img
               src={logoUrl}
@@ -282,7 +285,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
           </div>
         </div>
 
-        {/* Curva decorativa */}
         <div className="relative -mt-5">
           <div className="bg-white rounded-t-3xl px-6 pt-6 pb-2">
             <h2 className="text-2xl font-extrabold text-gray-800 text-center tracking-tight">
@@ -292,7 +294,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
               Portal oficial de gestión y acreditación
             </p>
 
-            {/* Botón principal */}
             <button
               onClick={() => setUserMode('external')}
               className="w-full bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold text-base transition-all shadow-sm shadow-green-200 flex items-center justify-center gap-2"
@@ -301,7 +302,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
               Ingresar al portal de solicitudes
             </button>
 
-            {/* Acciones secundarias — grid 2 columnas */}
             <div className="grid grid-cols-2 gap-3 mt-4">
               <button
                 onClick={() => setUserMode('consultar_estado')}
@@ -327,7 +327,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
               </button>
             </div>
 
-            {/* Reglamento y Tutorial */}
             <div className="space-y-2.5 mt-4">
               {reglamentoUrl && (
                 <a
@@ -356,10 +355,8 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
               )}
             </div>
 
-            {/* Separador */}
             <div className="border-t border-gray-200 my-5" />
 
-            {/* Botón de acceso administrativo — VISIBLE */}
             <button
               onClick={() => setShowAdmin(true)}
               className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border-2 border-slate-700 text-slate-700 font-bold text-sm hover:bg-slate-700 hover:text-white transition-all active:scale-[0.98]"
@@ -368,7 +365,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
               Acceso administrativo
             </button>
 
-            {/* Footer */}
             <p className="text-center text-xs text-gray-300 mt-5 mb-3">
               © {new Date().getFullYear()} CAEDUC — Colegio de Psicólogos de Guatemala
             </p>
@@ -376,7 +372,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
         </div>
       </div>
 
-      {/* Modal de login admin */}
       <Modal isOpen={showAdmin} onClose={() => setShowAdmin(false)} title="Acceso Comisión" size="sm">
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(email, password); }} className="space-y-4">
           <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2">
@@ -409,7 +404,6 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
         </form>
       </Modal>
 
-      {/* Animación CSS inline */}
       <style>{`
         @keyframes fade-in {
           from { opacity: 0; transform: translateY(16px); }
@@ -430,9 +424,9 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
   const [submittedNumber, setSubmittedNumber] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const formFilePath = appSettings?.aval_form_file_path || '';
-  const formFileUrl = formFilePath ? `${supabaseUrl}/storage/v1/object/public/aval-form-template/${formFilePath}` : null;
+  const formFileUrl = formFilePath ? buildStorageUrl(formFilePath, 'aval-form-template') : null;
   const reglamentoPath = appSettings?.reglamento_file_path || '';
-  const reglamentoUrl = reglamentoPath ? `${supabaseUrl}/storage/v1/object/public/reglamento-avales/${reglamentoPath}` : null;
+  const reglamentoUrl = reglamentoPath ? buildStorageUrl(reglamentoPath, 'reglamento-avales') : null;
   const handleSubmit = async (e) => { e.preventDefault(); setSubmitting(true); const rn = await submitAval(data, file); if (rn) setSubmittedNumber(rn); setSubmitting(false); };
   if (submittedNumber) return (
     <div className="max-w-lg mx-auto space-y-6 mt-10">
@@ -527,7 +521,7 @@ const VerificarAvalView = ({ onBack }) => {
   );
 };
 
-// ── OficioCard (colapsable) ────────────────────────────────────────────────────
+// ── OficioCard ────────────────────────────────────────────────────────────────
 const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }) => {
   const [expanded, setExpanded] = useState(false);
   if (!o.numero_oficio && !o.motivo) return null;
@@ -725,7 +719,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
 const FirmaUploader = ({ label, settingKey, appSettings, onUpdateSetting }) => {
   const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);
   const fp = appSettings?.[settingKey]||'';
-  const imgUrl = fp ? `${supabaseUrl}/storage/v1/object/public/firmas-sellos/${fp}` : null;
+  const imgUrl = fp ? buildStorageUrl(fp, 'firmas-sellos') : null;
   const handleUpload = async (e) => { const f=e.target.files[0]; if(!f)return; if(!f.type.startsWith('image/')){alert('Solo imágenes.');return;} setUploading(true);setMsg(null); try { const fn=`${settingKey}_${Date.now()}.${f.name.split('.').pop()}`; if(fp)await supabase.storage.from('firmas-sellos').remove([fp]); const{data,error}=await supabase.storage.from('firmas-sellos').upload(fn,f,{upsert:true}); if(error)setMsg({type:'error',text:error.message}); else{await onUpdateSetting(settingKey,data.path);setMsg({type:'success',text:'Imagen actualizada.'});} }catch(err){setMsg({type:'error',text:err.message});} setUploading(false); };
   const handleRemove = async () => { if(!fp||!confirm('¿Eliminar?'))return; await supabase.storage.from('firmas-sellos').remove([fp]); await onUpdateSetting(settingKey,''); setMsg({type:'success',text:'Eliminada.'}); };
   return (
@@ -793,6 +787,7 @@ const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers }) => {
     </div>
   );
 };
+
 const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
   const [saving,setSaving]=useState(false);const [msg,setMsg]=useState(null);
   const [f1,setF1]=useState({nombre:'',cargo:'',institucion:''});
@@ -815,7 +810,8 @@ const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
 
 const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
   const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);
-  const fp=appSettings?.aval_form_file_path||'';const fUrl=fp?`${supabaseUrl}/storage/v1/object/public/aval-form-template/${fp}`:null;
+  const fp=appSettings?.aval_form_file_path||'';
+  const fUrl=fp?buildStorageUrl(fp,'aval-form-template'):null;
   const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;setUploading(true);setMsg(null);try{const fn=`formulario_aval_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('aval-form-template').remove([fp]);const{data,error}=await supabase.storage.from('aval-form-template').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting('aval_form_file_path',data.path);setMsg({type:'success',text:'Archivo subido.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
   const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar?'))return;await supabase.storage.from('aval-form-template').remove([fp]);await onUpdateSetting('aval_form_file_path','');setMsg({type:'success',text:'Eliminado.'});};
   return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Formulario de Solicitud</h3>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700':'bg-red-50 text-red-700'} border`}>{msg.text}</div>}<Card>{fUrl?(<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"><FileText size={24} className="text-green-600 shrink-0"/><div className="flex-1"><p className="font-medium text-green-800">Archivo activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700">Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200">Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50"><Upload size={20} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx"/></label></div>):(<div className="text-center space-y-4"><Upload size={28} className="text-gray-400 mx-auto"/><p className="font-medium text-gray-700">Sin formulario</p><label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium"><Upload size={18}/>{uploading?'Subiendo...':'Subir Formulario'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx"/></label></div>)}</Card></div>);
@@ -823,7 +819,8 @@ const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
 
 const AdminReglamentoTab = ({ appSettings, onUpdateSetting }) => {
   const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);
-  const fp=appSettings?.reglamento_file_path||'';const fUrl=fp?`${supabaseUrl}/storage/v1/object/public/reglamento-avales/${fp}`:null;
+  const fp=appSettings?.reglamento_file_path||'';
+  const fUrl=fp?buildStorageUrl(fp,'reglamento-avales'):null;
   const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;setUploading(true);setMsg(null);try{const fn=`reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('reglamento-avales').remove([fp]);const{data,error}=await supabase.storage.from('reglamento-avales').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting('reglamento_file_path',data.path);setMsg({type:'success',text:'Reglamento subido.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
   const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar el reglamento?'))return;await supabase.storage.from('reglamento-avales').remove([fp]);await onUpdateSetting('reglamento_file_path','');setMsg({type:'success',text:'Eliminado.'});};
   return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Reglamento de Avales</h3>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700':'bg-red-50 text-red-700'} border`}>{msg.text}</div>}<Card>{fUrl?(<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg"><BookOpen size={24} className="text-purple-600 shrink-0"/><div className="flex-1"><p className="font-medium text-purple-800">Reglamento activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700">Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200">Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50"><Upload size={20} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx"/></label></div>):(<div className="text-center space-y-4"><BookOpen size={28} className="text-gray-400 mx-auto"/><p className="font-medium text-gray-700">Sin reglamento</p><label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium"><Upload size={18}/>{uploading?'Subiendo...':'Subir Reglamento'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx"/></label></div>)}</Card></div>);
