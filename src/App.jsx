@@ -747,9 +747,19 @@ const FirmaUploader = ({ label, settingKey, appSettings, onUpdateSetting }) => {
 };
 
 // ── AdminConfigView ────────────────────────────────────────────────────────────
-const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember }) => {
+const SUPER_ADMIN = 'lic.juanreyesr@gmail.com';
+
+const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember, userEmail }) => {
   const [activeTab,setActiveTab]=useState('users');
-  const tabs = [{id:'users',label:'Usuarios',icon:<UserPlus size={18}/>},{id:'firmas',label:'Firmas y Sello',icon:<FileSignature size={18}/>},{id:'form_file',label:'Formulario Aval',icon:<File size={18}/>},{id:'reglamento',label:'Reglamento',icon:<BookOpen size={18}/>},{id:'tutorial',label:'Tutorial YouTube',icon:<Youtube size={18}/>},{id:'passwords',label:'Contraseñas',icon:<Lock size={18}/>}];
+  const isSuperAdmin = userEmail === SUPER_ADMIN;
+  const tabs = [
+    {id:'users',label:'Usuarios',icon:<UserPlus size={18}/>},
+    {id:'firmas',label:'Firmas y Sello',icon:<FileSignature size={18}/>},
+    {id:'form_file',label:'Formulario Aval',icon:<File size={18}/>},
+    {id:'reglamento',label:'Reglamento',icon:<BookOpen size={18}/>},
+    {id:'tutorial',label:'Tutorial YouTube',icon:<Youtube size={18}/>},
+    ...(isSuperAdmin ? [{id:'passwords',label:'Contraseñas',icon:<Lock size={18}/>}] : [])
+  ];
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">Configuración del Sistema</h2>
@@ -762,6 +772,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
       {activeTab==='reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='passwords' && <AdminPasswordManager supabase={supabase} app="caeduc" />}
+      {activeTab==='passwords' && isSuperAdmin && <AdminPasswordManager supabase={supabase} app="caeduc" />}
     </div>
   );
 };
@@ -1021,7 +1032,7 @@ export default function CAEDUCApp() {
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
             {currentModule==='reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>}
-            {currentModule==='admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember}/>}
+            {currentModule==='admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember} userEmail={session?.user?.email}/>}
           </>
         )}
       </main>
