@@ -57,7 +57,7 @@ class ErrorBoundary extends React.Component {
 }
 
 
-const ROLES = ['Coordinador(a)','Subcoordinador(a)','Secretario(a)','Prosecretario(a)','Gestor(a) del Conocimiento','Vocal I','Vocal II'];
+const ROLES = ['Coordinador(a)','Subcoordinador(a)','Secretario(a)','Prosecretario(a)','Gestor(a) del Conocimiento','Vocal I','Vocal II','Asistente JD','Junta Directiva'];
 const ACTIVITY_TYPES = ['Certificación','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
 const MODALITIES = ['Virtual','Presencial','Híbrida'];
 const MOTIVOS_OFICIO = [
