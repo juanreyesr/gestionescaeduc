@@ -112,7 +112,7 @@ function ChangePasswordModal({ target, onClose, onSave, saving, msg, app }) {
   );
 }
 
-export default function AdminPasswordManager({ supabase, app = 'cpg' }) {
+export default function AdminPasswordManager({ supabase, app = 'caeduc' }) {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [search, setSearch]     = useState('');
