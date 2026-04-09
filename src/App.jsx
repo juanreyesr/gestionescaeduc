@@ -13,6 +13,7 @@ import AgendasView from './AgendasView';
 import DirectorioView from './DirectorioView';
 import CartasSection from './CartasView';
 import SouvenirsView from './SouvenirsView';
+import AdminPasswordManager from './AdminPasswordManager';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -748,7 +749,7 @@ const FirmaUploader = ({ label, settingKey, appSettings, onUpdateSetting }) => {
 // ── AdminConfigView ────────────────────────────────────────────────────────────
 const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember }) => {
   const [activeTab,setActiveTab]=useState('users');
-  const tabs = [{id:'users',label:'Usuarios',icon:<UserPlus size={18}/>},{id:'firmas',label:'Firmas y Sello',icon:<FileSignature size={18}/>},{id:'form_file',label:'Formulario Aval',icon:<File size={18}/>},{id:'reglamento',label:'Reglamento',icon:<BookOpen size={18}/>},{id:'tutorial',label:'Tutorial YouTube',icon:<Youtube size={18}/>}];
+  const tabs = [{id:'users',label:'Usuarios',icon:<UserPlus size={18}/>},{id:'firmas',label:'Firmas y Sello',icon:<FileSignature size={18}/>},{id:'form_file',label:'Formulario Aval',icon:<File size={18}/>},{id:'reglamento',label:'Reglamento',icon:<BookOpen size={18}/>},{id:'tutorial',label:'Tutorial YouTube',icon:<Youtube size={18}/>},{id:'passwords',label:'Contraseñas',icon:<Lock size={18}/>}];
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">Configuración del Sistema</h2>
@@ -760,6 +761,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
       {activeTab==='form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
+      {activeTab==='passwords' && <AdminPasswordManager supabase={supabase} app="caeduc" />}
     </div>
   );
 };
