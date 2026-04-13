@@ -6,7 +6,8 @@ import {
   FileSignature, Upload, Save, AlertTriangle, FileSpreadsheet,
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
-  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift
+  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift,
+  Loader
 } from 'lucide-react';
 import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
 import AgendasView from './AgendasView';
@@ -69,6 +70,47 @@ const MOTIVOS_OFICIO = [
   'Solicitud de difusión institucional',
   'Otro (personalizado)'
 ];
+
+// ── Subida de archivos con progreso (XMLHttpRequest) ───────────────────────────
+const uploadFileWithProgress = (bucket, filePath, file, onProgress) => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const url = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        const pct = Math.round((event.loaded / event.total) * 100);
+        onProgress(pct);
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const resp = JSON.parse(xhr.responseText);
+          resolve({ data: resp, error: null });
+        } catch {
+          resolve({ data: { Key: filePath }, error: null });
+        }
+      } else {
+        try {
+          const err = JSON.parse(xhr.responseText);
+          reject(new Error(err.message || err.error || `Error ${xhr.status}`));
+        } catch {
+          reject(new Error(`Error de servidor: ${xhr.status}`));
+        }
+      }
+    });
+
+    xhr.addEventListener('error', () => reject(new Error('Error de conexión al subir archivo. Verifica tu conexión a internet.')));
+    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada')));
+
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Authorization', `Bearer ${supabaseAnonKey}`);
+    xhr.setRequestHeader('x-upsert', 'false');
+    xhr.send(file);
+  });
+};
 
 // ── PDF utilities ──────────────────────────────────────────────────────────────
 const imgToBase64 = (url) => new Promise((resolve) => {
@@ -258,6 +300,47 @@ const BackButton = ({ onClick, label = '← Volver al Menú Principal' }) => (
   </button>
 );
 
+// ── Barra de progreso de subida ────────────────────────────────────────────────
+const UploadProgressBar = ({ progress, phase }) => {
+  if (progress <= 0) return null;
+  return (
+    <div className="space-y-2 animate-fade-in">
+      {phase === 'uploading' && (
+        <>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-blue-700 font-medium flex items-center gap-2">
+              <Loader size={14} className="animate-spin" />
+              Subiendo documento...
+            </span>
+            <span className="text-blue-600 font-bold tabular-nums">{progress}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          {progress < 30 && (
+            <p className="text-xs text-gray-400">Iniciando transferencia del archivo...</p>
+          )}
+          {progress >= 30 && progress < 80 && (
+            <p className="text-xs text-gray-400">Transfiriendo datos al servidor...</p>
+          )}
+          {progress >= 80 && (
+            <p className="text-xs text-gray-400">Finalizando subida...</p>
+          )}
+        </>
+      )}
+      {phase === 'saving' && (
+        <div className="flex items-center gap-2 text-green-700 text-sm font-medium bg-green-50 border border-green-200 rounded-lg p-3">
+          <CheckCircle size={16} className="text-green-500" />
+          Documento subido correctamente. Guardando solicitud...
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── LoginView ─────────────────────────────────────────────────────────────────
 const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }) => {
   const [showAdmin, setShowAdmin] = useState(false);
@@ -276,151 +359,45 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
           <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
           <div className="relative flex flex-col items-center">
-            <img
-              src={logoUrl}
-              alt="CAEDUC — Comisión de Acreditación y Educación Continua"
-              className="w-38 h-38 object-contain drop-shadow-lg"
-            />
-            <p className="text-white/50 text-xs tracking-widest uppercase mt-2">
-              Comisión de Acreditación y Educación Continua
-            </p>
+            <img src={logoUrl} alt="CAEDUC — Comisión de Acreditación y Educación Continua" className="w-38 h-38 object-contain drop-shadow-lg" />
+            <p className="text-white/50 text-xs tracking-widest uppercase mt-2">Comisión de Acreditación y Educación Continua</p>
           </div>
         </div>
-
         <div className="relative -mt-5">
           <div className="bg-white rounded-t-3xl px-6 pt-6 pb-2">
-            <h2 className="text-2xl font-extrabold text-gray-800 text-center tracking-tight">
-              Solicitud de Avales
-            </h2>
-            <p className="text-sm text-gray-400 text-center mt-1 mb-6">
-              Portal oficial de gestión y acreditación
-            </p>
-
-            <button
-              onClick={() => setUserMode('external')}
-              className="w-full bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold text-base transition-all shadow-sm shadow-green-200 flex items-center justify-center gap-2"
-            >
-              <FileText size={18} />
-              Ingresar al portal de solicitudes
-            </button>
-
+            <h2 className="text-2xl font-extrabold text-gray-800 text-center tracking-tight">Solicitud de Avales</h2>
+            <p className="text-sm text-gray-400 text-center mt-1 mb-6">Portal oficial de gestión y acreditación</p>
+            <button onClick={() => setUserMode('external')} className="w-full bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white py-3.5 rounded-xl font-bold text-base transition-all shadow-sm shadow-green-200 flex items-center justify-center gap-2"><FileText size={18} /> Ingresar al portal de solicitudes</button>
             <div className="grid grid-cols-2 gap-3 mt-4">
-              <button
-                onClick={() => setUserMode('consultar_estado')}
-                className="flex flex-col items-center gap-2 py-4 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group"
-              >
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                  <Search size={18} className="text-blue-600" />
-                </div>
-                <span className="text-xs font-semibold text-gray-700 text-center leading-tight">
-                  Consultar estado
-                </span>
-              </button>
-              <button
-                onClick={() => setUserMode('verificar_aval')}
-                className="flex flex-col items-center gap-2 py-4 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all group"
-              >
-                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                  <Shield size={18} className="text-green-600" />
-                </div>
-                <span className="text-xs font-semibold text-gray-700 text-center leading-tight">
-                  Verificar validez
-                </span>
-              </button>
+              <button onClick={() => setUserMode('consultar_estado')} className="flex flex-col items-center gap-2 py-4 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all group"><div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors"><Search size={18} className="text-blue-600" /></div><span className="text-xs font-semibold text-gray-700 text-center leading-tight">Consultar estado</span></button>
+              <button onClick={() => setUserMode('verificar_aval')} className="flex flex-col items-center gap-2 py-4 px-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all group"><div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center group-hover:bg-green-200 transition-colors"><Shield size={18} className="text-green-600" /></div><span className="text-xs font-semibold text-gray-700 text-center leading-tight">Verificar validez</span></button>
             </div>
-
             <div className="space-y-2.5 mt-4">
-              {reglamentoUrl && (
-                <a
-                  href={reglamentoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-all"
-                >
-                  <BookOpen size={18} className="text-purple-600 shrink-0" />
-                  <span className="text-sm font-semibold text-purple-700">Descargar reglamento</span>
-                  <Download size={14} className="text-purple-400 ml-auto" />
-                </a>
-              )}
-              {youtubeUrl && (
-                <a
-                  href={youtubeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 transition-all"
-                >
-                  <div className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center shrink-0">
-                    <Play size={12} className="text-white ml-0.5" fill="white" />
-                  </div>
-                  <span className="text-sm font-semibold text-red-600">Ver tutorial del proceso</span>
-                </a>
-              )}
+              {reglamentoUrl && <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-all"><BookOpen size={18} className="text-purple-600 shrink-0" /><span className="text-sm font-semibold text-purple-700">Descargar reglamento</span><Download size={14} className="text-purple-400 ml-auto" /></a>}
+              {youtubeUrl && <a href={youtubeUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 w-full py-3 px-4 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 transition-all"><div className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center shrink-0"><Play size={12} className="text-white ml-0.5" fill="white" /></div><span className="text-sm font-semibold text-red-600">Ver tutorial del proceso</span></a>}
             </div>
-
             <div className="border-t border-gray-200 my-5" />
-
-            <button
-              onClick={() => setShowAdmin(true)}
-              className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border-2 border-slate-700 text-slate-700 font-bold text-sm hover:bg-slate-700 hover:text-white transition-all active:scale-[0.98]"
-            >
-              <Lock size={15} />
-              Acceso administrativo
-            </button>
-
-            <p className="text-center text-xs text-gray-300 mt-5 mb-3">
-              © {new Date().getFullYear()} CAEDUC — Colegio de Psicólogos de Guatemala
-            </p>
+            <button onClick={() => setShowAdmin(true)} className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border-2 border-slate-700 text-slate-700 font-bold text-sm hover:bg-slate-700 hover:text-white transition-all active:scale-[0.98]"><Lock size={15} /> Acceso administrativo</button>
+            <p className="text-center text-xs text-gray-300 mt-5 mb-3">© {new Date().getFullYear()} CAEDUC — Colegio de Psicólogos de Guatemala</p>
           </div>
         </div>
       </div>
-
       <Modal isOpen={showAdmin} onClose={() => setShowAdmin(false)} title="Acceso Comisión" size="sm">
         <form onSubmit={(e) => { e.preventDefault(); handleLogin(email, password); }} className="space-y-4">
-          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2">
-            <Lock size={18} className="text-slate-500 shrink-0" />
-            <p className="text-sm text-slate-600">
-              Acceso exclusivo para miembros de la comisión CAEDUC.
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Correo electrónico</label>
-            <input type="email" placeholder="usuario@ejemplo.com" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-all" value={email} onChange={e => setEmail(e.target.value)} required/>
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-gray-700 mb-1">Contraseña</label>
-            <input type="password" placeholder="••••••••" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-all" value={password} onChange={e => setPassword(e.target.value)} required/>
-          </div>
-          {authError && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-              <AlertCircle size={16} className="text-red-500 shrink-0" />
-              <p className="text-red-600 text-sm">{authError}</p>
-            </div>
-          )}
-          <button type="submit" disabled={loading} className="w-full bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
-            {loading ? (
-              <><RefreshCw size={16} className="animate-spin" /> Ingresando...</>
-            ) : (
-              <><Lock size={16} /> Iniciar sesión</>
-            )}
-          </button>
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2"><Lock size={18} className="text-slate-500 shrink-0" /><p className="text-sm text-slate-600">Acceso exclusivo para miembros de la comisión CAEDUC.</p></div>
+          <div><label className="block text-sm font-bold text-gray-700 mb-1">Correo electrónico</label><input type="email" placeholder="usuario@ejemplo.com" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-all" value={email} onChange={e => setEmail(e.target.value)} required/></div>
+          <div><label className="block text-sm font-bold text-gray-700 mb-1">Contraseña</label><input type="password" placeholder="••••••••" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none transition-all" value={password} onChange={e => setPassword(e.target.value)} required/></div>
+          {authError && <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-3"><AlertCircle size={16} className="text-red-500 shrink-0" /><p className="text-red-600 text-sm">{authError}</p></div>}
+          <button type="submit" disabled={loading} className="w-full bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2">{loading ? <><RefreshCw size={16} className="animate-spin" /> Ingresando...</> : <><Lock size={16} /> Iniciar sesión</>}</button>
         </form>
       </Modal>
-
-      <style>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(16px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.5s ease-out both;
-        }
-      `}</style>
+      <style>{`@keyframes fade-in{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}.animate-fade-in{animation:fade-in 0.5s ease-out both;}`}</style>
     </div>
   );
 };
 
-// ── ExternalAvalesView ─────────────────────────────────────────────────────────
-const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
+// ── ExternalAvalesView (CON BARRA DE PROGRESO) ─────────────────────────────────
+const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 0, uploadPhase = 'idle' }) => {
   const [data, setData] = useState({ applicantName:'',institution:'',activityName:'',activityDate:'',email:'',activityType:'',duration:'',modality:'',schedule:'',platform:'',topic:'',targetAudience:'' });
   const [file, setFile] = useState(null);
   const [submittedNumber, setSubmittedNumber] = useState(null);
@@ -429,7 +406,21 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
   const formFileUrl = formFilePath ? buildStorageUrl(formFilePath, 'aval-form-template') : null;
   const reglamentoPath = appSettings?.reglamento_file_path || '';
   const reglamentoUrl = reglamentoPath ? buildStorageUrl(reglamentoPath, 'reglamento-avales') : null;
-  const handleSubmit = async (e) => { e.preventDefault(); setSubmitting(true); const rn = await submitAval(data, file); if (rn) setSubmittedNumber(rn); setSubmitting(false); };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    const rn = await submitAval(data, file);
+    if (rn) setSubmittedNumber(rn);
+    setSubmitting(false);
+  };
+
   if (submittedNumber) return (
     <div className="max-w-lg mx-auto space-y-6 mt-10">
       <Card className="border-t-4 border-t-green-500">
@@ -442,6 +433,7 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
       </Card>
     </div>
   );
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <BackButton onClick={onBack}/>
@@ -476,9 +468,48 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings }) => {
           </div>
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase">Documento Adjunto (PDF)</h3>
-            <input type="file" accept=".pdf" onChange={e=>{const f=e.target.files[0];if(f&&f.type!=='application/pdf'){alert('Solo PDF.');e.target.value='';setFile(null);return;}setFile(f);}}/>
+            <p className="text-xs text-gray-500">Adjunta tu solicitud en formato PDF. Sin límite de tamaño.</p>
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={e => {
+                const f = e.target.files[0];
+                if (!f) { setFile(null); return; }
+                setFile(f);
+              }}
+            />
+            {file && (
+              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-sm">
+                <FileText size={16} className="text-blue-600 shrink-0" />
+                <span className="text-blue-800 font-medium truncate">{file.name}</span>
+                <span className="text-blue-500 text-xs shrink-0">({formatFileSize(file.size)})</span>
+                <button type="button" onClick={() => setFile(null)} className="ml-auto text-gray-400 hover:text-red-500"><X size={14}/></button>
+              </div>
+            )}
           </div>
-          <button type="submit" disabled={submitting} className="w-full bg-green-600 text-white py-3 rounded font-bold hover:bg-green-700 disabled:opacity-50">{submitting?'Enviando...':'Enviar Solicitud'}</button>
+
+          {/* Barra de progreso de subida */}
+          <UploadProgressBar progress={uploadProgress} phase={uploadPhase} />
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg transition-all"
+          >
+            {submitting ? (
+              <>
+                <Loader size={20} className="animate-spin" />
+                {uploadPhase === 'uploading'
+                  ? `Subiendo documento... ${uploadProgress}%`
+                  : uploadPhase === 'saving'
+                    ? 'Guardando solicitud...'
+                    : 'Enviando...'
+                }
+              </>
+            ) : (
+              <><Send size={20} /> Enviar Solicitud</>
+            )}
+          </button>
         </form>
       </Card>
     </div>
@@ -580,14 +611,8 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
   return (
     <div className="space-y-6">
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl inline-flex">
-        <button onClick={() => setCartasTab('oficios')}
-          className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='oficios' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-          <FileSignature size={15}/> Oficios
-        </button>
-        <button onClick={() => setCartasTab('cartas')}
-          className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='cartas' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
-          <Mail size={15}/> Cartas
-        </button>
+        <button onClick={() => setCartasTab('oficios')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='oficios' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><FileSignature size={15}/> Oficios</button>
+        <button onClick={() => setCartasTab('cartas')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='cartas' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><Mail size={15}/> Cartas</button>
       </div>
       {cartasTab === 'cartas' ? <CartasSection appSettings={appSettings}/> : (<>
       <div className="flex justify-between items-center">
@@ -680,35 +705,11 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
               <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e=>upd('motivo',e.target.value)}>{MOTIVOS_OFICIO.map(m=><option key={m} value={m}>{m}</option>)}</select>
               {isCustomMotivo && <textarea required rows={3} placeholder="Describe el motivo..." className="w-full border p-2.5 rounded-lg text-sm resize-none" value={fd.motivo_custom} onChange={e=>upd('motivo_custom',e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.stopPropagation();}}/>}
             </div>
-            {isRecursos && (
-              <div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100">
-                <h4 className="font-bold text-green-800 text-sm uppercase">Datos de la Actividad</h4>
-                <input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>upd('actividad_nombre',e.target.value)}/>
-                <textarea rows={3} placeholder="Descripción" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>upd('actividad_descripcion',e.target.value)}/>
-                <div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>upd('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>upd('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div></div>
-                <div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>upd('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>upd('actividad_fecha',e.target.value)}/></div></div>
-                <input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>upd('actividad_sede',e.target.value)}/>
-              </div>
-            )}
-            {isRecursos && (
-              <div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100">
-                <h4 className="font-bold text-rose-800 text-sm uppercase">Recursos Solicitados</h4>
-                <input placeholder="Monto (ej: Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e=>upd('monto',e.target.value)}/>
-                <textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e=>upd('monto_detalle',e.target.value)}/>
-              </div>
-            )}
-            <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
-              <h4 className="font-bold text-purple-800 text-sm uppercase">Justificación Técnica (opcional)</h4>
-              <textarea rows={4} placeholder="Justificación técnica..." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e=>upd('justificacion',e.target.value)}/>
-            </div>
-            <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100">
-              <h4 className="font-bold text-indigo-800 text-sm uppercase">Solicitud Puntual (opcional)</h4>
-              <textarea rows={3} placeholder="Cada punto en una línea..." className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e=>upd('solicitud_puntual',e.target.value)}/>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
-              <h4 className="font-bold text-gray-700 text-sm uppercase">Cuerpo Personalizado (opcional)</h4>
-              <textarea rows={4} placeholder="Déjalo vacío para texto automático..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e=>upd('cuerpo_personalizado',e.target.value)}/>
-            </div>
+            {isRecursos && (<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100"><h4 className="font-bold text-green-800 text-sm uppercase">Datos de la Actividad</h4><input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>upd('actividad_nombre',e.target.value)}/><textarea rows={3} placeholder="Descripción" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>upd('actividad_descripcion',e.target.value)}/><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>upd('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>upd('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div></div><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>upd('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>upd('actividad_fecha',e.target.value)}/></div></div><input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>upd('actividad_sede',e.target.value)}/></div>)}
+            {isRecursos && (<div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100"><h4 className="font-bold text-rose-800 text-sm uppercase">Recursos Solicitados</h4><input placeholder="Monto (ej: Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e=>upd('monto',e.target.value)}/><textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e=>upd('monto_detalle',e.target.value)}/></div>)}
+            <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100"><h4 className="font-bold text-purple-800 text-sm uppercase">Justificación Técnica (opcional)</h4><textarea rows={4} placeholder="Justificación técnica..." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e=>upd('justificacion',e.target.value)}/></div>
+            <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100"><h4 className="font-bold text-indigo-800 text-sm uppercase">Solicitud Puntual (opcional)</h4><textarea rows={3} placeholder="Cada punto en una línea..." className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e=>upd('solicitud_puntual',e.target.value)}/></div>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200"><h4 className="font-bold text-gray-700 text-sm uppercase">Cuerpo Personalizado (opcional)</h4><textarea rows={4} placeholder="Déjalo vacío para texto automático..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e=>upd('cuerpo_personalizado',e.target.value)}/></div>
             <div className="flex gap-3 pt-2"><button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancelar</button><button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button></div>
           </form>
         </div>
@@ -771,7 +772,6 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
       {activeTab==='form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
-      {activeTab==='passwords' && <AdminPasswordManager supabase={supabase} app="caeduc" />}
       {activeTab==='passwords' && isSuperAdmin && <AdminPasswordManager supabase={supabase} app="caeduc" />}
     </div>
   );
@@ -793,11 +793,11 @@ const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers }) => {
       <div className="flex justify-between items-center"><h3 className="text-lg font-bold text-gray-700">Usuarios del Sistema</h3><button onClick={()=>{setShowModal(true);setMsg(null);}} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 text-sm font-medium"><UserPlus size={18}/> Nuevo usuario</button></div>
       {msg && <div className={`p-3 rounded-lg text-sm border ${msg.type==='success'?'bg-green-50 text-green-700 border-green-200':msg.type==='warning'?'bg-yellow-50 text-yellow-700 border-yellow-200':'bg-red-50 text-red-700 border-red-200'}`}>{msg.text}</div>}
       <div className="grid gap-2">{members.map(m=>(<Card key={m.id} className="!shadow-sm !p-4"><div className="flex items-center justify-between gap-3 flex-wrap"><div className="flex items-center gap-3 flex-1 min-w-0"><div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{m.name?.charAt(0)?.toUpperCase()||'?'}</div><div className="min-w-0"><p className="font-semibold text-gray-800 truncate">{m.name||'Sin nombre'}</p><p className="text-xs text-gray-500 truncate">{m.email||''}</p></div></div><div className="flex items-center gap-2 flex-wrap justify-end"><span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium shrink-0">{m.role||'Sin rol'}</span><button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 shrink-0 font-medium"><Edit3 size={12}/> Editar</button><button onClick={()=>{setPwModal(m);setNewPassword('');setMsg(null);}} className="bg-amber-50 text-amber-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-100 flex items-center gap-1 shrink-0 font-medium"><Lock size={12}/> Contraseña</button><button onClick={()=>setDeleteModal(m)} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 shrink-0 font-medium"><Trash2 size={12}/> Eliminar</button></div></div></Card>))}</div>
-      <Card className="!shadow-sm"><h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Settings size={16} className="text-blue-600"/> Roles disponibles</h4><div className="flex flex-wrap gap-2 mb-3">{ROLES.map(r=><span key={r} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}{customRoles.map(r=>(<span key={r} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">{r}<button onClick={()=>removeCustomRole(r)} className="ml-1 text-purple-400 hover:text-red-500"><X size={11}/></button></span>))}</div><div className="flex gap-2"><input className="flex-1 border p-2 rounded-lg text-sm" placeholder="Nuevo rol personalizado..." value={newRole} onChange={e=>setNewRole(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomRole();}}}/><button onClick={addCustomRole} disabled={!newRole.trim()} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"><Plus size={14}/> Agregar</button></div><p className="text-xs text-gray-400 mt-2">Azul = predeterminados · Morado = personalizados (× para eliminar)</p></Card>
+      <Card className="!shadow-sm"><h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Settings size={16} className="text-blue-600"/> Roles disponibles</h4><div className="flex flex-wrap gap-2 mb-3">{ROLES.map(r=><span key={r} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}{customRoles.map(r=>(<span key={r} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">{r}<button onClick={()=>removeCustomRole(r)} className="ml-1 text-purple-400 hover:text-red-500"><X size={11}/></button></span>))}</div><div className="flex gap-2"><input className="flex-1 border p-2 rounded-lg text-sm" placeholder="Nuevo rol personalizado..." value={newRole} onChange={e=>setNewRole(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomRole();}}}/><button onClick={addCustomRole} disabled={!newRole.trim()} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"><Plus size={14}/> Agregar</button></div><p className="text-xs text-gray-400 mt-2">Azul = predeterminados · Morado = personalizados</p></Card>
       <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm"><form onSubmit={handleCreate} className="space-y-4"><input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/><div className="relative"><input required type={showPw?'text':'password'} placeholder="Contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear usuario'}</button></form></Modal>
       <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm"><form onSubmit={handleEdit} className="space-y-4"><div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role||allRoles[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar cambios'}</button></form></Modal>
-      <Modal isOpen={!!pwModal} onClose={()=>{setPwModal(null);setNewPassword('');}} title="Cambiar Contraseña" size="sm"><div className="space-y-4"><div className="bg-amber-50 border border-amber-200 rounded-lg p-3"><p className="text-sm font-bold text-amber-800">{pwModal?.name}</p><p className="text-xs text-amber-600">{pwModal?.email}</p></div><div className="relative"><input type={showNewPw?'text':'password'} placeholder="Nueva contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/><button type="button" onClick={()=>setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showNewPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 space-y-1"><p className="font-bold">Opción A — Enviar reset por correo:</p><p>El usuario recibirá un enlace para crear su nueva contraseña.</p><p className="font-bold mt-1">Opción B — Desde Supabase Dashboard:</p><p>Authentication → Users → buscar {pwModal?.email} → Send password reset</p></div><div className="flex gap-3"><button onClick={()=>{setPwModal(null);setNewPassword('');}} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold text-sm">Cancelar</button><button onClick={async()=>{if(!pwModal?.email)return;setSavingPw(true);const{error}=await supabase.auth.resetPasswordForEmail(pwModal.email,{redirectTo:window.location.origin});if(error)setMsg({type:'error',text:error.message});else setMsg({type:'success',text:'✓ Email de reset enviado a '+pwModal.email});setPwModal(null);setNewPassword('');setSavingPw(false);}} disabled={savingPw} className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 disabled:opacity-50 text-sm flex items-center justify-center gap-1">{savingPw?'Enviando...':'📧 Enviar reset por email'}</button></div></div></Modal>
-      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Usuario" size="sm"><div className="space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-bold">{deleteModal?.name}</p><p className="text-red-500 text-sm">{deleteModal?.email} · {deleteModal?.role}</p><p className="text-red-600 text-sm mt-2">Se eliminará del directorio de usuarios. Esta acción no se puede deshacer.</p></div><div className="flex gap-3"><button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button></div></div></Modal>
+      <Modal isOpen={!!pwModal} onClose={()=>{setPwModal(null);setNewPassword('');}} title="Cambiar Contraseña" size="sm"><div className="space-y-4"><div className="bg-amber-50 border border-amber-200 rounded-lg p-3"><p className="text-sm font-bold text-amber-800">{pwModal?.name}</p><p className="text-xs text-amber-600">{pwModal?.email}</p></div><div className="relative"><input type={showNewPw?'text':'password'} placeholder="Nueva contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/><button type="button" onClick={()=>setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showNewPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div className="flex gap-3"><button onClick={()=>{setPwModal(null);setNewPassword('');}} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold text-sm">Cancelar</button><button onClick={async()=>{if(!pwModal?.email)return;setSavingPw(true);const{error}=await supabase.auth.resetPasswordForEmail(pwModal.email,{redirectTo:window.location.origin});if(error)setMsg({type:'error',text:error.message});else setMsg({type:'success',text:'✓ Email de reset enviado a '+pwModal.email});setPwModal(null);setNewPassword('');setSavingPw(false);}} disabled={savingPw} className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 disabled:opacity-50 text-sm flex items-center justify-center gap-1">{savingPw?'Enviando...':'📧 Enviar reset por email'}</button></div></div></Modal>
+      <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Usuario" size="sm"><div className="space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-bold">{deleteModal?.name}</p><p className="text-red-500 text-sm">{deleteModal?.email} · {deleteModal?.role}</p><p className="text-red-600 text-sm mt-2">Se eliminará del directorio de usuarios.</p></div><div className="flex gap-3"><button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button></div></div></Modal>
     </div>
   );
 };
@@ -812,7 +812,7 @@ const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
     <div className="space-y-6">
       <h3 className="text-lg font-bold text-gray-700">Logo, Firmas, Sello y Firmantes</h3>
       {msg && <div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700':'bg-red-50 text-red-700'} border`}>{msg.text}</div>}
-      <Card><div className="space-y-4"><h4 className="font-bold text-blue-900">📄 Membrete de Oficios</h4><p className="text-xs text-gray-500">Imagen de fondo de los oficios PDF (carta 8.5x11in). Al subir uno nuevo reemplaza el predeterminado.</p><FirmaUploader label="Imagen del membrete (JPG/PNG)" settingKey="membrete_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></Card>
+      <Card><div className="space-y-4"><h4 className="font-bold text-blue-900">📄 Membrete de Oficios</h4><p className="text-xs text-gray-500">Imagen de fondo de los oficios PDF.</p><FirmaUploader label="Imagen del membrete (JPG/PNG)" settingKey="membrete_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></Card>
       <Card><div className="space-y-4"><h4 className="font-bold text-green-800">Logo de Encabezado</h4><FirmaUploader label="Imagen del logo" settingKey="logo_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></Card>
       <Card><div className="space-y-4"><h4 className="font-bold text-blue-800">Firmante 1 (Coordinador/a)</h4><div className="grid md:grid-cols-2 gap-4"><div className="space-y-3"><div><label className="block text-sm font-bold mb-1">Nombre</label><input className="w-full border p-2.5 rounded-lg" value={f1.nombre} onChange={e=>setF1({...f1,nombre:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Cargo</label><input className="w-full border p-2.5 rounded-lg" value={f1.cargo} onChange={e=>setF1({...f1,cargo:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Institución</label><input className="w-full border p-2.5 rounded-lg" value={f1.institucion} onChange={e=>setF1({...f1,institucion:e.target.value})}/></div></div><div><FirmaUploader label="Firma" settingKey="firmante1_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></div></div></Card>
       <Card><div className="space-y-4"><h4 className="font-bold text-indigo-800">Firmante 2 (Secretaria/o)</h4><div className="grid md:grid-cols-2 gap-4"><div className="space-y-3"><div><label className="block text-sm font-bold mb-1">Nombre</label><input className="w-full border p-2.5 rounded-lg" value={f2.nombre} onChange={e=>setF2({...f2,nombre:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Cargo</label><input className="w-full border p-2.5 rounded-lg" value={f2.cargo} onChange={e=>setF2({...f2,cargo:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Institución</label><input className="w-full border p-2.5 rounded-lg" value={f2.institucion} onChange={e=>setF2({...f2,institucion:e.target.value})}/></div></div><div><FirmaUploader label="Firma" settingKey="firmante2_firma_path" appSettings={appSettings} onUpdateSetting={onUpdateSetting}/></div></div></div></Card>
@@ -824,8 +824,7 @@ const AdminFirmasTab = ({ appSettings, onUpdateSetting }) => {
 
 const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
   const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);
-  const fp=appSettings?.aval_form_file_path||'';
-  const fUrl=fp?buildStorageUrl(fp,'aval-form-template'):null;
+  const fp=appSettings?.aval_form_file_path||'';const fUrl=fp?buildStorageUrl(fp,'aval-form-template'):null;
   const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;setUploading(true);setMsg(null);try{const fn=`formulario_aval_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('aval-form-template').remove([fp]);const{data,error}=await supabase.storage.from('aval-form-template').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting('aval_form_file_path',data.path);setMsg({type:'success',text:'Archivo subido.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
   const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar?'))return;await supabase.storage.from('aval-form-template').remove([fp]);await onUpdateSetting('aval_form_file_path','');setMsg({type:'success',text:'Eliminado.'});};
   return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Formulario de Solicitud</h3>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700':'bg-red-50 text-red-700'} border`}>{msg.text}</div>}<Card>{fUrl?(<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg"><FileText size={24} className="text-green-600 shrink-0"/><div className="flex-1"><p className="font-medium text-green-800">Archivo activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-green-600 text-white px-3 py-1.5 rounded text-xs hover:bg-green-700">Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200">Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-blue-400 hover:bg-blue-50"><Upload size={20} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx"/></label></div>):(<div className="text-center space-y-4"><Upload size={28} className="text-gray-400 mx-auto"/><p className="font-medium text-gray-700">Sin formulario</p><label className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-blue-700 font-medium"><Upload size={18}/>{uploading?'Subiendo...':'Subir Formulario'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx,.xlsx"/></label></div>)}</Card></div>);
@@ -833,10 +832,9 @@ const AdminFormFileTab = ({ appSettings, onUpdateSetting }) => {
 
 const AdminReglamentoTab = ({ appSettings, onUpdateSetting }) => {
   const [uploading,setUploading]=useState(false);const [msg,setMsg]=useState(null);
-  const fp=appSettings?.reglamento_file_path||'';
-  const fUrl=fp?buildStorageUrl(fp,'reglamento-avales'):null;
+  const fp=appSettings?.reglamento_file_path||'';const fUrl=fp?buildStorageUrl(fp,'reglamento-avales'):null;
   const handleUpload=async(e)=>{const f=e.target.files[0];if(!f)return;setUploading(true);setMsg(null);try{const fn=`reglamento_avales_${Date.now()}.${f.name.split('.').pop()}`;if(fp)await supabase.storage.from('reglamento-avales').remove([fp]);const{data,error}=await supabase.storage.from('reglamento-avales').upload(fn,f,{upsert:true});if(error)setMsg({type:'error',text:error.message});else{await onUpdateSetting('reglamento_file_path',data.path);setMsg({type:'success',text:'Reglamento subido.'});}}catch(err){setMsg({type:'error',text:err.message});}setUploading(false);};
-  const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar el reglamento?'))return;await supabase.storage.from('reglamento-avales').remove([fp]);await onUpdateSetting('reglamento_file_path','');setMsg({type:'success',text:'Eliminado.'});};
+  const handleRemove=async()=>{if(!fp||!confirm('¿Eliminar?'))return;await supabase.storage.from('reglamento-avales').remove([fp]);await onUpdateSetting('reglamento_file_path','');setMsg({type:'success',text:'Eliminado.'});};
   return (<div className="space-y-4"><h3 className="text-lg font-bold text-gray-700">Reglamento de Avales</h3>{msg&&<div className={`p-3 rounded-lg text-sm ${msg.type==='success'?'bg-green-50 text-green-700':'bg-red-50 text-red-700'} border`}>{msg.text}</div>}<Card>{fUrl?(<div className="space-y-4"><div className="flex items-center gap-3 p-3 bg-purple-50 border border-purple-200 rounded-lg"><BookOpen size={24} className="text-purple-600 shrink-0"/><div className="flex-1"><p className="font-medium text-purple-800">Reglamento activo</p></div><a href={fUrl} target="_blank" rel="noopener noreferrer" className="bg-purple-600 text-white px-3 py-1.5 rounded text-xs hover:bg-purple-700">Ver</a><button onClick={handleRemove} className="bg-red-100 text-red-600 px-3 py-1.5 rounded text-xs hover:bg-red-200">Eliminar</button></div><label className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-purple-400 hover:bg-purple-50"><Upload size={20} className="text-gray-400"/><span className="text-sm text-gray-500">{uploading?'Subiendo...':'Reemplazar'}</span><input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx"/></label></div>):(<div className="text-center space-y-4"><BookOpen size={28} className="text-gray-400 mx-auto"/><p className="font-medium text-gray-700">Sin reglamento</p><label className="inline-flex items-center gap-2 bg-purple-600 text-white px-6 py-2.5 rounded-lg cursor-pointer hover:bg-purple-700 font-medium"><Upload size={18}/>{uploading?'Subiendo...':'Subir Reglamento'}<input type="file" className="hidden" onChange={handleUpload} disabled={uploading} accept=".pdf,.doc,.docx"/></label></div>)}</Card></div>);
 };
 
@@ -901,55 +899,38 @@ const ReportesView = ({ avales, docs, oficios }) => {
   const generateCSV=(data)=>{const h=['Actividad','Solicitante','Institución','Fecha','Estado','Correlativo','Tipo','Modalidad','Duración','Notas'];const rows=data.map(a=>[a.activity_name||'',a.applicant_name||'',a.institution||'',a.activity_date||'',a.is_deleted?'Eliminado':(a.status||''),a.correlativo||'',a.activity_type||'',a.modality||'',a.duration||'',a.approval_reason||'']);const csv=[h,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`reporte_avales_${dateFrom}_${dateTo}.csv`;a.click();};
   const generatePDF_report=async(data)=>{const rows=data.map(a=>`<tr><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.applicant_name||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.institution||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_date||''}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;font-weight:bold;color:${a.is_deleted?'#666':a.status==='Aprobado'?'#16a34a':a.status==='Rechazado'?'#dc2626':'#2563eb'}">${a.is_deleted?'Eliminado':(a.status||'')}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.correlativo||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.activity_type||'—'}</td><td style="border:1px solid #ddd;padding:6px;font-size:11px;">${a.approval_reason||'—'}</td></tr>`).join('');const html=`<div style="font-family:Arial;padding:30px;background:white;width:10in;"><h1 style="color:#1e3a5f;font-size:20px;">Reporte de Avales — CAEDUC</h1><p style="color:#666;font-size:12px;">Período: ${dateFrom} al ${dateTo} | Total: ${data.length}</p><table style="width:100%;border-collapse:collapse;margin-top:10px;"><thead><tr style="background:#1e3a5f;color:white;"><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Actividad</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Solicitante</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Institución</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Fecha</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Estado</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Correlativo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Tipo</th><th style="border:1px solid #ddd;padding:8px;font-size:10px;text-align:left;">Notas</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#999;font-size:10px;margin-top:20px;">Generado: ${new Date().toLocaleString()}</p></div>`;await downloadPDF(html,`Reporte_Avales_${dateFrom}_${dateTo}`);};
   const active=avales.filter(a=>!a.is_deleted);
- 
   return (
     <div className="space-y-6">
-      {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl inline-flex">
-        <button onClick={() => setReportTab('reportes')}
-          className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all ${reportTab === 'reportes' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-          <FileSpreadsheet size={15}/> Reportes de Avales
-        </button>
-        <button onClick={() => setReportTab('souvenirs')}
-          className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all ${reportTab === 'souvenirs' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-          <Gift size={15}/> Souvenirs
-        </button>
+        <button onClick={() => setReportTab('reportes')} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all ${reportTab === 'reportes' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><FileSpreadsheet size={15}/> Reportes de Avales</button>
+        <button onClick={() => setReportTab('souvenirs')} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all ${reportTab === 'souvenirs' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}><Gift size={15}/> Souvenirs</button>
       </div>
- 
-      {/* ── Tab Reportes de Avales ── */}
-      {reportTab === 'reportes' && (
-        <>
-          <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold">Reportes e Historial</h2>
-            <button onClick={()=>setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FileSpreadsheet size={18}/> Generar Reporte</button>
-          </div>
-          <div className="grid grid-cols-4 gap-4">
-            <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{avales.length}</p><p className="text-sm text-gray-500">Total Avales</p></div></Card>
-            <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{active.filter(a=>a.status==='Aprobado').length}</p><p className="text-sm text-gray-500">Aprobadas</p></div></Card>
-            <Card><div className="text-center"><p className="text-3xl font-bold text-red-600">{active.filter(a=>a.status==='Rechazado').length}</p><p className="text-sm text-gray-500">Rechazadas</p></div></Card>
-            <Card><div className="text-center"><p className="text-3xl font-bold text-indigo-600">{oficios.length}</p><p className="text-sm text-gray-500">Oficios</p></div></Card>
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card><h3 className="font-bold mb-2 text-indigo-700">Avales ({active.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{active.map(a=><div key={a.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-medium">{a.activity_name}</span><span className="text-gray-400 text-xs ml-2">#{a.request_number}</span>{a.correlativo&&<span className="text-indigo-600 text-xs ml-2">[{a.correlativo}]</span>}</div><Badge status={a.status}/></div>)}{active.length===0&&<p className="text-gray-400 text-center py-8">Sin avales</p>}</div></Card>
-            <Card><h3 className="font-bold mb-2 text-indigo-700">Oficios ({oficios.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{oficios.map(o=><div key={o.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-semibold">{o.numero_oficio}</span><span className="text-gray-400 text-xs ml-2">{o.fecha}</span></div><Badge status={o.estado}/></div>)}{oficios.length===0&&<p className="text-gray-400 text-center py-8">Sin oficios</p>}</div></Card>
-          </div>
-          <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Generar Reporte" size="sm">
-            <div className="space-y-4">
-              <div><label className="block text-sm font-bold mb-1">Fecha Inicio</label><input type="date" className="w-full border p-2 rounded" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></div>
-              <div><label className="block text-sm font-bold mb-1">Fecha Fin</label><input type="date" className="w-full border p-2 rounded" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></div>
-              <div><label className="block text-sm font-bold mb-1">Formato</label>
-                <div className="flex gap-3">
-                  <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='pdf'?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200'}`}><input type="radio" name="fmt" value="pdf" checked={reportFormat==='pdf'} onChange={()=>setReportFormat('pdf')} className="sr-only"/><FileText size={20} className="mx-auto mb-1"/><span className="text-sm font-medium">PDF</span></label>
-                  <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='excel'?'border-green-500 bg-green-50 text-green-700':'border-gray-200'}`}><input type="radio" name="fmt" value="excel" checked={reportFormat==='excel'} onChange={()=>setReportFormat('excel')} className="sr-only"/><FileSpreadsheet size={20} className="mx-auto mb-1"/><span className="text-sm font-medium">CSV</span></label>
-                </div>
+      {reportTab === 'reportes' && (<>
+        <div className="flex justify-between items-center"><h2 className="text-2xl font-bold">Reportes e Historial</h2><button onClick={()=>setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FileSpreadsheet size={18}/> Generar Reporte</button></div>
+        <div className="grid grid-cols-4 gap-4">
+          <Card><div className="text-center"><p className="text-3xl font-bold text-blue-700">{avales.length}</p><p className="text-sm text-gray-500">Total Avales</p></div></Card>
+          <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{active.filter(a=>a.status==='Aprobado').length}</p><p className="text-sm text-gray-500">Aprobadas</p></div></Card>
+          <Card><div className="text-center"><p className="text-3xl font-bold text-red-600">{active.filter(a=>a.status==='Rechazado').length}</p><p className="text-sm text-gray-500">Rechazadas</p></div></Card>
+          <Card><div className="text-center"><p className="text-3xl font-bold text-indigo-600">{oficios.length}</p><p className="text-sm text-gray-500">Oficios</p></div></Card>
+        </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <Card><h3 className="font-bold mb-2 text-indigo-700">Avales ({active.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{active.map(a=><div key={a.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-medium">{a.activity_name}</span><span className="text-gray-400 text-xs ml-2">#{a.request_number}</span>{a.correlativo&&<span className="text-indigo-600 text-xs ml-2">[{a.correlativo}]</span>}</div><Badge status={a.status}/></div>)}{active.length===0&&<p className="text-gray-400 text-center py-8">Sin avales</p>}</div></Card>
+          <Card><h3 className="font-bold mb-2 text-indigo-700">Oficios ({oficios.length})</h3><div className="h-64 overflow-y-auto text-sm border-t pt-2">{oficios.map(o=><div key={o.id} className="border-b py-2 flex justify-between items-center"><div><span className="font-semibold">{o.numero_oficio}</span><span className="text-gray-400 text-xs ml-2">{o.fecha}</span></div><Badge status={o.estado}/></div>)}{oficios.length===0&&<p className="text-gray-400 text-center py-8">Sin oficios</p>}</div></Card>
+        </div>
+        <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Generar Reporte" size="sm">
+          <div className="space-y-4">
+            <div><label className="block text-sm font-bold mb-1">Fecha Inicio</label><input type="date" className="w-full border p-2 rounded" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></div>
+            <div><label className="block text-sm font-bold mb-1">Fecha Fin</label><input type="date" className="w-full border p-2 rounded" value={dateTo} onChange={e=>setDateTo(e.target.value)}/></div>
+            <div><label className="block text-sm font-bold mb-1">Formato</label>
+              <div className="flex gap-3">
+                <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='pdf'?'border-blue-500 bg-blue-50 text-blue-700':'border-gray-200'}`}><input type="radio" name="fmt" value="pdf" checked={reportFormat==='pdf'} onChange={()=>setReportFormat('pdf')} className="sr-only"/><FileText size={20} className="mx-auto mb-1"/><span className="text-sm font-medium">PDF</span></label>
+                <label className={`flex-1 border rounded-lg p-3 cursor-pointer text-center transition-all ${reportFormat==='excel'?'border-green-500 bg-green-50 text-green-700':'border-gray-200'}`}><input type="radio" name="fmt" value="excel" checked={reportFormat==='excel'} onChange={()=>setReportFormat('excel')} className="sr-only"/><FileSpreadsheet size={20} className="mx-auto mb-1"/><span className="text-sm font-medium">CSV</span></label>
               </div>
-              <button onClick={generateReport} disabled={generating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{generating?'Generando...':'Generar Reporte'}</button>
             </div>
-          </Modal>
-        </>
-      )}
- 
-      {/* ── Tab Souvenirs ── */}
+            <button onClick={generateReport} disabled={generating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{generating?'Generando...':'Generar Reporte'}</button>
+          </div>
+        </Modal>
+      </>)}
       {reportTab === 'souvenirs' && <SouvenirsView/>}
     </div>
   );
@@ -975,9 +956,13 @@ const SidebarBtn = ({ icon, label, active, onClick, isOpen }) => (
   <button onClick={onClick} className={`flex items-center gap-3 p-3 w-full rounded ${active?'bg-blue-600':'hover:bg-slate-700'}`}>{icon}{isOpen&&<span>{label}</span>}</button>
 );
 
-// ── CAEDUCApp ──────────────────────────────────────────────────────────────────
+// ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
   const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('planificacion');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+
+  // ── Estado de progreso de subida ──
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState('idle'); // idle | uploading | saving
 
   const fetchPublicSettings=useCallback(async()=>{try{const{data}=await supabase.from('app_settings').select('key, value');if(data){const m={};data.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}}catch(e){console.error(e);}},[]);
 
@@ -988,7 +973,63 @@ export default function CAEDUCApp() {
   const handleLogin=async(email,password)=>{setLoading(true);setAuthError(null);const{data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setAuthError(error.message);else{setSession(data.session);setUserMode('admin');fetchData();}setLoading(false);};
   const handleLogout=async()=>{await supabase.auth.signOut();setSession(null);setUserMode('public');setAuthError(null);};
 
-  const submitAval=async(formData,file1)=>{let formUrl=null;if(file1){const{data:f1,error:ue}=await supabase.storage.from('avales-files').upload('forms/' + Date.now() + '_' + file1.name, file1);if(ue){alert('Error archivo: '+ue.message);return null;}if(f1)formUrl=f1.path;}const{data:inserted,error}=await supabase.from('avales').insert([{applicant_name:formData.applicantName,institution:formData.institution,activity_name:formData.activityName,activity_date:formData.activityDate,email:formData.email,activity_type:formData.activityType,duration:formData.duration,modality:formData.modality,schedule:formData.schedule,platform:formData.platform,topic:formData.topic,target_audience:formData.targetAudience,form_url:formUrl,status:'En Proceso'}]).select('request_number');if(error){alert(error.message);return null;}return inserted?.[0]?.request_number||null;};
+  // ── submitAval MEJORADO: con barra de progreso usando XMLHttpRequest ──
+  const submitAval = async (formData, file1) => {
+    let formUrl = null;
+    setUploadProgress(0);
+    setUploadPhase('idle');
+
+    if (file1) {
+      try {
+        setUploadPhase('uploading');
+        const filePath = `forms/${Date.now()}_${file1.name}`;
+
+        const { data: f1 } = await uploadFileWithProgress(
+          'avales-files',
+          filePath,
+          file1,
+          (pct) => setUploadProgress(pct)
+        );
+
+        if (f1) formUrl = f1.Key || filePath;
+        setUploadProgress(100);
+        setUploadPhase('saving');
+      } catch (err) {
+        alert('Error archivo: ' + err.message);
+        setUploadProgress(0);
+        setUploadPhase('idle');
+        return null;
+      }
+    } else {
+      setUploadPhase('saving');
+    }
+
+    const { data: inserted, error } = await supabase.from('avales').insert([{
+      applicant_name: formData.applicantName,
+      institution: formData.institution,
+      activity_name: formData.activityName,
+      activity_date: formData.activityDate,
+      email: formData.email,
+      activity_type: formData.activityType,
+      duration: formData.duration,
+      modality: formData.modality,
+      schedule: formData.schedule,
+      platform: formData.platform,
+      topic: formData.topic,
+      target_audience: formData.targetAudience,
+      form_url: formUrl,
+      status: 'En Proceso'
+    }]).select('request_number');
+
+    setUploadProgress(0);
+    setUploadPhase('idle');
+
+    if (error) {
+      alert(error.message);
+      return null;
+    }
+    return inserted?.[0]?.request_number || null;
+  };
 
   const updateAval=async(id,updates)=>{const{error}=await supabase.from('avales').update(updates).eq('id',id);if(error)alert(error.message);else fetchData();};
   const deleteAval=async(id,reason)=>{const{error}=await supabase.from('avales').update({is_deleted:true,deletion_reason:reason}).eq('id',id);if(error)alert(error.message);else fetchData();};
@@ -1021,7 +1062,7 @@ export default function CAEDUCApp() {
       {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout}/>}
       <main className={"flex-1 p-4 md:p-8 transition-all " + adminClass} style={{overflowX:'hidden',minWidth:0}}>
         {userMode==='public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
-        {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
+        {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings} uploadProgress={uploadProgress} uploadPhase={uploadPhase}/>}
         {userMode==='consultar_estado' && <ConsultarEstadoView onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
         {userMode==='verificar_aval' && <VerificarAvalView onBack={()=>setUserMode('public')}/>}
         {userMode==='admin' && (
