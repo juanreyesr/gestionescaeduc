@@ -156,32 +156,75 @@ const downloadPDF = async (htmlContent, filename) => {
   try {
     const html2pdf = await loadHtml2Pdf();
     const safeHtml = await convertImagesToBase64(htmlContent);
+
+    // Overlay de "Generando PDF..."
     const overlay = document.createElement('div');
     overlay.id = 'pdf-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,0.97);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
     overlay.innerHTML = '<div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:pdfspin 0.8s linear infinite;"></div><p style="font-size:15px;color:#374151;font-weight:600;">Generando PDF...</p><style>@keyframes pdfspin{to{transform:rotate(360deg)}}</style>';
     document.body.appendChild(overlay);
+
+    // Container visible (fixed top-left) con dimensiones estrictas
     const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:0;left:0;width:816px;max-width:816px;background:white;z-index:99998;overflow:visible;';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:816px;max-width:816px;min-width:816px;background:white;z-index:99998;overflow:hidden;box-sizing:border-box;';
     document.body.appendChild(container);
     container.innerHTML = safeHtml;
-    await new Promise(r => setTimeout(r, 1200));
+
+    // Forzar que los .page hijos usen px, no "in"
+    container.querySelectorAll('.page, [style*="8.5in"]').forEach(el => {
+      el.style.width = '816px';
+      el.style.maxWidth = '816px';
+      el.style.minWidth = '816px';
+      el.style.overflow = 'hidden';
+    });
+
+    // Esperar carga de imágenes y estabilización de layout
+    await new Promise(r => setTimeout(r, 1500));
+
     const safeName = filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf';
+    const containerHeight = Math.max(container.scrollHeight, 1056);
+
     await html2pdf().set({
-      margin: 0, filename: safeName,
+      margin: 0,
+      filename: safeName,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false, scrollX: 0, scrollY: 0, width: 816, height: container.scrollHeight },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        width: 816,
+        height: containerHeight,
+        windowWidth: 816,
+        windowHeight: containerHeight
+      },
+      jsPDF: { unit: 'px', format: [816, 1056], orientation: 'portrait', hotfixes: ['px_scaling'] },
       pagebreak: { mode: ['css', 'legacy'] }
     }).from(container).save();
+
+    // Cleanup
     if (container.parentNode) document.body.removeChild(container);
     if (overlay.parentNode) document.body.removeChild(overlay);
   } catch (err) {
     console.error('Error generando PDF:', err);
-    ['pdf-overlay'].forEach(id => { const el = document.getElementById(id); if (el) el.parentNode.removeChild(el); });
+    const el = document.getElementById('pdf-overlay');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    document.querySelectorAll('div[style*="z-index:99998"]').forEach(n => {
+      if (n.parentNode) n.parentNode.removeChild(n);
+    });
     alert('Error al generar el PDF. Intenta de nuevo.');
   }
 };
+
+
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ BLOQUE 2: generateApprovalLetterHTML (REEMPLAZAR COMPLETO)                  │
+// └─────────────────────────────────────────────────────────────────────────────┘
+
 
 const previewHTML = (html) => {
   const w = window.open('', '_blank');
@@ -191,6 +234,217 @@ const previewHTML = (html) => {
 
 // ── Carta de aprobación ────────────────────────────────────────────────────────
 const generateApprovalLetterHTML = (aval, settings = {}) => {
+  const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
+  const f1Cargo = settings.firmante1_cargo || 'Coordinador';
+  const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
+  const f2Name = settings.firmante2_nombre || 'Mgtr. Luisa Mazariegos';
+  const f2Cargo = settings.firmante2_cargo || 'Secretaria';
+  const f2FirmaUrl = buildStorageUrl(settings.firmante2_firma_path, 'firmas-sellos');
+  const selloUrl = buildStorageUrl(settings.sello_path, 'firmas-sellos');
+  const logoUrl = buildStorageUrl(settings.logo_path, 'firmas-sellos');
+
+  const fmtDate = (ds) => {
+    if (!ds) return '—';
+    const mo = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const d = new Date(ds + 'T12:00:00');
+    return `${d.getDate()} de ${mo[d.getMonth()]} de ${d.getFullYear()}`;
+  };
+  const fmtReq = (ds) => {
+    if (!ds) return '—';
+    const mo = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const d = new Date(ds);
+    return `${String(d.getDate()).padStart(2,'0')} de ${mo[d.getMonth()]} de ${d.getFullYear()}`;
+  };
+
+  // ── HTML con layout 100% en px, sin position:absolute problemáticos ──
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Aprobación ${aval.correlativo || ''}</title>
+<style>
+  @page { size: letter; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    color: #333;
+    background: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page {
+    width: 816px;
+    max-width: 816px;
+    min-height: 1056px;
+    margin: 0;
+    padding: 0;
+    background: white;
+    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+  }
+  /* Barras decorativas: columna izquierda DENTRO del flex, no absolute */
+  .deco-col {
+    width: 18px;
+    min-width: 18px;
+    padding-top: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+    flex-shrink: 0;
+  }
+  .deco-col span {
+    display: block;
+    width: 8px;
+    height: 55px;
+    border-radius: 0 4px 4px 0;
+  }
+  .deco-col span:nth-child(1) { background: #E91E63; }
+  .deco-col span:nth-child(2) { background: #9C27B0; }
+  .deco-col span:nth-child(3) { background: #2196F3; }
+  .deco-col span:nth-child(4) { background: #4CAF50; }
+  /* Columna principal de contenido */
+  .main-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 50px 70px 0 52px;
+  }
+  .main-col .body-content { flex: 1; }
+  /* Footer */
+  .footer-area {
+    margin-top: auto;
+    border-top: 2px solid #eee;
+    padding: 12px 0 4px 0;
+    display: flex;
+    justify-content: space-between;
+  }
+  .footer-col {
+    text-align: center;
+    flex: 1;
+    padding: 0 5px;
+    font-size: 8.5px;
+    color: #777;
+  }
+  .footer-col strong {
+    display: block;
+    color: #1a5276;
+    font-size: 9px;
+    margin-bottom: 2px;
+  }
+  .footer-bottom {
+    text-align: center;
+    font-size: 9px;
+    color: #1a5276;
+    font-weight: 600;
+    padding: 6px 0 10px 0;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- Columna decorativa izquierda -->
+  <div class="deco-col">
+    <span></span><span></span><span></span><span></span>
+  </div>
+
+  <!-- Columna principal -->
+  <div class="main-col">
+    <div class="body-content">
+      ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:90px;width:auto;display:block;"/>` : ''}
+
+      <div style="text-align:center;font-size:24px;font-weight:800;color:#1a5276;letter-spacing:2px;margin:20px 0 30px 0;">
+        APROBACIÓN DE AVAL
+      </div>
+
+      <div style="text-align:right;color:#E91E63;font-weight:600;margin-bottom:25px;font-size:14px;">
+        Guatemala, ${fmtDate(aval.approval_date)}
+      </div>
+
+      <div style="margin-bottom:25px;font-size:14px;line-height:1.6;">
+        Estimado(a) <span style="color:#E91E63;font-weight:600;">${aval.applicant_name || '—'}</span><br>
+        <span style="color:#E91E63;font-weight:600;">${aval.institution || ''}</span>
+      </div>
+
+      <p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;">
+        Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.
+      </p>
+
+      <p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;">
+        Por medio de la presente carta se extiende la aprobación a su solicitud recibida el
+        <span style="color:#E91E63;font-weight:700;">${fmtReq(aval.created_at)}</span>, con el Aval
+        <span style="color:#E91E63;font-weight:700;">${aval.correlativo || '—'}</span>.
+      </p>
+
+      <div style="margin:15px 0 20px 0;font-size:13.5px;line-height:2;">
+        <div><span style="font-weight:600;">Actividad:</span> <span style="color:#E91E63;font-weight:600;">${aval.activity_type || '—'}</span></div>
+        <div><span style="font-weight:600;">Duración:</span> <span style="color:#E91E63;font-weight:600;">${aval.duration || '—'}</span></div>
+        <div><span style="font-weight:600;">Modalidad:</span> <span style="color:#E91E63;font-weight:600;">${aval.modality || '—'}</span></div>
+        <div><span style="font-weight:600;">Fecha y hora:</span> <span style="color:#E91E63;font-weight:600;">${aval.schedule || aval.activity_date || '—'}</span></div>
+        <div><span style="font-weight:600;">Lugar/Plataforma:</span> <span style="color:#E91E63;font-weight:600;">${aval.platform || '—'}</span></div>
+        <div><span style="font-weight:600;">Tema:</span> <span style="color:#E91E63;font-weight:600;">${aval.topic || aval.activity_name || '—'}</span></div>
+      </div>
+
+      <p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-top:15px;">
+        Agradecemos su trabajo y esfuerzo en la promoción del crecimiento continuo de los profesionales.
+        Solicitamos incluir el número de AVAL en el material correspondiente.
+      </p>
+
+      <!-- Firmas -->
+      <div style="margin-top:30px;display:flex;justify-content:space-between;align-items:flex-end;">
+        ${f1FirmaUrl ? `
+        <div style="text-align:center;">
+          <img src="${f1FirmaUrl}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/>
+          <div style="width:220px;border-top:1px solid #333;padding-top:5px;">
+            <div style="font-weight:700;font-size:13px;">${f1Name}</div>
+            <div style="font-size:12px;color:#555;">${f1Cargo} – CAEDUC</div>
+          </div>
+        </div>` : '<div></div>'}
+
+        <div>
+          ${selloUrl ? `<img src="${selloUrl}" alt="Sello" style="height:110px;width:auto;opacity:0.85;"/>` : ''}
+        </div>
+
+        ${f2FirmaUrl ? `
+        <div style="text-align:center;">
+          <img src="${f2FirmaUrl}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/>
+          <div style="width:220px;border-top:1px solid #333;padding-top:5px;">
+            <div style="font-weight:700;font-size:13px;">${f2Name}</div>
+            <div style="font-size:12px;color:#555;">${f2Cargo} – CAEDUC</div>
+          </div>
+        </div>` : '<div></div>'}
+      </div>
+    </div>
+
+    <!-- Footer dentro del flujo -->
+    <div class="footer-area">
+      <div class="footer-col">
+        <strong>Sede central</strong>
+        3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt
+      </div>
+      <div class="footer-col">
+        <strong>Sub Sede Cobán</strong>
+        Plaza Magdalena, 1er Nivel Of. 105<br>+(502) 7764-7109
+      </div>
+      <div class="footer-col">
+        <strong>Sub Sede Zacapa</strong>
+        4a. Calle 10-34 Zona 1<br>+(502) 7941-0587
+      </div>
+      <div class="footer-col">
+        <strong>Sub Sede Quetzaltenango</strong>
+        Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314
+      </div>
+    </div>
+    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
+  </div>
+</div>
+</body>
+</html>`;
+};
+) => {
   const f1Name = settings.firmante1_nombre || 'M. A. Juan J. Reyes';
   const f1Cargo = settings.firmante1_cargo || 'Coordinador';
   const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
