@@ -162,7 +162,7 @@ const downloadPDF = async (htmlContent, filename) => {
     overlay.innerHTML = '<div style="width:40px;height:40px;border:4px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:pdfspin 0.8s linear infinite;"></div><p style="font-size:15px;color:#374151;font-weight:600;">Generando PDF...</p><style>@keyframes pdfspin{to{transform:rotate(360deg)}}</style>';
     document.body.appendChild(overlay);
     const container = document.createElement('div');
-    container.style.cssText = 'position:fixed;top:0;left:0;width:816px;max-width:816px;background:white;z-index:99998;overflow:hidden;';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:816px;max-width:816px;background:white;z-index:99998;overflow:visible;';
     document.body.appendChild(container);
     container.innerHTML = safeHtml;
     await new Promise(r => setTimeout(r, 1200));
