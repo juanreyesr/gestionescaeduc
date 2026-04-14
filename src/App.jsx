@@ -1201,11 +1201,31 @@ export default function CAEDUCApp() {
     setUploadProgress(0);
     setUploadPhase('idle');
 
+    console.log('SUPABASE URL:', supabaseUrl);
+    console.log('SUPABASE KEY PRESENT:', !!supabaseAnonKey);
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      console.log('USER SESSION:', sessionData);
+      console.log('USER SESSION ERROR:', sessionError);
+    } catch (sessionCatchError) {
+      console.error('SESSION EXCEPTION:', sessionCatchError);
+    }
+
     if (file1) {
       try {
         setUploadPhase('uploading');
         const safeFileName = file1.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
         const filePath = `forms/${Date.now()}_${safeFileName}`;
+
+        console.log('Uploading to bucket:', 'avales-files');
+        console.log('File path:', filePath);
+        console.log('File object:', {
+          name: file1.name,
+          size: file1.size,
+          type: file1.type,
+          lastModified: file1.lastModified
+        });
 
         // Progreso visual elegante mientras el SDK realiza la carga real.
         progressInterval = setInterval(() => {
@@ -1229,6 +1249,9 @@ export default function CAEDUCApp() {
           progressInterval = null;
         }
 
+        console.log('UPLOAD RESPONSE:', f1);
+        console.log('UPLOAD ERROR:', uploadError);
+
         if (uploadError) {
           alert('Error archivo: ' + uploadError.message);
           setUploadProgress(0);
@@ -1237,6 +1260,8 @@ export default function CAEDUCApp() {
         }
 
         formUrl = f1?.path || filePath;
+        console.log('FORM URL SAVED:', formUrl);
+
         setUploadProgress(100);
         setUploadPhase('saving');
       } catch (err) {
@@ -1244,14 +1269,18 @@ export default function CAEDUCApp() {
           clearInterval(progressInterval);
           progressInterval = null;
         }
+        console.error('UPLOAD EXCEPTION:', err);
         alert('Error archivo: ' + err.message);
         setUploadProgress(0);
         setUploadPhase('idle');
         return null;
       }
     } else {
+      console.log('No file provided; saving request without attachment.');
       setUploadPhase('saving');
     }
+
+    console.log('INSERTING INTO TABLE avales...');
 
     const { data: inserted, error } = await supabase.from('avales').insert([{
       applicant_name: formData.applicantName,
@@ -1269,6 +1298,9 @@ export default function CAEDUCApp() {
       form_url: formUrl,
       status: 'En Proceso'
     }]).select('request_number');
+
+    console.log('INSERT RESPONSE:', inserted);
+    console.log('INSERT ERROR:', error);
 
     setUploadProgress(0);
     setUploadPhase('idle');
