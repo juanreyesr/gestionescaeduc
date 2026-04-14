@@ -71,46 +71,8 @@ const MOTIVOS_OFICIO = [
   'Otro (personalizado)'
 ];
 
-// ── Subida de archivos con progreso (XMLHttpRequest) ───────────────────────────
-const uploadFileWithProgress = (bucket, filePath, file, onProgress) => {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const url = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
-
-    xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable) {
-        const pct = Math.round((event.loaded / event.total) * 100);
-        onProgress(pct);
-      }
-    });
-
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const resp = JSON.parse(xhr.responseText);
-          resolve({ data: resp, error: null });
-        } catch {
-          resolve({ data: { Key: filePath }, error: null });
-        }
-      } else {
-        try {
-          const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.message || err.error || `Error ${xhr.status}`));
-        } catch {
-          reject(new Error(`Error de servidor: ${xhr.status}`));
-        }
-      }
-    });
-
-    xhr.addEventListener('error', () => reject(new Error('Error de conexión al subir archivo. Verifica tu conexión a internet.')));
-    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada')));
-
-    xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', `Bearer ${supabaseAnonKey}`);
-    xhr.setRequestHeader('x-upsert', 'false');
-    xhr.send(file);
-  });
-};
+// ── Utilidades de estado de subida ───────────────────────────────────────────
+// La carga real se realiza con el SDK de Supabase para respetar RLS y Storage.
 
 // ── PDF utilities ──────────────────────────────────────────────────────────────
 const imgToBase64 = (url) => new Promise((resolve) => {
@@ -543,37 +505,43 @@ const BackButton = ({ onClick, label = '← Volver al Menú Principal' }) => (
 
 // ── Barra de progreso de subida ────────────────────────────────────────────────
 const UploadProgressBar = ({ progress, phase }) => {
-  if (progress <= 0) return null;
+  if (progress <= 0 && phase !== 'saving') return null;
+
   return (
     <div className="space-y-2 animate-fade-in">
       {phase === 'uploading' && (
-        <>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-blue-700 font-medium flex items-center gap-2">
+        <div className="rounded-2xl border border-blue-100 bg-white/90 shadow-sm p-4">
+          <div className="flex items-center justify-between text-sm mb-2">
+            <span className="text-blue-700 font-semibold flex items-center gap-2">
               <Loader size={14} className="animate-spin" />
-              Subiendo documento...
+              Subiendo documento
             </span>
             <span className="text-blue-600 font-bold tabular-nums">{progress}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+
+          <div className="w-full h-3 rounded-full bg-slate-100 overflow-hidden relative">
             <div
-              className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${progress}%` }}
-            />
+              className="h-full rounded-full bg-gradient-to-r from-blue-500 via-sky-500 to-blue-600 transition-all duration-300 ease-out relative overflow-hidden"
+              style={{ width: `${Math.min(progress, 100)}%` }}
+            >
+              <div className="absolute inset-0 upload-shine" />
+            </div>
           </div>
-          {progress < 30 && (
-            <p className="text-xs text-gray-400">Iniciando transferencia del archivo...</p>
-          )}
-          {progress >= 30 && progress < 80 && (
-            <p className="text-xs text-gray-400">Transfiriendo datos al servidor...</p>
-          )}
-          {progress >= 80 && (
-            <p className="text-xs text-gray-400">Finalizando subida...</p>
-          )}
-        </>
+
+          <p className="text-xs text-slate-500 mt-2">
+            {progress < 25
+              ? 'Preparando archivo y conexión segura...'
+              : progress < 70
+                ? 'Subiendo archivo al almacenamiento...'
+                : progress < 100
+                  ? 'Finalizando carga del documento...'
+                  : 'Carga completada.'}
+          </p>
+        </div>
       )}
+
       {phase === 'saving' && (
-        <div className="flex items-center gap-2 text-green-700 text-sm font-medium bg-green-50 border border-green-200 rounded-lg p-3">
+        <div className="flex items-center gap-2 text-green-700 text-sm font-medium bg-green-50 border border-green-200 rounded-2xl p-3 shadow-sm">
           <CheckCircle size={16} className="text-green-500" />
           Documento subido correctamente. Guardando solicitud...
         </div>
@@ -632,7 +600,18 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
           <button type="submit" disabled={loading} className="w-full bg-slate-800 text-white py-3 rounded-lg font-bold hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2">{loading ? <><RefreshCw size={16} className="animate-spin" /> Ingresando...</> : <><Lock size={16} /> Iniciar sesión</>}</button>
         </form>
       </Modal>
-      <style>{`@keyframes fade-in{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}.animate-fade-in{animation:fade-in 0.5s ease-out both;}`}</style>
+      <style>{`
+        @keyframes fade-in{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+        .animate-fade-in{animation:fade-in 0.5s ease-out both;}
+        .upload-shine{
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+          transform: translateX(-100%);
+          animation: upload-shine 1.4s infinite;
+        }
+        @keyframes upload-shine{
+          100%{transform:translateX(220%);}
+        }
+      `}</style>
     </div>
   );
 };
@@ -741,7 +720,7 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
               <>
                 <Loader size={20} className="animate-spin" />
                 {uploadPhase === 'uploading'
-                  ? `Subiendo documento... ${uploadProgress}%`
+                  ? `Cargando documento... ${uploadProgress}%`
                   : uploadPhase === 'saving'
                     ? 'Guardando solicitud...'
                     : 'Enviando...'
@@ -1214,28 +1193,57 @@ export default function CAEDUCApp() {
   const handleLogin=async(email,password)=>{setLoading(true);setAuthError(null);const{data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setAuthError(error.message);else{setSession(data.session);setUserMode('admin');fetchData();}setLoading(false);};
   const handleLogout=async()=>{await supabase.auth.signOut();setSession(null);setUserMode('public');setAuthError(null);};
 
-  // ── submitAval MEJORADO: con barra de progreso usando XMLHttpRequest ──
+  // ── submitAval CORREGIDO: subida por SDK de Supabase + progreso visual ──
   const submitAval = async (formData, file1) => {
     let formUrl = null;
+    let progressInterval = null;
+
     setUploadProgress(0);
     setUploadPhase('idle');
 
     if (file1) {
       try {
         setUploadPhase('uploading');
-        const filePath = `forms/${Date.now()}_${file1.name}`;
+        const safeFileName = file1.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
+        const filePath = `forms/${Date.now()}_${safeFileName}`;
 
-        const { data: f1 } = await uploadFileWithProgress(
-          'avales-files',
-          filePath,
-          file1,
-          (pct) => setUploadProgress(pct)
-        );
+        // Progreso visual elegante mientras el SDK realiza la carga real.
+        progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            if (prev >= 92) return prev;
+            if (prev < 45) return prev + 9;
+            if (prev < 75) return prev + 5;
+            return prev + 2;
+          });
+        }, 220);
 
-        if (f1) formUrl = f1.Key || filePath;
+        const { data: f1, error: uploadError } = await supabase.storage
+          .from('avales-files')
+          .upload(filePath, file1, {
+            upsert: false,
+            cacheControl: '3600'
+          });
+
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+
+        if (uploadError) {
+          alert('Error archivo: ' + uploadError.message);
+          setUploadProgress(0);
+          setUploadPhase('idle');
+          return null;
+        }
+
+        formUrl = f1?.path || filePath;
         setUploadProgress(100);
         setUploadPhase('saving');
       } catch (err) {
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
         alert('Error archivo: ' + err.message);
         setUploadProgress(0);
         setUploadPhase('idle');
