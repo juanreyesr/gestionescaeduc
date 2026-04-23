@@ -1305,7 +1305,7 @@ export default function CAEDUCApp() {
   const updateAval=async(id,updates)=>{const{error}=await supabase.from('avales').update(updates).eq('id',id);if(error)alert(error.message);else fetchData();};
   const deleteAval=async(id,reason)=>{const{error}=await supabase.from('avales').update({is_deleted:true,deletion_reason:reason}).eq('id',id);if(error)alert(error.message);else fetchData();};
   const updateMember=async(id,updates)=>{const{error}=await supabase.from('profiles').update(updates).eq('id',id);if(error)throw error;else await fetchData();};
-  const updateSetting=async(key,value)=>{const{error}=await supabase.from('app_settings').update({value,updated_at:new Date().toISOString()}).eq('key',key);if(error){const{error:ie}=await supabase.from('app_settings').insert([{key,value}]);if(ie)throw ie;}setAppSettings(prev=>({...prev,[key]:value}));};
+  const updateSetting=async(key,value)=>{const{error}=await supabase.from('app_settings').upsert({key,value,updated_at:new Date().toISOString()},{onConflict:'key'});if(error)throw error;setAppSettings(prev=>({...prev,[key]:value}));};
 
   const createOficio=async(data)=>{const{error}=await supabase.from('oficios').insert([data]);if(error){alert('Error al crear: '+error.message);return;}fetchData();};
   const updateOficio=async(id,data)=>{

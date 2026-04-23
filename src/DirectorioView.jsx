@@ -514,13 +514,15 @@ function ProveedorCard({ proveedor, categorias, onEdit, onDelete, onMenuUpload, 
             {proveedor.menu_path ? (
               <>
                 {/* Ver — abre en nueva pestaña */}
-                <button
-                  onClick={() => menuUrl && window.open(menuUrl, '_blank', 'noopener')}
+                <a
+                  href={menuUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1 transition-colors"
                   title="Ver menú / cotización"
                 >
                   <Eye size={11}/> Ver
-                </button>
+                </a>
 
                 {/* Actualizar */}
                 <label
