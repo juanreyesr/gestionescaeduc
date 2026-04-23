@@ -620,6 +620,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
 const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 0, uploadPhase = 'idle' }) => {
   const [data, setData] = useState({ applicantName:'',institution:'',activityName:'',activityDate:'',email:'',activityType:'',duration:'',modality:'',schedule:'',platform:'',topic:'',targetAudience:'' });
   const [file, setFile] = useState(null);
+  const [fileError, setFileError] = useState(null);
   const [submittedNumber, setSubmittedNumber] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const formFilePath = appSettings?.aval_form_file_path || '';
@@ -635,9 +636,15 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!file) {
+      setFileError('Debes adjuntar el documento antes de enviar la solicitud. Si el archivo no se cargó correctamente, retíralo y vuélvelo a seleccionar.');
+      return;
+    }
+    setFileError(null);
     setSubmitting(true);
     const rn = await submitAval(data, file);
     if (rn) setSubmittedNumber(rn);
+    else setFileError('Ocurrió un error al cargar el archivo. Por favor, retíralo y vuélvelo a cargar antes de intentar de nuevo.');
     setSubmitting(false);
   };
 
@@ -686,9 +693,9 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
             <input required placeholder="Lugar o Plataforma" className="w-full border p-2 rounded" value={data.platform} onChange={e=>setData({...data,platform:e.target.value})}/>
             <input required placeholder="Dirigido a" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e=>setData({...data,targetAudience:e.target.value})}/>
           </div>
-          <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-            <h3 className="font-bold text-gray-700 text-sm uppercase">Documento Adjunto (PDF)</h3>
-            <p className="text-xs text-gray-500">Adjunta tu solicitud en formato PDF. Sin límite de tamaño.</p>
+          <div className={`rounded-lg p-4 space-y-3 ${fileError ? 'bg-red-50 border border-red-300' : 'bg-gray-50'}`}>
+            <h3 className="font-bold text-gray-700 text-sm uppercase">Documento Adjunto (PDF) <span className="text-red-600">*</span></h3>
+            <p className="text-xs text-gray-500">Adjunta tu solicitud en formato PDF. Este campo es obligatorio.</p>
             <input
               type="file"
               accept=".pdf,.doc,.docx"
@@ -696,6 +703,7 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
                 const f = e.target.files[0];
                 if (!f) { setFile(null); return; }
                 setFile(f);
+                setFileError(null);
               }}
             />
             {file && (
@@ -703,7 +711,13 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
                 <FileText size={16} className="text-blue-600 shrink-0" />
                 <span className="text-blue-800 font-medium truncate">{file.name}</span>
                 <span className="text-blue-500 text-xs shrink-0">({formatFileSize(file.size)})</span>
-                <button type="button" onClick={() => setFile(null)} className="ml-auto text-gray-400 hover:text-red-500"><X size={14}/></button>
+                <button type="button" onClick={() => { setFile(null); setFileError(null); }} className="ml-auto text-gray-400 hover:text-red-500"><X size={14}/></button>
+              </div>
+            )}
+            {fileError && (
+              <div className="flex items-start gap-2 bg-red-100 border border-red-300 rounded-lg p-3">
+                <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5"/>
+                <p className="text-sm text-red-700 leading-relaxed">{fileError}</p>
               </div>
             )}
           </div>
@@ -748,7 +762,7 @@ const ConsultarEstadoView = ({ onBack, appSettings }) => {
           <div className="text-center"><Search size={40} className="text-blue-600 mx-auto mb-2"/><h2 className="text-2xl font-bold">Consultar Estado</h2></div>
           {!result&&!notFound&&(<form onSubmit={handleSearch} className="space-y-4"><div className="relative"><Hash size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input required type="number" min="1" placeholder="Número de solicitud" className="w-full border p-3 pl-10 rounded-lg text-lg" value={requestNum} onChange={e=>setRequestNum(e.target.value)}/></div><button type="submit" disabled={searching} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{searching?'Buscando...':'Consultar'}</button></form>)}
           {notFound&&<div className="text-center space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><AlertCircle size={32} className="text-red-500 mx-auto mb-2"/><p className="text-red-700 font-medium">No se encontró solicitud #{requestNum}</p></div><div className="flex gap-3"><button onClick={()=>{setNotFound(false);setRequestNum('');}} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold">Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold">Volver</button></div></div>}
-          {result&&<div className="space-y-4"><div className="bg-gray-50 rounded-lg p-4 space-y-3"><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Solicitud</span><span className="font-bold text-lg">#{result.request_number}</span></div><div className="border-t pt-3 space-y-2"><div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status}/></div></div>{result.status==='Aprobado'&&result.correlativo&&<div className="border-t pt-3 space-y-3"><div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div><div className="flex gap-2"><button onClick={()=>openApprovalLetter(result,appSettings,'preview')} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 border border-blue-200 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button><button onClick={()=>openApprovalLetter(result,appSettings,'download')} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={18}/> PDF</button></div></div>}</div><div className="flex gap-3"><button onClick={()=>{setResult(null);setRequestNum('');}} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold">Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold">Volver</button></div></div>}
+          {result&&<div className="space-y-4"><div className="bg-gray-50 rounded-lg p-4 space-y-3"><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Solicitud</span><span className="font-bold text-lg">#{result.request_number}</span></div><div className="border-t pt-3 space-y-2"><div className="flex justify-between"><span className="text-sm text-gray-500">Solicitante</span><span className="font-medium">{result.applicant_name}</span></div><div className="flex justify-between"><span className="text-sm text-gray-500">Actividad</span><span className="font-medium">{result.activity_name}</span></div><div className="flex justify-between items-center"><span className="text-sm text-gray-500">Estado</span><Badge status={result.status}/></div></div>{result.status==='Aprobado'&&result.correlativo&&<div className="border-t pt-3 space-y-3"><div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center"><p className="text-sm text-green-600 font-medium">Número de Aval</p><p className="text-2xl font-black text-green-700">{result.correlativo}</p></div><div className="flex gap-2"><button onClick={()=>openApprovalLetter(result,appSettings,'preview')} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-bold hover:bg-blue-100 border border-blue-200 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button><button onClick={()=>openApprovalLetter(result,appSettings,'download')} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 flex items-center justify-center gap-2"><FileDown size={18}/> PDF</button></div></div>}{result.status==='Rechazado'&&<div className="border-t pt-3"><div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2"><div className="flex items-center gap-2 mb-1"><AlertCircle size={16} className="text-red-600 shrink-0"/><p className="text-sm font-bold text-red-700">Motivo del rechazo</p></div>{result.approval_reason?<p className="text-sm text-red-800 leading-relaxed">{result.approval_reason}</p>:<p className="text-sm text-red-500 italic">No se especificó un motivo.</p>}</div></div>}</div><div className="flex gap-3"><button onClick={()=>{setResult(null);setRequestNum('');}} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold">Otra Consulta</button><button onClick={onBack} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-bold">Volver</button></div></div>}
         </div>
       </Card>
     </div>
@@ -1201,33 +1215,12 @@ export default function CAEDUCApp() {
     setUploadProgress(0);
     setUploadPhase('idle');
 
-    console.log('SUPABASE URL:', supabaseUrl);
-    console.log('SUPABASE KEY PRESENT:', !!supabaseAnonKey);
-
-    try {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      console.log('USER SESSION:', sessionData);
-      console.log('USER SESSION ERROR:', sessionError);
-    } catch (sessionCatchError) {
-      console.error('SESSION EXCEPTION:', sessionCatchError);
-    }
-
     if (file1) {
       try {
         setUploadPhase('uploading');
         const safeFileName = file1.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
         const filePath = `forms/${Date.now()}_${safeFileName}`;
 
-        console.log('Uploading to bucket:', 'avales-files');
-        console.log('File path:', filePath);
-        console.log('File object:', {
-          name: file1.name,
-          size: file1.size,
-          type: file1.type,
-          lastModified: file1.lastModified
-        });
-
-        // Progreso visual elegante mientras el SDK realiza la carga real.
         progressInterval = setInterval(() => {
           setUploadProgress(prev => {
             if (prev >= 92) return prev;
@@ -1249,19 +1242,13 @@ export default function CAEDUCApp() {
           progressInterval = null;
         }
 
-        console.log('UPLOAD RESPONSE:', f1);
-        console.log('UPLOAD ERROR:', uploadError);
-
         if (uploadError) {
-          alert('Error archivo: ' + uploadError.message);
           setUploadProgress(0);
           setUploadPhase('idle');
           return null;
         }
 
         formUrl = f1?.path || filePath;
-        console.log('FORM URL SAVED:', formUrl);
-
         setUploadProgress(100);
         setUploadPhase('saving');
       } catch (err) {
@@ -1269,18 +1256,13 @@ export default function CAEDUCApp() {
           clearInterval(progressInterval);
           progressInterval = null;
         }
-        console.error('UPLOAD EXCEPTION:', err);
-        alert('Error archivo: ' + err.message);
         setUploadProgress(0);
         setUploadPhase('idle');
         return null;
       }
     } else {
-      console.log('No file provided; saving request without attachment.');
       setUploadPhase('saving');
     }
-
-    console.log('INSERTING INTO TABLE avales...');
 
     const { data: inserted, error } = await supabase.from('avales').insert([{
       applicant_name: formData.applicantName,
@@ -1298,9 +1280,6 @@ export default function CAEDUCApp() {
       form_url: formUrl,
       status: 'En Proceso'
     }]).select('request_number');
-
-    console.log('INSERT RESPONSE:', inserted);
-    console.log('INSERT ERROR:', error);
 
     setUploadProgress(0);
     setUploadPhase('idle');
