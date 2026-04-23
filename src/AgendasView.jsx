@@ -164,6 +164,56 @@ export default function AgendasView() {
   const [loading, setLoading] = useState(true);
   const [activeAgenda, setActiveAgenda] = useState(null);  // agenda en edición/detalle
   const [puntos, setPuntos]   = useState([]);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastAutoSave, setLastAutoSave] = useState(null);
+  const autoSaveRef = React.useRef(null);
+
+  // Auto-guardado silencioso de borradores
+  useEffect(() => {
+    if (view !== 'editor' || !activeAgenda || activeAgenda.estado === 'Aprobada') return;
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(async () => {
+      setAutoSaving(true);
+      try {
+        let agendaId = activeAgenda.id;
+        const puntosCalc = recalcTimes(puntos, activeAgenda.hora_inicio);
+        const agendaData = {
+          numero_sesion: activeAgenda.numero_sesion,
+          fecha: activeAgenda.fecha,
+          fecha_iso: activeAgenda.fecha_iso || todayISO(),
+          hora_inicio: activeAgenda.hora_inicio,
+          modalidad: activeAgenda.modalidad,
+          lugar: activeAgenda.lugar,
+          estado: 'Borrador',
+          notas: activeAgenda.notas,
+          updated_at: new Date().toISOString(),
+        };
+        if (agendaId) {
+          await supabase.from('caeduc_agendas').update(agendaData).eq('id', agendaId);
+          await supabase.from('caeduc_agenda_puntos').delete().eq('agenda_id', agendaId);
+        } else {
+          const { data, error } = await supabase.from('caeduc_agendas').insert([agendaData]).select();
+          if (!error && data) {
+            agendaId = data[0].id;
+            setActiveAgenda(a => ({ ...a, id: agendaId }));
+          }
+        }
+        if (agendaId) {
+          const puntosToInsert = puntosCalc.map((p, i) => ({
+            agenda_id: agendaId, orden: i + 1, tema: p.tema,
+            descripcion: p.descripcion || '', responsable: p.responsable || '',
+            hora_inicio: p.hora_inicio, duracion_min: Number(p.duracion_min) || 0,
+            hora_fin: p.hora_fin, es_fijo: p.es_fijo || false,
+            notas_seguimiento: p.notas_seguimiento || '',
+          }));
+          await supabase.from('caeduc_agenda_puntos').insert(puntosToInsert);
+        }
+        setLastAutoSave(new Date());
+      } catch (_) { /* silencioso */ }
+      setAutoSaving(false);
+    }, 3000);
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, [activeAgenda, puntos, view]);
 
   // Fetch all agendas
   const fetchAgendas = useCallback(async () => {
@@ -413,7 +463,17 @@ export default function AgendasView() {
             <p className="text-sm text-gray-500">{activeAgenda.fecha} · {activeAgenda.modalidad} · {activeAgenda.hora_inicio}{horaFin ? ` – ${horaFin}` : ''} · Duración total: {durTotal} min</p>
           </div>
           {/* Acciones */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            {!aprobada && autoSaving && (
+              <span className="text-xs text-blue-500 flex items-center gap-1 animate-pulse">
+                <Save size={12}/> Guardando...
+              </span>
+            )}
+            {!aprobada && !autoSaving && lastAutoSave && (
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <Save size={12}/> Guardado {lastAutoSave.toLocaleTimeString('es-GT', {hour:'2-digit',minute:'2-digit'})}
+              </span>
+            )}
             {!aprobada && (
               <button onClick={() => handleSave('Borrador')}
                 className="bg-yellow-400 text-yellow-900 px-4 py-2 rounded-xl font-bold hover:bg-yellow-500 flex items-center gap-1.5 text-sm">

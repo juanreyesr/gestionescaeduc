@@ -146,6 +146,12 @@ const downloadPDF = async (htmlContent, filename) => {
     const safeName = filename.replace(/[^a-zA-Z0-9_\-áéíóúñÁÉÍÓÚÑ ]/g, '') + '.pdf';
     const containerHeight = Math.max(container.scrollHeight, 1056);
 
+    // Forzar altura explícita para que html2canvas capture documentos de múltiples páginas
+    // sin que position:fixed recorte el contenido al alto del viewport
+    container.style.height = containerHeight + 'px';
+    container.style.overflow = 'visible';
+    await new Promise(r => setTimeout(r, 80));
+
     await html2pdf().set({
       margin: 0,
       filename: safeName,
@@ -449,7 +455,7 @@ const generateOficioHTML = (oficio, settings = {}) => {
   let recursosHTML = oficio.monto ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">Recursos solicitados</p>${parrafo(`Total solicitado: <strong>${oficio.monto}</strong>.`)}${oficio.monto_detalle ? `<p style="font-size:10px;font-weight:700;color:#1a5276;margin:8px 0 4px;">Detalle de lo solicitado:</p>${parrafo(oficio.monto_detalle)}` : ''}</div>` : '';
   let justHTML = oficio.justificacion ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">Justificación técnica</p>${oficio.justificacion.split('\n').filter(l=>l.trim()).map(p=>parrafo(p)).join('')}</div>` : '';
   let solHTML = oficio.solicitud_puntual ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">Solicitud puntual</p><ul style="padding-left:16px;margin:0;">${oficio.solicitud_puntual.split('\n').filter(l=>l.trim()).map(p=>`<li style="font-size:11.5px;line-height:1.75;margin-bottom:3px;">${p}</li>`).join('')}</ul></div>` : '';
-  const firmaBlock = `<div style="margin-top:20px;text-align:left;"><p style="font-size:11.5px;margin-bottom:16px;">Cordialmente,</p><div style="display:flex;align-items:flex-end;gap:20px;">${f1FirmaUrl?`<div style="text-align:center;"><img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/><div style="width:200px;border-top:1.5px solid #333;padding-top:4px;"><div style="font-size:11.5px;font-weight:700;">${f1Name}</div><div style="font-size:10.5px;color:#555;">${f1Cargo}</div>${instLines.map(l=>`<div style="font-size:10px;color:#666;">${l}</div>`).join('')}</div></div>`:'<div></div>'}${selloUrl?`<div style="margin-bottom:10px;"><img src="${selloUrl}" alt="Sello" style="height:80px;width:auto;opacity:0.88;"/></div>`:''}</div></div><p style="font-size:10px;color:#888;margin-top:10px;">C.C: Archivo / CAEDUC</p>`;
+  const firmaBlock = `<div style="margin-top:20px;"><p style="font-size:11.5px;margin-bottom:16px;text-align:left;">Cordialmente,</p><div style="text-align:center;"><div style="display:inline-flex;align-items:flex-end;gap:20px;">${f1FirmaUrl?`<div style="text-align:center;"><img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/><div style="width:200px;border-top:1.5px solid #333;padding-top:4px;"><div style="font-size:11.5px;font-weight:700;">${f1Name}</div><div style="font-size:10.5px;color:#555;">${f1Cargo}</div>${instLines.map(l=>`<div style="font-size:10px;color:#666;">${l}</div>`).join('')}</div></div>`:'<div></div>'}${selloUrl?`<div style="margin-bottom:10px;"><img src="${selloUrl}" alt="Sello" style="height:80px;width:auto;opacity:0.88;"/></div>`:''}</div></div></div><p style="font-size:10px;color:#888;margin-top:10px;">C.C: Archivo / CAEDUC</p>`;
   const footerHTML = `<div style="border-top:2px solid #E91E63;padding-top:10px;display:flex;justify-content:space-between;font-size:8px;color:#777;gap:8px;"><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel<br>+(502) 7764-7109</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div></div><p style="text-align:center;font-size:8.5px;color:white;background:#E91E63;padding:3px 0;margin:0;">colegiodepsicologos.org.gt • @colpsicogt</p>`;
   const mainPage = `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;page-break-after:always;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;min-height:11in;box-sizing:border-box;display:flex;flex-direction:column;"><div style="flex:1;"><div style="text-align:right;margin-bottom:18px;"><div style="font-size:12px;font-weight:700;color:#111;">${oficio.numero_oficio||'Of. ___.CAEDUC'}</div><div style="font-size:11.5px;color:#555;margin-top:1px;">Guatemala ${formatOficioDate(oficio.fecha)}</div></div><div style="margin-bottom:15px;font-size:11.5px;line-height:1.7;">${(oficio.dirigido_a||'').split(',').map(l=>l.trim()).filter(Boolean).join('<br>')}<br>Presente</div><p style="font-size:11.5px;font-weight:700;margin-bottom:12px;">Honorables miembros de la Junta Directiva:</p>${cuerpoHTML}${detallesHTML}${parrafo('Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.')}<p style="font-size:11.5px;margin-bottom:0;">Sin otro particular, me suscribo.</p>${firmaBlock}</div></div></div>`;
   const hasExtra = oficio.justificacion || oficio.solicitud_puntual || oficio.monto;
@@ -636,6 +642,11 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(data.email)) {
+      setFileError('El correo electrónico no parece válido. Verifica que incluya un dominio completo, por ejemplo: nombre@correo.com');
+      return;
+    }
     if (!file) {
       setFileError('Debes adjuntar el documento antes de enviar la solicitud. Si el archivo no se cargó correctamente, retíralo y vuélvelo a seleccionar.');
       return;
