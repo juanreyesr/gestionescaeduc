@@ -60,7 +60,7 @@ class ErrorBoundary extends React.Component {
 
 
 const ROLES = ['Coordinador(a)','Subcoordinador(a)','Secretario(a)','Prosecretario(a)','Gestor(a) del Conocimiento','Vocal I','Vocal II','Asistente JD','Junta Directiva'];
-const ACTIVITY_TYPES = ['Certificación','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
+const ACTIVITY_TYPES = ['Especialización','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
 const MODALITIES = ['Virtual','Presencial','Híbrida'];
 const MOTIVOS_OFICIO = [
   'Aprobación y asignación de recursos para realizar actividad',
@@ -624,7 +624,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
 
 // ── ExternalAvalesView (CON BARRA DE PROGRESO) ─────────────────────────────────
 const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 0, uploadPhase = 'idle' }) => {
-  const [data, setData] = useState({ applicantName:'',institution:'',activityName:'',activityDate:'',email:'',activityType:'',duration:'',modality:'',schedule:'',platform:'',topic:'',targetAudience:'' });
+  const [data, setData] = useState({ applicantName:'',institution:'',activityName:'',activityDate:'',email:'',activityType:'',duration:'',modality:'',schedule:'',platform:'',topic:'',targetAudience:'',isInternal:false,internalArea:'' });
   const [file, setFile] = useState(null);
   const [fileError, setFileError] = useState(null);
   const [submittedNumber, setSubmittedNumber] = useState(null);
@@ -687,6 +687,13 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
             <input required placeholder="Nombre completo" className="w-full border p-2 rounded" value={data.applicantName} onChange={e=>setData({...data,applicantName:e.target.value})}/>
             <input required placeholder="Institución" className="w-full border p-2 rounded" value={data.institution} onChange={e=>setData({...data,institution:e.target.value})}/>
             <input required type="email" placeholder="Email de Contacto" className="w-full border p-2 rounded" value={data.email} onChange={e=>setData({...data,email:e.target.value})}/>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={data.isInternal} onChange={e=>setData({...data,isInternal:e.target.checked,internalArea:''})}/>
+              <span className="text-sm font-medium text-gray-700">Solicitud interna</span>
+            </label>
+            {data.isInternal && (
+              <input required placeholder="Comisión / Sub Sede / Área del Colegio" className="w-full border p-2 rounded" value={data.internalArea} onChange={e=>setData({...data,internalArea:e.target.value})}/>
+            )}
           </div>
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             <h3 className="font-bold text-gray-700 text-sm uppercase">Datos de la Actividad</h3>
@@ -800,8 +807,12 @@ const VerificarAvalView = ({ onBack }) => {
 };
 
 // ── OficioCard ────────────────────────────────────────────────────────────────
-const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }) => {
+const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete, onSavePunto }) => {
   const [expanded, setExpanded] = useState(false);
+  const [editingPunto, setEditingPunto] = useState(false);
+  const [puntoNumber, setPuntoNumber] = useState(o.numero_punto_resolutivo || '');
+  const [puntoFile, setPuntoFile] = useState(null);
+  const [savingPunto, setSavingPunto] = useState(false);
   if (!o.numero_oficio && !o.motivo) return null;
   return (
     <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow" style={{overflow:'hidden',maxWidth:'100%',boxSizing:'border-box'}}>
@@ -837,6 +848,50 @@ const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete }
             {o.estado==='Enviado' && <button onClick={(e)=>{e.stopPropagation();onStatusChange('Archivado');}} className="bg-gray-50 text-gray-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1"><Archive size={12}/> Archivar</button>}
             <button onClick={(e)=>{e.stopPropagation();onDelete();}} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 ml-auto"><Trash2 size={12}/> Eliminar</button>
           </div>
+          {/* Punto Resolutivo */}
+          <div className="border-t pt-3 mt-1" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-bold text-gray-500 uppercase">Punto Resolutivo / Certificación</span>
+              {!editingPunto && <button onClick={()=>{setPuntoNumber(o.numero_punto_resolutivo||'');setPuntoFile(null);setEditingPunto(true);}} className="text-xs text-blue-600 hover:underline flex items-center gap-1"><Edit3 size={11}/>{o.numero_punto_resolutivo?'Editar':'Agregar'}</button>}
+            </div>
+            {!editingPunto && o.numero_punto_resolutivo && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-2 py-1 rounded font-medium">#{o.numero_punto_resolutivo}</span>
+                {o.documento_resolutivo_url && (
+                  <>
+                    <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${o.documento_resolutivo_url}`} target="_blank" rel="noopener noreferrer" className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Eye size={11}/> Ver</a>
+                    <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${o.documento_resolutivo_url}`} download className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded text-xs hover:bg-indigo-100 flex items-center gap-1"><Download size={11}/> Descargar</a>
+                  </>
+                )}
+              </div>
+            )}
+            {editingPunto && (
+              <div className="space-y-2 bg-white border rounded-lg p-3">
+                <input placeholder="Número de punto resolutivo o certificación" className="w-full border p-2 rounded text-sm" value={puntoNumber} onChange={e=>setPuntoNumber(e.target.value)}/>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Documento (PDF/imagen) — opcional</label>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="text-xs w-full" onChange={e=>setPuntoFile(e.target.files[0]||null)}/>
+                  {o.documento_resolutivo_url && !puntoFile && <p className="text-xs text-gray-400 mt-1">Ya hay un documento. Sube uno nuevo para reemplazarlo.</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button disabled={savingPunto} className="bg-green-600 text-white px-3 py-1.5 rounded text-xs font-bold hover:bg-green-700 disabled:opacity-50 flex items-center gap-1" onClick={async()=>{
+                    setSavingPunto(true);
+                    let docUrl = o.documento_resolutivo_url || null;
+                    if (puntoFile) {
+                      const safeName = puntoFile.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9._-]/g,'');
+                      const fp = `puntos-resolutivos/${Date.now()}_${safeName}`;
+                      const { data: up } = await supabase.storage.from('avales-files').upload(fp, puntoFile, { upsert: false, cacheControl: '3600' });
+                      if (up) docUrl = up.path || fp;
+                    }
+                    await onSavePunto({ numero_punto_resolutivo: puntoNumber || null, documento_resolutivo_url: docUrl });
+                    setEditingPunto(false);
+                    setSavingPunto(false);
+                  }}>{savingPunto?'Guardando...':'Guardar'}</button>
+                  <button className="bg-gray-100 text-gray-600 px-3 py-1.5 rounded text-xs hover:bg-gray-200" onClick={()=>setEditingPunto(false)}>Cancelar</button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -853,6 +908,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
   const handleClose=()=>{setShowForm(false);setEditingOficio(null);if(onClearPreFill)onClearPreFill();};
   const handleDelete=async()=>{if(!deleteModal)return;setDeleting(true);await onDeleteOficio(deleteModal.id);setDeleteModal(null);setDeleting(false);};
   const handleStatusChange=async(oficio,newStatus)=>{await onUpdateOficio(oficio.id,{...oficio,estado:newStatus});};
+  const handleSavePunto=async(oficio,puntoData)=>{await onUpdateOficio(oficio.id,{...oficio,...puntoData});};
   return (
     <div className="space-y-6">
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl inline-flex">
@@ -871,7 +927,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
         <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{oficios.filter(o=>o.estado==='Enviado').length}</p><p className="text-sm text-gray-500">Enviados</p></div></Card>
       </div>
       <div className="space-y-2">
-        {oficios.map(o => <OficioCard key={o.id} oficio={o} appSettings={appSettings} onEdit={()=>handleEdit(o)} onStatusChange={(s)=>handleStatusChange(o,s)} onDelete={()=>setDeleteModal(o)}/>)}
+        {oficios.map(o => <OficioCard key={o.id} oficio={o} appSettings={appSettings} onEdit={()=>handleEdit(o)} onStatusChange={(s)=>handleStatusChange(o,s)} onDelete={()=>setDeleteModal(o)} onSavePunto={(pd)=>handleSavePunto(o,pd)}/>)}
         {oficios.length===0 && <div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4"/><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>}
       </div>
       {showForm && <OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} existingCount={oficios.length} appSettings={appSettings}/>}
@@ -1289,7 +1345,9 @@ export default function CAEDUCApp() {
       topic: formData.topic,
       target_audience: formData.targetAudience,
       form_url: formUrl,
-      status: 'En Proceso'
+      status: 'En Proceso',
+      is_internal: formData.isInternal || false,
+      internal_area: formData.isInternal ? (formData.internalArea || null) : null
     }]).select('request_number');
 
     setUploadProgress(0);
