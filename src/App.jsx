@@ -623,7 +623,7 @@ const LoginView = ({ handleLogin, loading, authError, setUserMode, appSettings }
 };
 
 // ── ExternalAvalesView (CON BARRA DE PROGRESO) ─────────────────────────────────
-const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 0, uploadPhase = 'idle' }) => {
+const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 0, uploadPhase = 'idle', serverUploadError = null }) => {
   const [data, setData] = useState({ applicantName:'',institution:'',activityName:'',activityDate:'',email:'',activityType:'',duration:'',modality:'',schedule:'',platform:'',topic:'',targetAudience:'',isInternal:false,internalArea:'' });
   const [file, setFile] = useState(null);
   const [fileError, setFileError] = useState(null);
@@ -654,8 +654,11 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
     setFileError(null);
     setSubmitting(true);
     const rn = await submitAval(data, file);
-    if (rn) setSubmittedNumber(rn);
-    else setFileError('Ocurrió un error al cargar el archivo. Por favor, retíralo y vuélvelo a cargar antes de intentar de nuevo.');
+    if (rn) {
+      setSubmittedNumber(rn);
+    } else {
+      setFileError(serverUploadError || 'No fue posible enviar la solicitud. Retira el archivo y vuélvelo a seleccionar antes de intentar de nuevo.');
+    }
     setSubmitting(false);
   };
 
@@ -711,7 +714,7 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
             <input required placeholder="Lugar o Plataforma" className="w-full border p-2 rounded" value={data.platform} onChange={e=>setData({...data,platform:e.target.value})}/>
             <input required placeholder="Dirigido a" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e=>setData({...data,targetAudience:e.target.value})}/>
           </div>
-          <div className={`rounded-lg p-4 space-y-3 ${fileError ? 'bg-red-50 border border-red-300' : 'bg-gray-50'}`}>
+          <div className={`rounded-lg p-4 space-y-3 ${fileError && !fileError.startsWith('Aviso:') ? 'bg-red-50 border border-red-300' : fileError ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50'}`}>
             <h3 className="font-bold text-gray-700 text-sm uppercase">Documento Adjunto (PDF) <span className="text-red-600">*</span></h3>
             <p className="text-xs text-gray-500">Adjunta tu solicitud en formato PDF. Este campo es obligatorio.</p>
             <input
@@ -720,8 +723,15 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
               onChange={e => {
                 const f = e.target.files[0];
                 if (!f) { setFile(null); return; }
+                const MB = f.size / 1024 / 1024;
+                if (MB > 20) {
+                  setFile(null);
+                  e.target.value = '';
+                  setFileError(`El archivo pesa ${MB.toFixed(1)} MB y supera el límite de 20 MB. Comprime el PDF antes de subirlo (puedes usar ilovepdf.com o smallpdf.com de forma gratuita).`);
+                  return;
+                }
                 setFile(f);
-                setFileError(null);
+                setFileError(MB > 10 ? `Aviso: el archivo pesa ${MB.toFixed(1)} MB. La subida puede tardar unos segundos.` : null);
               }}
             />
             {file && (
@@ -733,10 +743,15 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
               </div>
             )}
             {fileError && (
-              <div className="flex items-start gap-2 bg-red-100 border border-red-300 rounded-lg p-3">
-                <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5"/>
-                <p className="text-sm text-red-700 leading-relaxed">{fileError}</p>
-              </div>
+              fileError.startsWith('Aviso:')
+                ? <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                    <AlertTriangle size={16} className="text-yellow-600 shrink-0 mt-0.5"/>
+                    <p className="text-sm text-yellow-800 leading-relaxed">{fileError}</p>
+                  </div>
+                : <div className="flex items-start gap-2 bg-red-100 border border-red-300 rounded-lg p-3">
+                    <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5"/>
+                    <p className="text-sm text-red-700 leading-relaxed">{fileError}</p>
+                  </div>
             )}
           </div>
 
@@ -1264,6 +1279,7 @@ export default function CAEDUCApp() {
   // ── Estado de progreso de subida ──
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadPhase, setUploadPhase] = useState('idle'); // idle | uploading | saving
+  const [uploadError, setUploadError] = useState(null);
 
   const fetchPublicSettings=useCallback(async()=>{try{const{data}=await supabase.from('app_settings').select('key, value');if(data){const m={};data.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}}catch(e){console.error(e);}},[]);
 
@@ -1281,6 +1297,7 @@ export default function CAEDUCApp() {
 
     setUploadProgress(0);
     setUploadPhase('idle');
+    setUploadError(null);
 
     if (file1) {
       try {
@@ -1297,7 +1314,7 @@ export default function CAEDUCApp() {
           });
         }, 220);
 
-        const { data: f1, error: uploadError } = await supabase.storage
+        const { data: f1, error: storageError } = await supabase.storage
           .from('avales-files')
           .upload(filePath, file1, {
             upsert: false,
@@ -1309,9 +1326,16 @@ export default function CAEDUCApp() {
           progressInterval = null;
         }
 
-        if (uploadError) {
+        if (storageError) {
           setUploadProgress(0);
           setUploadPhase('idle');
+          // Detectar si el error es por tamaño para dar mensaje más claro
+          const msg = storageError.message || '';
+          if (msg.toLowerCase().includes('size') || msg.toLowerCase().includes('too large') || msg.toLowerCase().includes('payload')) {
+            setUploadError(`El archivo es demasiado grande para el servidor (${(file1.size / 1024 / 1024).toFixed(1)} MB). Comprime el PDF antes de subirlo.`);
+          } else {
+            setUploadError(`Error al subir el archivo: ${msg}`);
+          }
           return null;
         }
 
@@ -1325,6 +1349,7 @@ export default function CAEDUCApp() {
         }
         setUploadProgress(0);
         setUploadPhase('idle');
+        setUploadError(`Error inesperado al subir el archivo: ${err.message || 'inténtalo de nuevo.'}`);
         return null;
       }
     } else {
@@ -1391,7 +1416,7 @@ export default function CAEDUCApp() {
       {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout}/>}
       <main className={"flex-1 p-4 md:p-8 transition-all " + adminClass} style={{overflowX:'hidden',minWidth:0}}>
         {userMode==='public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
-        {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings} uploadProgress={uploadProgress} uploadPhase={uploadPhase}/>}
+        {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings} uploadProgress={uploadProgress} uploadPhase={uploadPhase} serverUploadError={uploadError}/>}
         {userMode==='consultar_estado' && <ConsultarEstadoView onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
         {userMode==='verificar_aval' && <VerificarAvalView onBack={()=>setUserMode('public')}/>}
         {userMode==='admin' && (
