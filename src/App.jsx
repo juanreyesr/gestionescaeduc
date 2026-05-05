@@ -60,6 +60,26 @@ class ErrorBoundary extends React.Component {
 
 
 const ROLES = ['Coordinador(a)','Subcoordinador(a)','Secretario(a)','Prosecretario(a)','Gestor(a) del Conocimiento','Vocal I','Vocal II','Asistente JD','Junta Directiva'];
+
+// Módulos del sistema con sus etiquetas para el panel de permisos
+const MODULES = [
+  { id: 'planificacion', label: 'Planificación', icon: '✅' },
+  { id: 'avales',        label: 'Avales',        icon: '📋' },
+  { id: 'oficios',       label: 'Oficios y Cartas', icon: '✍️' },
+  { id: 'agendas',       label: 'Agendas',       icon: '📖' },
+  { id: 'directorio',    label: 'Directorio',    icon: '👥' },
+  { id: 'reportes',      label: 'Reportes',      icon: '🕐' },
+];
+
+// Helper: ¿puede el usuario hacer algo en un módulo?
+// Si no hay permissions definidos (null/undefined) se asume acceso completo.
+const canDo = (permissions, moduleId, action = 'view') => {
+  if (!permissions) return true;
+  const mod = permissions[moduleId];
+  if (mod === undefined || mod === null) return true;
+  return mod[action] !== false;
+};
+
 const ACTIVITY_TYPES = ['Especialización','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
 const MODALITIES = ['Virtual','Presencial','Híbrida'];
 const MOTIVOS_OFICIO = [
@@ -1083,7 +1103,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
       <div className="flex gap-1 bg-gray-100 p-1 rounded-lg flex-wrap">
         {tabs.map(tab => <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all flex-1 justify-center ${activeTab===tab.id?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>{tab.icon} {tab.label}</button>)}
       </div>
-      {activeTab==='users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember} onRefreshMembers={()=>{}}/>}
+      {activeTab==='users' && <AdminUsersTab members={members} onUpdateMember={onUpdateMember} onRefreshMembers={()=>{}} isSuperAdmin={isSuperAdmin}/>}
       {activeTab==='firmas' && <AdminFirmasTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
@@ -1093,16 +1113,30 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
   );
 };
 
-const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers }) => {
+const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers, isSuperAdmin }) => {
   const [showModal,setShowModal]=useState(false);const [editModal,setEditModal]=useState(null);const [pwModal,setPwModal]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [newUser,setNewUser]=useState({email:'',password:'',name:'',role:ROLES[0]});const [editData,setEditData]=useState({});const [newRole,setNewRole]=useState('');const [customRoles,setCustomRoles]=useState([]);const [creating,setCreating]=useState(false);const [saving,setSaving]=useState(false);const [deleting,setDeleting]=useState(false);const [showPw,setShowPw]=useState(false);const [showNewPw,setShowNewPw]=useState(false);const [newPassword,setNewPassword]=useState('');const [savingPw,setSavingPw]=useState(false);const [msg,setMsg]=useState(null);
+
+  // Helper: actualiza un permiso de un módulo
+  const setPermission = (moduleId, action, value) => {
+    setEditData(prev => {
+      const perms = { ...(prev.permissions || {}) };
+      perms[moduleId] = { ...(perms[moduleId] || { view: true, edit: true }), [action]: value };
+      return { ...prev, permissions: perms };
+    });
+  };
+  const getPermission = (moduleId, action) => {
+    const mod = editData.permissions?.[moduleId];
+    if (!mod) return true; // sin restricción = acceso completo
+    return mod[action] !== false;
+  };
   useEffect(()=>{supabase.from('app_settings').select('value').eq('key','custom_roles').single().then(({data})=>{if(data?.value)setCustomRoles(JSON.parse(data.value)||[]);});},[]);
   const allRoles = [...ROLES, ...customRoles];
   const saveCustomRoles = async (roles) => {setCustomRoles(roles);const val = JSON.stringify(roles);const {error} = await supabase.from('app_settings').update({value:val}).eq('key','custom_roles');if(error) await supabase.from('app_settings').insert([{key:'custom_roles',value:val}]);};
   const addCustomRole = () => {const r = newRole.trim();if(!r || allRoles.includes(r)) return;saveCustomRoles([...customRoles, r]);setNewRole('');};
   const removeCustomRole = (r) => saveCustomRoles(customRoles.filter(x=>x!==r));
   const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}if(ad.user){const{error:pe}=await supabase.from('profiles').insert([{id:ad.user.id,name:newUser.name,role:newUser.role,email:newUser.email}]);if(pe)setMsg({type:'warning',text:'Auth OK pero error perfil: '+pe.message});else{setMsg({type:'success',text:`"${newUser.name}" creado.`});setNewUser({email:'',password:'',name:'',role:allRoles[0]});setShowModal(false);if(onRefreshMembers)onRefreshMembers();}}}catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
-  const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||allRoles[0],email:m.email||''});setEditModal(true);setMsg(null);};
-  const handleEdit=async(e)=>{e.preventDefault();setSaving(true);setMsg(null);try{await onUpdateMember(editData.id,{name:editData.name,role:editData.role,email:editData.email});setMsg({type:'success',text:'Actualizado.'});setEditModal(null);}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
+  const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||allRoles[0],email:m.email||'',permissions:m.permissions||null});setEditModal(true);setMsg(null);};
+  const handleEdit=async(e)=>{e.preventDefault();setSaving(true);setMsg(null);try{await onUpdateMember(editData.id,{name:editData.name,role:editData.role,email:editData.email,permissions:editData.permissions});setMsg({type:'success',text:'Actualizado.'});setEditModal(null);}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
   const handleDelete=async()=>{setDeleting(true);try{await supabase.from('profiles').delete().eq('id',deleteModal.id);setMsg({type:'success',text:`${deleteModal.name} eliminado del sistema.`});setDeleteModal(null);if(onRefreshMembers)onRefreshMembers();}catch(err){setMsg({type:'error',text:err.message});}setDeleting(false);};
   return (
     <div className="space-y-5">
@@ -1111,7 +1145,48 @@ const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers }) => {
       <div className="grid gap-2">{members.map(m=>(<Card key={m.id} className="!shadow-sm !p-4"><div className="flex items-center justify-between gap-3 flex-wrap"><div className="flex items-center gap-3 flex-1 min-w-0"><div className="bg-blue-100 text-blue-700 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0">{m.name?.charAt(0)?.toUpperCase()||'?'}</div><div className="min-w-0"><p className="font-semibold text-gray-800 truncate">{m.name||'Sin nombre'}</p><p className="text-xs text-gray-500 truncate">{m.email||''}</p></div></div><div className="flex items-center gap-2 flex-wrap justify-end"><span className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full text-xs font-medium shrink-0">{m.role||'Sin rol'}</span><button onClick={()=>openEdit(m)} className="bg-blue-50 text-blue-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 shrink-0 font-medium"><Edit3 size={12}/> Editar</button><button onClick={()=>{setPwModal(m);setNewPassword('');setMsg(null);}} className="bg-amber-50 text-amber-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-amber-100 flex items-center gap-1 shrink-0 font-medium"><Lock size={12}/> Contraseña</button><button onClick={()=>setDeleteModal(m)} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 shrink-0 font-medium"><Trash2 size={12}/> Eliminar</button></div></div></Card>))}</div>
       <Card className="!shadow-sm"><h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2"><Settings size={16} className="text-blue-600"/> Roles disponibles</h4><div className="flex flex-wrap gap-2 mb-3">{ROLES.map(r=><span key={r} className="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-medium">{r}</span>)}{customRoles.map(r=>(<span key={r} className="bg-purple-50 text-purple-700 border border-purple-200 px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">{r}<button onClick={()=>removeCustomRole(r)} className="ml-1 text-purple-400 hover:text-red-500"><X size={11}/></button></span>))}</div><div className="flex gap-2"><input className="flex-1 border p-2 rounded-lg text-sm" placeholder="Nuevo rol personalizado..." value={newRole} onChange={e=>setNewRole(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustomRole();}}}/><button onClick={addCustomRole} disabled={!newRole.trim()} className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-40 flex items-center gap-1"><Plus size={14}/> Agregar</button></div><p className="text-xs text-gray-400 mt-2">Azul = predeterminados · Morado = personalizados</p></Card>
       <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="Crear Usuario" size="sm"><form onSubmit={handleCreate} className="space-y-4"><input required placeholder="Nombre completo" className="w-full border p-2.5 rounded-lg" value={newUser.name} onChange={e=>setNewUser({...newUser,name:e.target.value})}/><input required type="email" placeholder="email@ejemplo.com" className="w-full border p-2.5 rounded-lg" value={newUser.email} onChange={e=>setNewUser({...newUser,email:e.target.value})}/><div className="relative"><input required type={showPw?'text':'password'} placeholder="Contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newUser.password} onChange={e=>setNewUser({...newUser,password:e.target.value})}/><button type="button" onClick={()=>setShowPw(!showPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={newUser.role} onChange={e=>setNewUser({...newUser,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={creating} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{creating?'Creando...':'Crear usuario'}</button></form></Modal>
-      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="sm"><form onSubmit={handleEdit} className="space-y-4"><div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div><div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role||allRoles[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div><button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar cambios'}</button></form></Modal>
+      <Modal isOpen={!!editModal} onClose={()=>setEditModal(null)} title="Editar Usuario" size="md">
+        <form onSubmit={handleEdit} className="space-y-4">
+          <div><label className="block text-sm font-bold mb-1">Nombre</label><input required className="w-full border p-2.5 rounded-lg" value={editData.name||''} onChange={e=>setEditData({...editData,name:e.target.value})}/></div>
+          <div><label className="block text-sm font-bold mb-1">Email</label><input required type="email" className="w-full border p-2.5 rounded-lg" value={editData.email||''} onChange={e=>setEditData({...editData,email:e.target.value})}/></div>
+          <div><label className="block text-sm font-bold mb-1">Rol</label><select className="w-full border p-2.5 rounded-lg" value={editData.role||allRoles[0]} onChange={e=>setEditData({...editData,role:e.target.value})}>{allRoles.map(r=><option key={r}>{r}</option>)}</select></div>
+          {isSuperAdmin && (
+            <div className="border border-blue-200 rounded-xl p-4 bg-blue-50 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-blue-800 flex items-center gap-1.5"><Shield size={15}/> Permisos de acceso</p>
+                <button type="button" onClick={()=>setEditData(p=>({...p,permissions:null}))} className="text-xs text-blue-500 hover:text-blue-700 underline">Restablecer todo</button>
+              </div>
+              <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-2 text-xs">
+                <span className="font-bold text-gray-500 uppercase">Módulo</span>
+                <span className="font-bold text-gray-500 uppercase text-center">Ver</span>
+                <span className="font-bold text-gray-500 uppercase text-center">Editar</span>
+                {MODULES.map(mod => (
+                  <React.Fragment key={mod.id}>
+                    <span className="text-gray-700 font-medium self-center">{mod.icon} {mod.label}</span>
+                    <div className="flex justify-center">
+                      <input type="checkbox" className="w-4 h-4 accent-blue-600 cursor-pointer"
+                        checked={getPermission(mod.id,'view')}
+                        onChange={e=>{
+                          // Si quita ver, también quita editar
+                          setPermission(mod.id,'view',e.target.checked);
+                          if(!e.target.checked) setPermission(mod.id,'edit',false);
+                        }}/>
+                    </div>
+                    <div className="flex justify-center">
+                      <input type="checkbox" className="w-4 h-4 accent-green-600 cursor-pointer"
+                        checked={getPermission(mod.id,'edit') && getPermission(mod.id,'view')}
+                        disabled={!getPermission(mod.id,'view')}
+                        onChange={e=>setPermission(mod.id,'edit',e.target.checked)}/>
+                    </div>
+                  </React.Fragment>
+                ))}
+              </div>
+              <p className="text-xs text-blue-500">Azul = Ver módulo · Verde = Editar/crear/eliminar dentro del módulo</p>
+            </div>
+          )}
+          <button type="submit" disabled={saving} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50">{saving?'Guardando...':'Guardar cambios'}</button>
+        </form>
+      </Modal>
       <Modal isOpen={!!pwModal} onClose={()=>{setPwModal(null);setNewPassword('');}} title="Cambiar Contraseña" size="sm"><div className="space-y-4"><div className="bg-amber-50 border border-amber-200 rounded-lg p-3"><p className="text-sm font-bold text-amber-800">{pwModal?.name}</p><p className="text-xs text-amber-600">{pwModal?.email}</p></div><div className="relative"><input type={showNewPw?'text':'password'} placeholder="Nueva contraseña (mín 6 caracteres)" minLength={6} className="w-full border p-2.5 rounded-lg pr-10" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/><button type="button" onClick={()=>setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">{showNewPw?<EyeOff size={18}/>:<Eye size={18}/>}</button></div><div className="flex gap-3"><button onClick={()=>{setPwModal(null);setNewPassword('');}} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold text-sm">Cancelar</button><button onClick={async()=>{if(!pwModal?.email)return;setSavingPw(true);const{error}=await supabase.auth.resetPasswordForEmail(pwModal.email,{redirectTo:window.location.origin});if(error)setMsg({type:'error',text:error.message});else setMsg({type:'success',text:'✓ Email de reset enviado a '+pwModal.email});setPwModal(null);setNewPassword('');setSavingPw(false);}} disabled={savingPw} className="flex-1 bg-amber-500 text-white py-2.5 rounded-lg font-bold hover:bg-amber-600 disabled:opacity-50 text-sm flex items-center justify-center gap-1">{savingPw?'Enviando...':'📧 Enviar reset por email'}</button></div></div></Modal>
       <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Usuario" size="sm"><div className="space-y-4"><div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-bold">{deleteModal?.name}</p><p className="text-red-500 text-sm">{deleteModal?.email} · {deleteModal?.role}</p><p className="text-red-600 text-sm mt-2">Se eliminará del directorio de usuarios.</p></div><div className="flex gap-3"><button onClick={()=>setDeleteModal(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold">Cancelar</button><button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50">{deleting?'Eliminando...':'Eliminar'}</button></div></div></Modal>
     </div>
@@ -1164,7 +1239,7 @@ const AdminTutorialTab = ({ appSettings, onUpdateSetting }) => {
 };
 
 // ── AvalesAdminView ────────────────────────────────────────────────────────────
-const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
+const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings, canEdit = true }) => {
   const [actionModal,setActionModal]=useState(null);const [editModal,setEditModal]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [reason,setReason]=useState('');const [correlativoInput,setCorrelativoInput]=useState('');const [deleteReason,setDeleteReason]=useState('');const [editData,setEditData]=useState({});const [saving,setSaving]=useState(false);
   const visibleAvales=avales.filter(a=>!a.is_deleted);
   const openAction=(aval,action)=>{setActionModal({id:aval.id,action,name:aval.applicant_name});setReason('');setCorrelativoInput('');};
@@ -1179,7 +1254,15 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
         <Card key={req.id}>
           <div className="flex justify-between items-start gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2"><h3 className="font-bold text-lg">{req.applicant_name}</h3><span className="text-xs text-gray-400">#{req.request_number}</span></div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-lg">{req.applicant_name}</h3>
+                <span className="text-xs text-gray-400">#{req.request_number}</span>
+                {req.is_internal && (
+                  <span className="bg-purple-100 text-purple-700 border border-purple-200 text-xs px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 whitespace-nowrap">
+                    🏢 Interna{req.internal_area ? ` · ${req.internal_area}` : ''}
+                  </span>
+                )}
+              </div>
               <p className="text-gray-600">{req.activity_name}</p>
               {req.institution && <p className="text-sm text-gray-500">{req.institution}</p>}
               <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -1192,9 +1275,9 @@ const AvalesAdminView = ({ avales, updateAval, deleteAval, appSettings }) => {
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <Badge status={req.status}/>
-              {req.status==='En Proceso' && <div className="flex gap-2"><button onClick={()=>openAction(req,'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={()=>openAction(req,'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>}
+              {canEdit && req.status==='En Proceso' && <div className="flex gap-2"><button onClick={()=>openAction(req,'Aprobado')} className="bg-green-100 text-green-700 px-3 py-1 rounded text-xs hover:bg-green-200">Aprobar</button><button onClick={()=>openAction(req,'Rechazado')} className="bg-red-100 text-red-700 px-3 py-1 rounded text-xs hover:bg-red-200">Rechazar</button></div>}
               {req.status==='Aprobado' && <div className="flex gap-1"><button onClick={()=>openApprovalLetter(req,appSettings,'preview')} className="bg-blue-50 text-blue-600 px-2 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Eye size={12}/> Ver</button><button onClick={()=>openApprovalLetter(req,appSettings,'download')} className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs hover:bg-green-100 flex items-center gap-1"><FileDown size={12}/> PDF</button></div>}
-              <div className="flex gap-2"><button onClick={()=>openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12}/> Editar</button><button onClick={()=>{setDeleteModal(req);setDeleteReason('');}} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12}/> Eliminar</button></div>
+              {canEdit && <div className="flex gap-2"><button onClick={()=>openEdit(req)} className="bg-blue-50 text-blue-600 px-3 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Edit3 size={12}/> Editar</button><button onClick={()=>{setDeleteModal(req);setDeleteReason('');}} className="bg-gray-50 text-red-500 px-3 py-1 rounded text-xs hover:bg-red-50 flex items-center gap-1"><Trash2 size={12}/> Eliminar</button></div>}
             </div>
           </div>
         </Card>
@@ -1253,21 +1336,24 @@ const ReportesView = ({ avales, docs, oficios }) => {
 };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
-const Sidebar = ({ isOpen, toggle, current, setModule, logout }) => (
-  <div className={`bg-slate-800 text-white fixed h-full z-20 transition-all ${isOpen?'w-64':'w-20'}`}>
-    <div className="p-4 flex justify-between border-b border-slate-700">{isOpen&&<h1 className="font-bold">CAEDUC App</h1>}<button onClick={toggle}><Menu size={20}/></button></div>
-    <nav className="p-2 space-y-2 mt-4">
-      <SidebarBtn icon={<CheckCircle/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>
-      <SidebarBtn icon={<Users/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen}/>
-      <SidebarBtn icon={<FileSignature/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>
-      <SidebarBtn icon={<BookOpen/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen}/>
-      <SidebarBtn icon={<Users/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>
-      <SidebarBtn icon={<Clock/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>
-      <SidebarBtn icon={<Settings/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
-    </nav>
-    <button onClick={logout} className="absolute bottom-4 left-4 flex gap-2 text-red-300 hover:text-white items-center"><LogOut size={18}/>{isOpen&&'Salir'}</button>
-  </div>
-);
+const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSuperAdmin }) => {
+  const visible = (moduleId) => isSuperAdmin || canDo(permissions, moduleId, 'view');
+  return (
+    <div className={`bg-slate-800 text-white fixed h-full z-20 transition-all ${isOpen?'w-64':'w-20'}`}>
+      <div className="p-4 flex justify-between border-b border-slate-700">{isOpen&&<h1 className="font-bold">CAEDUC App</h1>}<button onClick={toggle}><Menu size={20}/></button></div>
+      <nav className="p-2 space-y-2 mt-4">
+        {visible('planificacion') && <SidebarBtn icon={<CheckCircle/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>}
+        {visible('avales')        && <SidebarBtn icon={<Users/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen}/>}
+        {visible('oficios')       && <SidebarBtn icon={<FileSignature/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>}
+        {visible('agendas')       && <SidebarBtn icon={<BookOpen/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen}/>}
+        {visible('directorio')    && <SidebarBtn icon={<Users/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>}
+        {visible('reportes')      && <SidebarBtn icon={<Clock/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>}
+        <SidebarBtn icon={<Settings/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
+      </nav>
+      <button onClick={logout} className="absolute bottom-4 left-4 flex gap-2 text-red-300 hover:text-white items-center"><LogOut size={18}/>{isOpen&&'Salir'}</button>
+    </div>
+  );
+};
 const SidebarBtn = ({ icon, label, active, onClick, isOpen }) => (
   <button onClick={onClick} className={`flex items-center gap-3 p-3 w-full rounded ${active?'bg-blue-600':'hover:bg-slate-700'}`}>{icon}{isOpen&&<span>{label}</span>}</button>
 );
@@ -1275,6 +1361,7 @@ const SidebarBtn = ({ icon, label, active, onClick, isOpen }) => (
 // ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
   const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('planificacion');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+  const [userPermissions,setUserPermissions]=useState(null); // null = acceso completo
 
   // ── Estado de progreso de subida ──
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -1285,7 +1372,14 @@ export default function CAEDUCApp() {
 
   useEffect(()=>{fetchPublicSettings();supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session){setUserMode('admin');fetchData();}});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{setSession(session);if(session){setUserMode('admin');fetchData();}else setUserMode('public');});return()=>subscription.unsubscribe();},[fetchPublicSettings]);
 
-  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:settings}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('app_settings').select('key, value')]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}}catch(e){console.error(e);}setLoading(false);};
+  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:settings}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('app_settings').select('key, value')]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}
+    // Cargar permisos del usuario activo (null = acceso completo para super admin)
+    const{data:{session:sess}}=await supabase.auth.getSession();
+    if(sess?.user?.email){
+      if(sess.user.email===SUPER_ADMIN){setUserPermissions(null);}
+      else{const{data:prof}=await supabase.from('profiles').select('permissions').eq('email',sess.user.email).maybeSingle();setUserPermissions(prof?.permissions||null);}
+    }
+  }catch(e){console.error(e);}setLoading(false);};
 
   const handleLogin=async(email,password)=>{setLoading(true);setAuthError(null);const{data,error}=await supabase.auth.signInWithPassword({email,password});if(error)setAuthError(error.message);else{setSession(data.session);setUserMode('admin');fetchData();}setLoading(false);};
   const handleLogout=async()=>{await supabase.auth.signOut();setSession(null);setUserMode('public');setAuthError(null);};
@@ -1413,7 +1507,7 @@ export default function CAEDUCApp() {
   return (
     <ErrorBoundary>
     <div className="flex min-h-screen bg-gray-100 font-sans text-gray-800">
-      {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout}/>}
+      {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout} permissions={userPermissions} isSuperAdmin={session?.user?.email===SUPER_ADMIN}/>}
       <main className={"flex-1 p-4 md:p-8 transition-all " + adminClass} style={{overflowX:'hidden',minWidth:0}}>
         {userMode==='public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
         {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings} uploadProgress={uploadProgress} uploadPhase={uploadPhase} serverUploadError={uploadError}/>}
@@ -1422,7 +1516,7 @@ export default function CAEDUCApp() {
         {userMode==='admin' && (
           <>
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios}/>}
-            {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings}/>}
+            {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
