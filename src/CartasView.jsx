@@ -46,7 +46,15 @@ export const CARTA_TEMPLATES = [
     nombre: 'Invitación a Ponente / Facilitador',
     descripcion: 'Para invitar a profesionales a participar como ponentes en actividades académicas.',
     icon: '🎓',
-  }
+    resumen: (c) => `${c.tipo_actividad || '—'} · ${c.tema || '—'}`,
+  },
+  {
+    id: 'carta_libre',
+    nombre: 'Carta Libre',
+    descripcion: 'Carta de propósito general con cuerpo redactado libremente.',
+    icon: '✉️',
+    resumen: (c) => c.cuerpo ? c.cuerpo.slice(0, 80) + (c.cuerpo.length > 80 ? '…' : '') : '—',
+  },
 ];
 
 // ── Generador HTML ────────────────────────────────────────────────────────────
@@ -161,7 +169,97 @@ const generateCartaInvitacionHTML = (campos, settings = {}) => {
   </body></html>`;
 };
 
-const CARTA_GENERATORS = { invitacion_ponente: generateCartaInvitacionHTML };
+// ── Generador HTML: Carta Libre ───────────────────────────────────────────────
+const generateCartaLibreHTML = (campos, settings = {}) => {
+  const {
+    tratamiento = 'Estimada', grado = '', nombre = '',
+    cuerpo = '', fecha_carta = todayISO(),
+  } = campos;
+
+  const f1Name     = settings.firmante1_nombre     || 'M. A. Juan J. Reyes';
+  const f1Cargo    = settings.firmante1_cargo      || 'Coordinador';
+  const f1Inst     = settings.firmante1_institucion || 'Comisión de Acreditación y Educación Continua, Colegio de Psicólogos de Guatemala';
+  const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
+  const selloUrl   = buildStorageUrl(settings.sello_path, 'firmas-sellos');
+  const membreteUrl = settings.membrete_path
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
+    : '/fondo-oficios.jpg';
+
+  const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
+
+  const cuerpoHTML = cuerpo
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => `<p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">${line}</p>`)
+    .join('');
+
+  const firmaBlock = `
+    <div style="margin-top:28px;text-align:center;">
+      <p style="font-size:11.5px;margin-bottom:20px;">Atentamente,</p>
+      <div style="display:inline-flex;align-items:flex-end;justify-content:center;gap:28px;">
+        ${f1FirmaUrl ? `
+          <div style="text-align:center;">
+            <img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/>
+            <div style="width:210px;border-top:1.5px solid #333;padding-top:5px;">
+              <div style="font-size:11.5px;font-weight:700;">${f1Name}</div>
+              <div style="font-size:10.5px;color:#555;">${f1Cargo}</div>
+              ${instLines.map(l => `<div style="font-size:10px;color:#666;">${l}</div>`).join('')}
+            </div>
+          </div>` : ''}
+        ${selloUrl ? `
+          <div style="text-align:center;margin-bottom:6px;">
+            <img src="${selloUrl}" alt="Sello" style="height:82px;width:auto;opacity:0.88;"/>
+          </div>` : ''}
+      </div>
+    </div>`;
+
+  const printButton = `
+    <div style="text-align:right;padding:10px 30px 0;font-family:Arial;">
+      <button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;padding:7px 18px;border-radius:5px;font-size:11px;cursor:pointer;">
+        🖨️ Imprimir / Guardar PDF
+      </button>
+    </div>`;
+
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Carta — ${nombre}</title>
+    <style>
+      @page{size:letter;margin:0;}
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      @media print{.no-print{display:none!important;}}
+    </style>
+    <script>window.onafterprint=()=>{};<\/script>
+  </head><body>
+    <div class="no-print">${printButton}</div>
+    <div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;">
+      <img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;"/>
+      <div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;min-height:11in;box-sizing:border-box;display:flex;flex-direction:column;">
+        <div style="flex:1;">
+          <div style="text-align:right;margin-bottom:20px;">
+            <div style="font-size:11.5px;color:#555;">Guatemala, ${formatDateLong(fecha_carta)}</div>
+          </div>
+          <div style="margin-bottom:18px;font-size:11.5px;line-height:1.7;">
+            <strong>${tratamiento}${grado ? ' ' + grado : ''} ${nombre || '—'}:</strong>
+          </div>
+          <p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">
+            Reciba un cordial saludo de parte de la <strong>Comisión de Acreditación y Educación Continua —CAEDUC—</strong> del Colegio de Psicólogos de Guatemala.
+          </p>
+          ${cuerpoHTML}
+          <p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">
+            Sin otro particular, me suscribo de usted con muestras de alta estima y consideración, quedando a su entera disposición para cualquier información o detalle adicional que requiera.
+          </p>
+          ${firmaBlock}
+        </div>
+      </div>
+    </div>
+  </body></html>`;
+};
+
+const CARTA_GENERATORS = {
+  invitacion_ponente: generateCartaInvitacionHTML,
+  carta_libre: generateCartaLibreHTML,
+};
 
 // ── Formulario de campos ──────────────────────────────────────────────────────
 function FormInvitacionPonente({ campos, onChange }) {
@@ -247,12 +345,70 @@ function FormInvitacionPonente({ campos, onChange }) {
   );
 }
 
-const CARTA_FORMS    = { invitacion_ponente: FormInvitacionPonente };
+// ── Formulario: Carta Libre ───────────────────────────────────────────────────
+function FormCartaLibre({ campos, onChange }) {
+  const upd = (k, v) => onChange({ ...campos, [k]: v });
+  return (
+    <div className="space-y-4">
+      <div className="bg-blue-50 rounded-xl p-4 space-y-3 border border-blue-100">
+        <h4 className="font-bold text-blue-800 text-sm">Destinatario/a</h4>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Tratamiento *</label>
+            <select className="w-full border p-2.5 rounded-lg text-sm"
+              value={campos.tratamiento} onChange={e => upd('tratamiento', e.target.value)}>
+              <option value="Estimada">Estimada</option>
+              <option value="Estimado">Estimado</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Grado académico</label>
+            <input list="grados-list-libre" className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Mtr., Dr."
+              value={campos.grado} onChange={e => upd('grado', e.target.value)}/>
+            <datalist id="grados-list-libre">{['Lic.','Licda.','Mtr.','Mgtr.','Dr.','Dra.','Ph.D.','MSc.'].map(g=><option key={g} value={g}/>)}</datalist>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Nombre completo *</label>
+            <input required className="w-full border p-2.5 rounded-lg text-sm" placeholder="Nombre y apellidos"
+              value={campos.nombre} onChange={e => upd('nombre', e.target.value)}/>
+          </div>
+        </div>
+      </div>
+      <div className="bg-rose-50 rounded-xl p-4 space-y-3 border border-rose-100">
+        <h4 className="font-bold text-rose-800 text-sm">Cuerpo de la carta</h4>
+        <p className="text-xs text-rose-600">
+          Redacta el contenido con tus propias palabras. El saludo inicial y la despedida se generan automáticamente.
+        </p>
+        <textarea
+          required
+          rows={8}
+          className="w-full border p-2.5 rounded-lg text-sm resize-y leading-relaxed"
+          placeholder={"Por medio de la presente, me dirijo a usted con el fin de...\n\nPuede redactar varios párrafos separando cada uno con una línea en blanco."}
+          value={campos.cuerpo}
+          onChange={e => upd('cuerpo', e.target.value)}
+        />
+      </div>
+      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+        <label className="block text-xs font-bold text-gray-600 mb-1">Fecha de la carta</label>
+        <input type="date" className="w-full border p-2.5 rounded-lg text-sm"
+          value={campos.fecha_carta || todayISO()} onChange={e => upd('fecha_carta', e.target.value)}/>
+      </div>
+    </div>
+  );
+}
+
+const CARTA_FORMS = {
+  invitacion_ponente: FormInvitacionPonente,
+  carta_libre: FormCartaLibre,
+};
 const CAMPOS_DEFAULTS = {
   invitacion_ponente: {
     tratamiento:'Estimada', grado:'', nombre:'', tipo_actividad:'', tema:'',
     fecha_actividad:'', hora:'', modalidad:'Virtual', plataforma_o_direccion:'', fecha_carta: todayISO(),
-  }
+  },
+  carta_libre: {
+    tratamiento:'Estimada', grado:'', nombre:'', cuerpo:'', fecha_carta: todayISO(),
+  },
 };
 
 // ── NuevaCartaModal ────────────────────────────────────────────────────────────
@@ -324,7 +480,6 @@ function NuevaCartaModal({ isOpen, onClose, onSave, appSettings, saving, editDat
                   </div>
                 </button>
               ))}
-              <p className="text-xs text-gray-400 text-center pt-2">Próximamente más plantillas</p>
             </div>
           )}
           {(step===2 || editData) && FormComponent && (
@@ -351,10 +506,10 @@ function NuevaCartaModal({ isOpen, onClose, onSave, appSettings, saving, editDat
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1.5">
                 <p className="font-bold text-blue-800 text-sm mb-2">Resumen</p>
+                <p className="text-sm"><span className="font-medium">Plantilla:</span> {template?.nombre}</p>
                 <p className="text-sm"><span className="font-medium">Destinatario/a:</span> {campos.tratamiento} {campos.grado} {campos.nombre}</p>
-                <p className="text-sm"><span className="font-medium">Actividad:</span> {campos.tipo_actividad} — {campos.tema}</p>
-                <p className="text-sm"><span className="font-medium">Fecha:</span> {formatDateLong(campos.fecha_actividad)} {campos.hora && `a las ${campos.hora}`}</p>
-                <p className="text-sm"><span className="font-medium">Modalidad:</span> {campos.modalidad} {campos.plataforma_o_direccion && `· ${campos.plataforma_o_direccion}`}</p>
+                <p className="text-sm"><span className="font-medium">Fecha carta:</span> {formatDateLong(campos.fecha_carta)}</p>
+                {template && <p className="text-sm text-gray-600">{CARTA_TEMPLATES.find(t=>t.id===templateId)?.resumen(campos)}</p>}
                 <p className="text-sm text-amber-700"><span className="font-medium">Solicitada por:</span> {currentUserEmail}</p>
               </div>
               <div className="flex gap-3">
@@ -424,7 +579,12 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
               )}
             </div>
             <p className="text-xs text-rose-600 font-medium mt-0.5">{carta.template_nombre}</p>
-            {campos.tema && <p className="text-xs text-gray-500 mt-0.5 truncate">{campos.tipo_actividad} · {campos.tema}</p>}
+            {carta.template_id === 'invitacion_ponente' && campos.tema && (
+              <p className="text-xs text-gray-500 mt-0.5 truncate">{campos.tipo_actividad} · {campos.tema}</p>
+            )}
+            {carta.template_id === 'carta_libre' && campos.cuerpo && (
+              <p className="text-xs text-gray-500 mt-0.5 truncate">{campos.cuerpo.slice(0, 90)}{campos.cuerpo.length > 90 ? '…' : ''}</p>
+            )}
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               {campos.fecha_actividad && <span className="text-xs text-gray-400 flex items-center gap-1"><Calendar size={10}/>{formatDateLong(campos.fecha_actividad)}</span>}
               {campos.hora && <span className="text-xs text-gray-400 flex items-center gap-1"><Clock size={10}/>{campos.hora}</span>}
@@ -433,7 +593,7 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
             {carta.solicitante_email && (
               <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1"><User size={10}/> {carta.solicitante_email}</p>
             )}
-            {carta.estado === 'Recibida' && (
+            {carta.template_id === 'invitacion_ponente' && carta.estado === 'Recibida' && (
               <div className="mt-1.5 flex items-center gap-1.5">
                 <div className="flex-1 bg-gray-200 rounded-full h-1.5">
                   <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{width: `${(docsRecibidos/docsTotal)*100}%`}}/>
@@ -472,7 +632,7 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
             </div>
             <span className="text-xs font-medium text-gray-600">Respuesta recibida</span>
           </label>
-          {carta.estado === 'Recibida' && (
+          {carta.template_id === 'invitacion_ponente' && carta.estado === 'Recibida' && (
             <button onClick={() => setExpanded(e=>!e)}
               className="text-xs text-green-600 font-medium flex items-center gap-1 hover:text-green-800">
               <Package size={12}/> Documentos {expanded ? '▲' : '▼'}
@@ -481,7 +641,7 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
         </div>
       </div>
 
-      {carta.estado === 'Recibida' && expanded && (
+      {carta.template_id === 'invitacion_ponente' && carta.estado === 'Recibida' && expanded && (
         <div className="border-t px-4 pb-4 pt-3 bg-green-50">
           <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1"><CheckCircle size={12}/> Documentos recibidos en la respuesta</p>
           <div className="space-y-1.5">
