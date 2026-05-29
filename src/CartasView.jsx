@@ -102,14 +102,6 @@ const generateCartaInvitacionHTML = (campos, settings = {}) => {
       </div>
     </div>`;
 
-  const footerHTML = `
-    <div style="border-top:2px solid #E91E63;padding-top:8px;display:flex;justify-content:space-between;font-size:8px;color:#777;gap:8px;">
-      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400</div>
-      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel<br>+(502) 7764-7109</div>
-      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div>
-      <div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div>
-    </div>
-    <p style="text-align:center;font-size:8.5px;color:white;background:#E91E63;padding:3px 0;margin:0;">colegiodepsicologos.org.gt • @colpsicogt</p>`;
 
   const printButton = `
     <div style="text-align:right;padding:10px 30px 0;font-family:Arial;">
@@ -164,7 +156,6 @@ const generateCartaInvitacionHTML = (campos, settings = {}) => {
           </p>
           ${firmaBlock}
         </div>
-        <div style="margin-top:auto;padding-top:16px;">${footerHTML}</div>
       </div>
     </div>
   </body></html>`;
