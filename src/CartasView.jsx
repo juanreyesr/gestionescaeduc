@@ -29,6 +29,51 @@ const formatDateLong = (iso) => {
 };
 const todayISO = () => new Date().toISOString().split('T')[0];
 
+// ── Generación de PDF (html2pdf cargado desde CDN bajo demanda) ─────────────────
+const loadHtml2Pdf = () => new Promise((resolve, reject) => {
+  if (window.html2pdf) return resolve(window.html2pdf);
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
+  s.onload = () => resolve(window.html2pdf);
+  s.onerror = () => reject(new Error('No se pudo cargar el generador de PDF.'));
+  document.body.appendChild(s);
+});
+
+// Renderiza el HTML completo de una carta en un iframe oculto y descarga el PDF.
+const downloadCartaPDF = async (html, filename) => {
+  const html2pdf = await loadHtml2Pdf();
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '-9999px';
+  iframe.style.top = '0';
+  iframe.style.width = '8.5in';
+  iframe.style.height = '11in';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+
+    // Esperar a que carguen las imágenes (membrete, firma, sello)
+    await new Promise(r => setTimeout(r, 300));
+    const imgs = Array.from(doc.images || []);
+    await Promise.all(imgs.map(img => img.complete && img.naturalWidth
+      ? Promise.resolve()
+      : new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 4000); })));
+
+    const target = doc.querySelector('.carta-page') || doc.body;
+    await html2pdf().set({
+      margin: 0,
+      filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+    }).from(target).save();
+  } finally {
+    document.body.removeChild(iframe);
+  }
+};
+
 // Documentos que se esperan en la respuesta del ponente
 const DOCS_ESPERADOS = [
   { id: 'carta_aceptacion', label: 'Carta de aceptación' },
@@ -111,27 +156,17 @@ const generateCartaInvitacionHTML = (campos, settings = {}) => {
     </div>`;
 
 
-  const printButton = `
-    <div style="text-align:right;padding:10px 30px 0;font-family:Arial;">
-      <button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;padding:7px 18px;border-radius:5px;font-size:11px;cursor:pointer;">
-        🖨️ Imprimir / Guardar PDF
-      </button>
-    </div>`;
-
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
     <title>Carta — ${nombre}</title>
     <style>
       @page{size:letter;margin:0;}
       *{margin:0;padding:0;box-sizing:border-box;}
       body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-      @media print{.no-print{display:none!important;}}
     </style>
-    <script>window.onafterprint=()=>{};<\/script>
   </head><body>
-    <div class="no-print">${printButton}</div>
-    <div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;">
-      <img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;"/>
-      <div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;min-height:11in;box-sizing:border-box;display:flex;flex-direction:column;">
+    <div class="carta-page" style="position:relative;width:8.5in;height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;overflow:hidden;">
+      <img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:8.5in;height:11in;object-fit:cover;z-index:0;pointer-events:none;"/>
+      <div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;height:11in;box-sizing:border-box;display:flex;flex-direction:column;">
         <div style="flex:1;">
           <div style="text-align:right;margin-bottom:20px;">
             <div style="font-size:11.5px;color:#555;">Guatemala, ${formatDateLong(fecha_carta)}</div>
@@ -214,27 +249,17 @@ const generateCartaLibreHTML = (campos, settings = {}) => {
       </div>
     </div>`;
 
-  const printButton = `
-    <div style="text-align:right;padding:10px 30px 0;font-family:Arial;">
-      <button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;padding:7px 18px;border-radius:5px;font-size:11px;cursor:pointer;">
-        🖨️ Imprimir / Guardar PDF
-      </button>
-    </div>`;
-
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
     <title>Carta — ${nombre}</title>
     <style>
       @page{size:letter;margin:0;}
       *{margin:0;padding:0;box-sizing:border-box;}
       body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-      @media print{.no-print{display:none!important;}}
     </style>
-    <script>window.onafterprint=()=>{};<\/script>
   </head><body>
-    <div class="no-print">${printButton}</div>
-    <div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;">
-      <img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none;"/>
-      <div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;min-height:11in;box-sizing:border-box;display:flex;flex-direction:column;">
+    <div class="carta-page" style="position:relative;width:8.5in;height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;overflow:hidden;">
+      <img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:8.5in;height:11in;object-fit:cover;z-index:0;pointer-events:none;"/>
+      <div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;height:11in;box-sizing:border-box;display:flex;flex-direction:column;">
         <div style="flex:1;">
           <div style="text-align:right;margin-bottom:20px;">
             <div style="font-size:11.5px;color:#555;">Guatemala, ${formatDateLong(fecha_carta)}</div>
@@ -539,6 +564,7 @@ const CartaBadge = ({ estado }) => {
 // ── CartaCard ──────────────────────────────────────────────────────────────────
 function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
   const [expanded, setExpanded]   = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const campos = carta.campos || {};
   const docs   = carta.docs_recibidos || {};
 
@@ -557,6 +583,20 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
     const html = gen(campos, appSettings);
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
+  };
+
+  const downloadPDF = async () => {
+    const gen = CARTA_GENERATORS[carta.template_id];
+    if (!gen) return;
+    setPdfLoading(true);
+    try {
+      const html = gen(campos, appSettings);
+      const nombre = (carta.destinatario_nombre || 'documento').replace(/[^\w\s.-]/g, '').trim();
+      await downloadCartaPDF(html, `Carta - ${nombre}.pdf`);
+    } catch (err) {
+      alert('No se pudo generar el PDF: ' + (err?.message || err));
+    }
+    setPdfLoading(false);
   };
 
   const docsTotal    = DOCS_ESPERADOS.length;
@@ -604,8 +644,11 @@ function CartaCard({ carta, appSettings, onUpdate, onDelete, onEdit }) {
           </div>
           <div className="flex gap-1 shrink-0 flex-col items-end">
             <div className="flex gap-1">
-              <button onClick={openCarta} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Ver/Imprimir">
+              <button onClick={openCarta} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Ver">
                 <Eye size={14}/>
+              </button>
+              <button onClick={downloadPDF} disabled={pdfLoading} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50" title="Descargar PDF">
+                <Download size={14} className={pdfLoading ? 'animate-pulse' : ''}/>
               </button>
               <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Editar">
                 <Edit3 size={14}/>
