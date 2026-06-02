@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Calendar, FileText, Users, Settings, Menu, X, CheckCircle, Clock,
@@ -9,12 +9,14 @@ import {
   Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift,
   Loader
 } from 'lucide-react';
-import PlanificacionCAEDUCView from './PlanificacionCAEDUCView';
-import AgendasView from './AgendasView';
-import DirectorioView from './DirectorioView';
-import CartasSection from './CartasView';
-import SouvenirsView from './SouvenirsView';
-import AdminPasswordManager from './AdminPasswordManager';
+// Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
+// en vez de cargar las ~6,000 líneas de todas las vistas en el bundle inicial.
+const PlanificacionCAEDUCView = lazy(() => import('./PlanificacionCAEDUCView'));
+const AgendasView             = lazy(() => import('./AgendasView'));
+const DirectorioView          = lazy(() => import('./DirectorioView'));
+const CartasSection           = lazy(() => import('./CartasView'));
+const SouvenirsView           = lazy(() => import('./SouvenirsView'));
+const AdminPasswordManager    = lazy(() => import('./AdminPasswordManager'));
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -33,6 +35,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder'
+);
+
+// Fallback mientras se descarga el chunk de una vista diferida
+const ViewLoader = () => (
+  <div className="flex items-center justify-center py-20 text-gray-400">
+    <Loader className="animate-spin" size={24}/>
+  </div>
 );
 
 // ── Error Boundary para diagnóstico ──────────────────────────────────────────
@@ -950,7 +959,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
         <button onClick={() => setCartasTab('oficios')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='oficios' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><FileSignature size={15}/> Oficios</button>
         <button onClick={() => setCartasTab('cartas')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='cartas' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><Mail size={15}/> Cartas</button>
       </div>
-      {cartasTab === 'cartas' ? <CartasSection appSettings={appSettings}/> : (<>
+      {cartasTab === 'cartas' ? <Suspense fallback={<ViewLoader/>}><CartasSection appSettings={appSettings}/></Suspense> : (<>
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2><p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p></div>
         <button onClick={handleNew} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FilePlus size={20}/> Nuevo Oficio</button>
@@ -1108,7 +1117,7 @@ const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember
       {activeTab==='form_file' && <AdminFormFileTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='reglamento' && <AdminReglamentoTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
       {activeTab==='tutorial' && <AdminTutorialTab appSettings={appSettings} onUpdateSetting={onUpdateSetting}/>}
-      {activeTab==='passwords' && isSuperAdmin && <AdminPasswordManager supabase={supabase} app="caeduc" />}
+      {activeTab==='passwords' && isSuperAdmin && <Suspense fallback={<ViewLoader/>}><AdminPasswordManager supabase={supabase} app="caeduc" /></Suspense>}
     </div>
   );
 };
@@ -1330,7 +1339,7 @@ const ReportesView = ({ avales, docs, oficios }) => {
           </div>
         </Modal>
       </>)}
-      {reportTab === 'souvenirs' && <SouvenirsView/>}
+      {reportTab === 'souvenirs' && <Suspense fallback={<ViewLoader/>}><SouvenirsView/></Suspense>}
     </div>
   );
 };
@@ -1514,7 +1523,7 @@ export default function CAEDUCApp() {
         {userMode==='consultar_estado' && <ConsultarEstadoView onBack={()=>setUserMode('public')} appSettings={appSettings}/>}
         {userMode==='verificar_aval' && <VerificarAvalView onBack={()=>setUserMode('public')}/>}
         {userMode==='admin' && (
-          <>
+          <Suspense fallback={<ViewLoader/>}>
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
@@ -1522,7 +1531,7 @@ export default function CAEDUCApp() {
             {currentModule==='directorio' && <DirectorioView/>}
             {currentModule==='reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>}
             {currentModule==='admin_config' && <AdminConfigView appSettings={appSettings} onUpdateSetting={updateSetting} members={members} onUpdateMember={updateMember} userEmail={session?.user?.email}/>}
-          </>
+          </Suspense>
         )}
       </main>
     </div>
