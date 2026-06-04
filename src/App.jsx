@@ -224,9 +224,18 @@ const downloadPDF = async (htmlContent, filename) => {
 
 
 const previewHTML = (html) => {
-  const w = window.open('', '_blank');
-  if (w) { w.document.write(html); w.document.close(); }
-  else alert('Permite las ventanas emergentes para ver la vista previa.');
+  // Blob URL en vez de window.open('','_blank')+document.write: este último
+  // frecuentemente queda en blanco en Safari. Abrir una URL real es confiable.
+  try {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const w = window.open(url, '_blank');
+    if (!w) { URL.revokeObjectURL(url); alert('Permite las ventanas emergentes para ver la vista previa.'); return; }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch {
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+    else alert('Permite las ventanas emergentes para ver la vista previa.');
+  }
 };
 
 // ── Carta de aprobación ────────────────────────────────────────────────────────
@@ -1008,6 +1017,8 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
   const upd = (k,v) => setFd(p => ({...p,[k]:v}));
   const goToPreview = (e) => { e.preventDefault(); setCurrentStep(2); };
   const handleSaveOficio = async () => { setSaving(true); const sd={...fd}; if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom; delete sd.motivo_custom; await onSave(sd); setSaving(false); };
+  // Guarda directamente desde el editor (sin pasar por la vista previa) para no perder datos.
+  const handleSaveDraft = async () => { setSaving(true); const sd={...fd, estado: initialData?.estado || 'Borrador'}; if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom; delete sd.motivo_custom; await onSave(sd); setSaving(false); };
   const getPreviewData = () => { const pd={...fd}; if(fd.motivo==='Otro (personalizado)'&&fd.motivo_custom)pd.motivo=fd.motivo_custom; return pd; };
 
   if (currentStep === 2) return (
@@ -1055,7 +1066,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
             <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100"><h4 className="font-bold text-purple-800 text-sm uppercase">Justificación Técnica (opcional)</h4><textarea rows={4} placeholder="Justificación técnica..." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e=>upd('justificacion',e.target.value)}/></div>
             <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100"><h4 className="font-bold text-indigo-800 text-sm uppercase">Solicitud Puntual (opcional)</h4><textarea rows={3} placeholder="Cada punto en una línea..." className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e=>upd('solicitud_puntual',e.target.value)}/></div>
             <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200"><h4 className="font-bold text-gray-700 text-sm uppercase">Cuerpo Personalizado (opcional)</h4><textarea rows={4} placeholder="Déjalo vacío para texto automático..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e=>upd('cuerpo_personalizado',e.target.value)}/></div>
-            <div className="flex gap-3 pt-2"><button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancelar</button><button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button></div>
+            <div className="flex gap-3 pt-2"><button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancelar</button><button type="button" onClick={handleSaveDraft} disabled={saving} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"><Save size={18}/> {saving?'Guardando...':'Guardar borrador'}</button><button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button></div>
           </form>
         </div>
       </div>
