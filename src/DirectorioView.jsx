@@ -6,7 +6,8 @@ import {
   Phone, Mail, MapPin, User, Building2, ChevronDown, ChevronUp,
   ClipboardList, Clock, AlertCircle, CheckCircle,
   ShoppingBag, Tag, Upload, Eye, Settings,
-  FileText, RefreshCw, Filter
+  FileText, RefreshCw, Filter,
+  Award, GraduationCap, Printer, Download, Loader
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -1344,6 +1345,223 @@ function ProcedimientosSection() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ── TARIFARIO DE HONORARIOS ─────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+const TARIFAS = [
+  { grado: 'Licenciatura',    monto: 2000 },
+  { grado: 'Maestría',        monto: 2500 },
+  { grado: 'Doctorado',       monto: 3000 },
+  { grado: 'Post Doctorado',  monto: 3500 },
+];
+
+const fmtQ = (n) => 'Q. ' + n.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const fechaLarga = (iso) => {
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const d = iso ? new Date(iso + 'T12:00:00') : new Date();
+  return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+};
+
+// html2pdf cargado desde CDN bajo demanda (mismo patrón que las cartas)
+const loadHtml2Pdf = () => new Promise((resolve, reject) => {
+  if (window.html2pdf) return resolve(window.html2pdf);
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js';
+  s.onload = () => resolve(window.html2pdf);
+  s.onerror = () => reject(new Error('No se pudo cargar el generador de PDF.'));
+  document.body.appendChild(s);
+});
+
+const generateTarifarioHTML = (settings = {}) => {
+  const f1Name     = settings.firmante1_nombre     || 'M. A. Juan J. Reyes';
+  const f1Cargo    = settings.firmante1_cargo      || 'Coordinador';
+  const f1Inst     = settings.firmante1_institucion || 'Comisión de Acreditación y Educación Continua, Colegio de Psicólogos de Guatemala';
+  const f1FirmaUrl = buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos');
+  const selloUrl   = buildStorageUrl(settings.sello_path, 'firmas-sellos');
+  const membreteUrl = settings.membrete_path
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
+    : '/fondo-oficios.jpg';
+  const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
+
+  const filas = TARIFAS.map((t, i) => `
+    <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'};">
+      <td style="padding:11px 18px;font-size:12px;color:#1f2937;border-bottom:1px solid #e5e7eb;">${t.grado}</td>
+      <td style="padding:11px 18px;font-size:12px;font-weight:700;color:#1a5276;text-align:right;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${fmtQ(t.monto)}</td>
+    </tr>`).join('');
+
+  const tablaHTML = `
+    <table style="width:100%;border-collapse:collapse;margin:18px 0;border:1px solid #d1d5db;border-radius:8px;overflow:hidden;">
+      <thead>
+        <tr style="background:#1a5276;color:#ffffff;">
+          <th style="padding:11px 18px;font-size:11px;text-align:left;text-transform:uppercase;letter-spacing:0.04em;">Grado académico</th>
+          <th style="padding:11px 18px;font-size:11px;text-align:right;text-transform:uppercase;letter-spacing:0.04em;">Honorario</th>
+        </tr>
+      </thead>
+      <tbody>${filas}</tbody>
+    </table>`;
+
+  const firmaBlock = `
+    <div style="margin-top:30px;text-align:center;">
+      <p style="font-size:11.5px;margin-bottom:20px;">Atentamente,</p>
+      <div style="display:inline-flex;align-items:flex-end;justify-content:center;gap:28px;">
+        ${f1FirmaUrl ? `
+          <div style="text-align:center;">
+            <img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/>
+            <div style="width:210px;border-top:1.5px solid #333;padding-top:5px;">
+              <div style="font-size:11.5px;font-weight:700;">${f1Name}</div>
+              <div style="font-size:10.5px;color:#555;">${f1Cargo}</div>
+              ${instLines.map(l => `<div style="font-size:10px;color:#666;">${l}</div>`).join('')}
+            </div>
+          </div>` : ''}
+        ${selloUrl ? `
+          <div style="text-align:center;margin-bottom:6px;">
+            <img src="${selloUrl}" alt="Sello" style="height:82px;width:auto;opacity:0.88;"/>
+          </div>` : ''}
+      </div>
+    </div>`;
+
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Tarifario de Honorarios — CAEDUC</title>
+    <style>
+      @page{size:letter;margin:0;}
+      *{margin:0;padding:0;box-sizing:border-box;}
+      body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    </style>
+  </head><body>
+    <div class="carta-page" style="position:relative;width:8.5in;height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;overflow:hidden;">
+      <img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:8.5in;height:11in;object-fit:cover;z-index:0;pointer-events:none;"/>
+      <div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;height:11in;box-sizing:border-box;display:flex;flex-direction:column;">
+        <div style="flex:1;">
+          <div style="text-align:right;margin-bottom:20px;">
+            <div style="font-size:11.5px;color:#555;">Guatemala, ${fechaLarga()}</div>
+          </div>
+          <div style="margin-bottom:18px;font-size:11.5px;line-height:1.7;">
+            <strong>A quien corresponda:</strong>
+          </div>
+          <p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">
+            Reciba un cordial saludo de parte de la <strong>Comisión de Acreditación y Educación Continua —CAEDUC—</strong> del Colegio de Psicólogos de Guatemala.
+          </p>
+          <p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">
+            Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) ha resuelto definir un tarifario que contemple el pago de honorarios a ponentes y conferencistas de forma clara y sin sesgos de ninguna clase, atendiendo únicamente al logro académico y a la dignificación profesional de acuerdo con su recorrido académico, quedando establecido de la siguiente manera:
+          </p>
+          ${tablaHTML}
+          <p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">
+            Los montos descritos corresponden al honorario por su participación en las distintas actividades académicas organizadas por la Comisión, y se aplicarán de manera uniforme conforme al grado académico debidamente acreditado del profesional.
+          </p>
+          <p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">
+            Sin otro particular, me suscribo de usted con muestras de alta estima y consideración, quedando a su entera disposición para cualquier información o detalle adicional que requiera.
+          </p>
+          ${firmaBlock}
+        </div>
+      </div>
+    </div>
+  </body></html>`;
+};
+
+const downloadTarifarioPDF = async (settings) => {
+  const html2pdf = await loadHtml2Pdf();
+  const html = generateTarifarioHTML(settings);
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:-9999px;top:0;width:8.5in;height:11in;border:0;';
+  document.body.appendChild(iframe);
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    await new Promise(r => setTimeout(r, 300));
+    const imgs = Array.from(doc.images || []);
+    await Promise.all(imgs.map(img => img.complete && img.naturalWidth
+      ? Promise.resolve()
+      : new Promise(res => { img.onload = res; img.onerror = res; setTimeout(res, 4000); })));
+    const target = doc.querySelector('.carta-page') || doc.body;
+    await html2pdf().set({
+      margin: 0,
+      filename: 'Tarifario de Honorarios - CAEDUC.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+    }).from(target).save();
+  } finally {
+    document.body.removeChild(iframe);
+  }
+};
+
+const previewTarifario = (settings) => {
+  const url = URL.createObjectURL(new Blob([generateTarifarioHTML(settings)], { type: 'text/html' }));
+  const w = window.open(url, '_blank');
+  if (!w) { URL.revokeObjectURL(url); alert('Permite las ventanas emergentes para ver la vista previa.'); return; }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
+
+function TarifarioSection() {
+  const [settings, setSettings] = useState({});
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.from('app_settings').select('key, value').then(({ data }) => {
+      if (data) { const m = {}; data.forEach(r => { m[r.key] = r.value; }); setSettings(m); }
+    });
+  }, []);
+
+  const handleDownload = async () => {
+    setPdfLoading(true);
+    try { await downloadTarifarioPDF(settings); }
+    catch (err) { alert('No se pudo generar el PDF: ' + (err?.message || err)); }
+    setPdfLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <Award size={20} className="text-amber-500"/> Tarifario de Honorarios
+          </h2>
+          <p className="text-sm text-gray-500">Pago a ponentes y conferencistas según grado académico</p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => previewTarifario(settings)}
+            className="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-200 flex items-center gap-2">
+            <Eye size={16}/> Vista previa
+          </button>
+          <button onClick={handleDownload} disabled={pdfLoading}
+            className="bg-purple-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2">
+            {pdfLoading ? <Loader size={16} className="animate-spin"/> : <Printer size={16}/>}
+            {pdfLoading ? 'Generando...' : 'Imprimir tarifario'}
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto w-full">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 text-center">
+            <p className="text-amber-300 text-xs font-bold uppercase tracking-widest">Comisión de Acreditación y Educación Continua</p>
+            <h3 className="text-white text-2xl font-black mt-1">Tarifario de Honorarios</h3>
+            <p className="text-slate-300 text-xs mt-1">Ponentes y conferencistas · por actividad académica</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {TARIFAS.map((t, i) => (
+              <div key={t.grado} className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
+                    <GraduationCap size={18} className="text-purple-600"/>
+                  </div>
+                  <span className="font-semibold text-gray-800">{t.grado}</span>
+                </div>
+                <span className="text-lg font-black text-slate-700 tabular-nums">{fmtQ(t.monto)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="bg-gray-50 px-6 py-3 text-center">
+            <p className="text-xs text-gray-400">Montos uniformes según grado académico acreditado · sin sesgos</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ── COMPONENTE PRINCIPAL ───────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -1378,11 +1596,20 @@ export default function DirectorioView() {
         >
           <ClipboardList size={15}/> Procedimientos
         </button>
+        <button
+          onClick={() => setActiveTab('tarifario')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
+            activeTab === 'tarifario' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Award size={15}/> Tarifario
+        </button>
       </div>
 
       {activeTab === 'directorio'     && <DirectorioSection/>}
       {activeTab === 'proveedores'    && <ProveedoresSection/>}
       {activeTab === 'procedimientos' && <ProcedimientosSection/>}
+      {activeTab === 'tarifario'      && <TarifarioSection/>}
     </div>
   );
 }
