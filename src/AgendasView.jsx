@@ -1,11 +1,11 @@
-// src/AgendasView.jsx — Control de Agendas CAEDUC
+// src/AgendasView.jsx — Control de Agendas CAEDUC (Parte 5: memoria entre sesiones)
 import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Plus, Save, CheckCircle, FileText, Clock, User, Edit3, Trash2,
   X, Printer, ChevronDown, ChevronUp, ArrowLeft, BookOpen,
   Calendar, MapPin, RefreshCw, Info, Lock, Unlock, Copy,
-  AlignLeft, Hash
+  AlignLeft, Hash, ListChecks, CheckSquare, Square, History
 } from 'lucide-react';
 
 const supabase = createClient(
@@ -69,7 +69,9 @@ const loadHtml2Pdf = () => new Promise((res, rej) => {
   document.head.appendChild(s);
 });
 
-const generateAgendaPDF = async (agenda, puntos) => {
+// PARTE 5: la agenda en PDF ahora incluye "Pendientes de la reunión anterior" (✓/✗)
+// y "Pendientes registrados en esta sesión" (con responsables).
+const generateAgendaPDF = async (agenda, puntos, pendientesActuales = [], pendientesAnteriores = [], sesionAnteriorNum = null) => {
   const rows = puntos.map((p, i) => `
     <tr>
       <td style="border:1px solid #d1d5db;padding:8px 10px;font-size:11px;vertical-align:top;text-align:center;white-space:nowrap;">${i+1}.</td>
@@ -88,18 +90,60 @@ const generateAgendaPDF = async (agenda, puntos) => {
   const durTotal = totalDuracion(puntos);
   const horaFin = puntos.length > 0 ? puntos[puntos.length-1].hora_fin : '';
 
+  const pendAnterioresRows = pendientesAnteriores.map(p => `
+    <tr>
+      <td style="border:1px solid #d1d5db;padding:6px 10px;font-size:10.5px;text-align:center;width:26px;">${p.completado ? '✅' : '❌'}</td>
+      <td style="border:1px solid #d1d5db;padding:6px 10px;font-size:10.5px;">${p.descripcion}</td>
+      <td style="border:1px solid #d1d5db;padding:6px 10px;font-size:10.5px;">${p.responsable || '—'}</td>
+    </tr>
+  `).join('');
+
+  const pendActualesRows = pendientesActuales.map(p => `
+    <tr>
+      <td style="border:1px solid #d1d5db;padding:6px 10px;font-size:10.5px;text-align:center;width:26px;">${p.completado ? '✅' : '❌'}</td>
+      <td style="border:1px solid #d1d5db;padding:6px 10px;font-size:10.5px;">${p.descripcion}</td>
+      <td style="border:1px solid #d1d5db;padding:6px 10px;font-size:10.5px;">${p.responsable || '—'}</td>
+    </tr>
+  `).join('');
+
+  const seccionPendAnt = pendientesAnteriores.length > 0 ? `
+    <h3 style="font-size:12px;font-weight:800;color:#1a5276;margin:22px 0 8px;border-bottom:2px solid #E91E63;padding-bottom:4px;">
+      Pendientes de la reunión anterior${sesionAnteriorNum ? ` (Sesión No. ${sesionAnteriorNum})` : ''}
+    </h3>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:#f1f5f9;color:#334155;">
+        <th style="padding:6px 10px;font-size:10px;border:1px solid #d1d5db;">✓</th>
+        <th style="padding:6px 10px;font-size:10px;text-align:left;border:1px solid #d1d5db;">Pendiente</th>
+        <th style="padding:6px 10px;font-size:10px;text-align:left;border:1px solid #d1d5db;width:160px;">Responsable</th>
+      </tr></thead>
+      <tbody>${pendAnterioresRows}</tbody>
+    </table>` : '';
+
+  const seccionPendAct = pendientesActuales.length > 0 ? `
+    <h3 style="font-size:12px;font-weight:800;color:#1a5276;margin:22px 0 8px;border-bottom:2px solid #E91E63;padding-bottom:4px;">
+      Pendientes registrados en esta sesión
+    </h3>
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr style="background:#f1f5f9;color:#334155;">
+        <th style="padding:6px 10px;font-size:10px;border:1px solid #d1d5db;">✓</th>
+        <th style="padding:6px 10px;font-size:10px;text-align:left;border:1px solid #d1d5db;">Pendiente</th>
+        <th style="padding:6px 10px;font-size:10px;text-align:left;border:1px solid #d1d5db;width:160px;">Responsable</th>
+      </tr></thead>
+      <tbody>${pendActualesRows}</tbody>
+    </table>` : '';
+
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
   <title>Agenda Sesión No. ${agenda.numero_sesion} CAEDUC</title>
   <style>
     @page { size: letter; margin: 0.7in 0.8in; }
     body { font-family: 'Segoe UI', Arial, sans-serif; color: #111; background: white; margin: 0; }
-    .header { text-align: center; margin-bottom: 24px; border-bottom: 3px solid #1e3a5f; padding-bottom: 16px; }
-    .header h1 { font-size: 15px; font-weight: 800; color: #1e3a5f; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+    .header { text-align: center; margin-bottom: 24px; border-bottom: 3px solid #1a5276; padding-bottom: 16px; }
+    .header h1 { font-size: 15px; font-weight: 800; color: #1a5276; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px; }
     .header h2 { font-size: 13px; font-weight: 700; color: #374151; margin: 0 0 6px; }
     .header p  { font-size: 11px; color: #6b7280; margin: 2px 0; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    thead tr { background: #1e3a5f; color: white; }
-    thead th { padding: 8px 10px; font-size: 11px; text-align: left; border: 1px solid #1e3a5f; }
+    thead tr { background: #1a5276; color: white; }
+    thead th { padding: 8px 10px; font-size: 11px; text-align: left; border: 1px solid #1a5276; }
     tbody tr:nth-child(even) { background: #f9fafb; }
     .footer { margin-top: 28px; display: flex; justify-content: space-between; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 10px; }
     .status-badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700;
@@ -128,8 +172,10 @@ const generateAgendaPDF = async (agenda, puntos) => {
     </thead>
     <tbody>${rows}</tbody>
   </table>
+  ${seccionPendAnt}
+  ${seccionPendAct}
   <div class="footer">
-    <span>CAEDUC 2026 — colegiodepsicologos.org.gt</span>
+    <span>CAEDUC ${new Date().getFullYear()} — colegiodepsicologos.org.gt</span>
     <span>Generado: ${new Date().toLocaleString('es-GT')}</span>
   </div>
   </body></html>`;
@@ -167,6 +213,14 @@ export default function AgendasView() {
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const autoSaveRef = React.useRef(null);
+
+  // PARTE 5: memoria entre sesiones
+  const [resumenAnterior, setResumenAnterior] = useState(null); // {agenda, puntos}
+  const [resumenOpen, setResumenOpen] = useState(true);
+  const [pendientesAnteriores, setPendientesAnteriores] = useState([]); // completado=false de sesiones previas
+  const [pendientesActuales, setPendientesActuales] = useState([]); // ligados a activeAgenda.id
+  const [nuevoPendiente, setNuevoPendiente] = useState({ descripcion:'', responsable:'' });
+  const [savingPendiente, setSavingPendiente] = useState(false);
 
   // Auto-guardado silencioso de borradores
   useEffect(() => {
@@ -224,6 +278,7 @@ export default function AgendasView() {
       .order('numero_sesion', { ascending: false });
     if (data) setAgendas(data);
     setLoading(false);
+    return data || [];
   }, []);
 
   useEffect(() => { fetchAgendas(); }, [fetchAgendas]);
@@ -238,8 +293,109 @@ export default function AgendasView() {
     return data || [];
   };
 
+  // Encuentra la agenda con numero_sesion inmediatamente anterior (cualquier estado)
+  const findAgendaAnterior = (numeroSesion, agendasList) => {
+    const candidatas = (agendasList || agendas).filter(a => Number(a.numero_sesion) < Number(numeroSesion));
+    if (!candidatas.length) return null;
+    return candidatas.sort((a,b) => Number(b.numero_sesion) - Number(a.numero_sesion))[0];
+  };
+
+  // PARTE 5.1: resumen de la reunión anterior (solo lectura, puntos con notas_seguimiento)
+  const loadResumenAnterior = async (numeroSesion, agendasList) => {
+    const prev = findAgendaAnterior(numeroSesion, agendasList);
+    if (!prev) { setResumenAnterior(null); return; }
+    const pts = await fetchPuntos(prev.id);
+    const conSeguimiento = pts.filter(p => p.notas_seguimiento && p.notas_seguimiento.trim());
+    setResumenAnterior({ agenda: prev, puntos: conSeguimiento });
+  };
+
+  // PARTE 5.2: pendientes con completado=false de CUALQUIER agenda anterior (excluye la actual)
+  const loadPendientesAnteriores = async (agendaIdActual) => {
+    const { data } = await supabase
+      .from('caeduc_agenda_pendientes')
+      .select('*')
+      .eq('completado', false)
+      .order('created_at');
+    const lista = (data || []).filter(p => p.agenda_id !== agendaIdActual);
+    setPendientesAnteriores(lista);
+  };
+
+  const loadPendientesActuales = async (agendaId) => {
+    if (!agendaId) { setPendientesActuales([]); return; }
+    const { data } = await supabase
+      .from('caeduc_agenda_pendientes')
+      .select('*')
+      .eq('agenda_id', agendaId)
+      .order('orden');
+    setPendientesActuales(data || []);
+  };
+
+  // Asegura que la agenda tenga un id en BD (crea un registro mínimo si aún no existe)
+  const ensureAgendaId = async () => {
+    if (activeAgenda.id) return activeAgenda.id;
+    const agendaData = {
+      numero_sesion: activeAgenda.numero_sesion,
+      fecha: activeAgenda.fecha,
+      fecha_iso: activeAgenda.fecha_iso || todayISO(),
+      hora_inicio: activeAgenda.hora_inicio,
+      modalidad: activeAgenda.modalidad,
+      lugar: activeAgenda.lugar,
+      estado: 'Borrador',
+      notas: activeAgenda.notas,
+    };
+    const { data, error } = await supabase.from('caeduc_agendas').insert([agendaData]).select();
+    if (error || !data) { alert('No se pudo guardar la agenda: ' + (error?.message || '')); return null; }
+    const id = data[0].id;
+    setActiveAgenda(a => ({ ...a, id }));
+    return id;
+  };
+
+  // Marcar pendiente (anterior o actual) como completado — persiste de inmediato
+  const togglePendienteCompletado = async (pendiente, listaSetter) => {
+    const nuevoEstado = !pendiente.completado;
+    listaSetter(prev => prev.map(p => p.id === pendiente.id ? { ...p, completado: nuevoEstado } : p));
+    const { error } = await supabase.from('caeduc_agenda_pendientes')
+      .update({ completado: nuevoEstado, completado_en: nuevoEstado ? new Date().toISOString() : null })
+      .eq('id', pendiente.id);
+    if (error) alert('Error al actualizar pendiente: ' + error.message);
+    // Si se completó un pendiente "de la reunión anterior", ya no debe listarse ahí
+    if (nuevoEstado) setPendientesAnteriores(prev => prev.filter(p => p.id !== pendiente.id));
+  };
+
+  const addPendienteActual = async () => {
+    if (!nuevoPendiente.descripcion.trim()) return;
+    setSavingPendiente(true);
+    const agendaId = await ensureAgendaId();
+    if (!agendaId) { setSavingPendiente(false); return; }
+    const { data, error } = await supabase.from('caeduc_agenda_pendientes').insert([{
+      agenda_id: agendaId,
+      descripcion: nuevoPendiente.descripcion.trim(),
+      responsable: nuevoPendiente.responsable.trim(),
+      orden: pendientesActuales.length,
+    }]).select();
+    if (error) { alert('Error al agregar pendiente: ' + error.message); setSavingPendiente(false); return; }
+    setPendientesActuales(prev => [...prev, ...(data || [])]);
+    setNuevoPendiente({ descripcion:'', responsable:'' });
+    setSavingPendiente(false);
+  };
+
+  const updatePendienteActual = async (id, campo, valor) => {
+    setPendientesActuales(prev => prev.map(p => p.id === id ? { ...p, [campo]: valor } : p));
+  };
+  const savePendienteActualEdit = async (pendiente) => {
+    const { error } = await supabase.from('caeduc_agenda_pendientes')
+      .update({ descripcion: pendiente.descripcion, responsable: pendiente.responsable })
+      .eq('id', pendiente.id);
+    if (error) alert('Error al guardar pendiente: ' + error.message);
+  };
+  const removePendienteActual = async (id) => {
+    setPendientesActuales(prev => prev.filter(p => p.id !== id));
+    const { error } = await supabase.from('caeduc_agenda_pendientes').delete().eq('id', id);
+    if (error) alert('Error al eliminar pendiente: ' + error.message);
+  };
+
   // Abrir nueva agenda
-  const handleNewAgenda = () => {
+  const handleNewAgenda = async () => {
     const maxNum = agendas.reduce((m, a) => Math.max(m, Number(a.numero_sesion || 0)), 9);
     const nuevaAgenda = {
       id: null,
@@ -252,14 +408,17 @@ export default function AgendasView() {
       estado: 'Borrador',
       notas: '',
     };
-    // Puntos fijos por defecto con orden y sin tiempos aún
     const puntosIniciales = PUNTOS_FIJOS.map((p, i) => ({
       ...p, orden: i + 1, descripcion: '', duracion_min: 0,
       hora_inicio: '', hora_fin: '', id: null, agenda_id: null,
     }));
     setActiveAgenda(nuevaAgenda);
     setPuntos(puntosIniciales);
+    setPendientesActuales([]);
+    setNuevoPendiente({ descripcion:'', responsable:'' });
     setView('editor');
+    await loadResumenAnterior(nuevaAgenda.numero_sesion, agendas);
+    await loadPendientesAnteriores(null);
   };
 
   // Abrir agenda existente para ver/editar
@@ -275,6 +434,9 @@ export default function AgendasView() {
         }))
     );
     setView('editor');
+    await loadResumenAnterior(agenda.numero_sesion, agendas);
+    await loadPendientesAnteriores(agenda.id);
+    await loadPendientesActuales(agenda.id);
     setLoading(false);
   };
 
@@ -284,10 +446,8 @@ export default function AgendasView() {
 
     let agendaId = activeAgenda.id;
 
-    // Recalcular tiempos antes de guardar
     const puntosCalc = recalcTimes(puntos, activeAgenda.hora_inicio);
 
-    // Si ya estaba aprobada y se vuelve a guardar = registrar edición
     let editFields = {};
     if (activeAgenda.estado === 'Aprobada' && agendaId) {
       const { data: userData } = await supabase.auth.getUser();
@@ -299,7 +459,6 @@ export default function AgendasView() {
       };
     }
 
-    // Upsert agenda
     const agendaData = {
       numero_sesion: activeAgenda.numero_sesion,
       fecha:         activeAgenda.fecha,
@@ -323,7 +482,7 @@ export default function AgendasView() {
       setActiveAgenda(a => ({ ...a, id: agendaId }));
     }
 
-    // Borrar puntos anteriores y reinsertar
+    // Puntos: se mantiene delete+reinsert (riesgo controlado, sin cambios en esta fase)
     await supabase.from('caeduc_agenda_puntos').delete().eq('agenda_id', agendaId);
     const puntosToInsert = puntosCalc.map((p, i) => ({
       agenda_id:         agendaId,
@@ -340,11 +499,19 @@ export default function AgendasView() {
     const { error: ep } = await supabase.from('caeduc_agenda_puntos').insert(puntosToInsert);
     if (ep) { alert('Error al guardar puntos: ' + ep.message); return; }
 
-    // Actualizar puntos locales con tiempos calculados
     setPuntos(puntosCalc.map(p => ({ ...p, agenda_id: agendaId })));
     setActiveAgenda(a => ({ ...a, id: agendaId, estado: estadoDestino }));
     await fetchAgendas();
     alert(estadoDestino === 'Aprobada' ? '✅ Agenda aprobada y guardada en el registro oficial.' : '💾 Borrador guardado.');
+  };
+
+  const handleDownloadPDF = async (agenda, puntosParam) => {
+    const prev = findAgendaAnterior(agenda.numero_sesion, agendas);
+    const [{ data: actuales }, prevData] = await Promise.all([
+      supabase.from('caeduc_agenda_pendientes').select('*').eq('agenda_id', agenda.id).order('orden'),
+      prev ? supabase.from('caeduc_agenda_pendientes').select('*').eq('agenda_id', prev.id).order('orden') : Promise.resolve({ data: [] }),
+    ]);
+    await generateAgendaPDF(agenda, puntosParam, actuales || [], prevData.data || [], prev?.numero_sesion);
   };
 
   // ── LISTA DE AGENDAS ────────────────────────────────────────────────────────
@@ -361,13 +528,12 @@ export default function AgendasView() {
               <RefreshCw size={15}/> Actualizar
             </button>
             <button onClick={handleNewAgenda}
-              className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-700 flex items-center gap-2 shadow-sm">
+              className="bg-caeduc-pink text-white px-5 py-2.5 rounded-xl font-bold hover:bg-caeduc-pinkDark flex items-center gap-2 shadow-sm">
               <Plus size={18}/> Nueva agenda
             </button>
           </div>
         </div>
 
-        {/* Info */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-800 flex items-start gap-2">
           <Info size={15} className="shrink-0 mt-0.5"/>
           <span>Las agendas en <strong>Borrador</strong> son editables. Al <strong>Aprobar</strong> quedan en el registro oficial. Cualquier agenda puede descargarse en PDF.</span>
@@ -375,7 +541,7 @@ export default function AgendasView() {
 
         {loading ? (
           <div className="flex items-center justify-center h-40">
-            <RefreshCw size={28} className="text-blue-500 animate-spin"/>
+            <RefreshCw size={28} className="text-caeduc-pink animate-spin"/>
           </div>
         ) : agendas.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl border text-gray-400">
@@ -392,7 +558,7 @@ export default function AgendasView() {
                 onOpen={() => handleOpenAgenda(a)}
                 onDownload={async () => {
                   const pts = await fetchPuntos(a.id);
-                  generateAgendaPDF(a, pts);
+                  await handleDownloadPDF(a, pts);
                 }}
               />
             ))}
@@ -419,15 +585,14 @@ export default function AgendasView() {
 
     const addPunto = () => {
       setPuntos(prev => [
-        ...prev.slice(0, -1),  // antes del cierre
+        ...prev.slice(0, -1),
         { tema: '', descripcion: '', responsable: '', duracion_min: 0,
           hora_inicio: '', hora_fin: '', es_fijo: false, id: null, orden: prev.length },
-        prev[prev.length - 1], // cierre siempre al final
+        prev[prev.length - 1],
       ]);
     };
 
     const removePunto = (idx) => {
-      // Todos los puntos son eliminables (los fijos son solo propuestas)
       setPuntos(prev => prev.filter((_, i) => i !== idx));
     };
 
@@ -435,7 +600,6 @@ export default function AgendasView() {
       const newPuntos = [...puntos];
       const target = idx + dir;
       if (target < 0 || target >= newPuntos.length) return;
-      // Todos los puntos son reordenables
       [newPuntos[idx], newPuntos[target]] = [newPuntos[target], newPuntos[idx]];
       setPuntos(newPuntos);
     };
@@ -495,8 +659,8 @@ export default function AgendasView() {
               </button>
             )}
             <button
-              onClick={() => generateAgendaPDF(activeAgenda, puntosCalc)}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 flex items-center gap-1.5 text-sm">
+              onClick={() => handleDownloadPDF(activeAgenda, puntosCalc)}
+              className="bg-caeduc-blue text-white px-4 py-2 rounded-xl font-bold hover:bg-caeduc-blueDark flex items-center gap-1.5 text-sm">
               <Printer size={15}/> Descargar PDF
             </button>
           </div>
@@ -577,6 +741,50 @@ export default function AgendasView() {
           </div>
         </div>
 
+        {/* PARTE 5.1 — Resumen de la sesión anterior (solo lectura, colapsable) */}
+        {resumenAnterior && (
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <button onClick={()=>setResumenOpen(o=>!o)} className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
+              <span className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                <History size={15} className="text-caeduc-blue"/> Resumen de la sesión anterior (Sesión No. {resumenAnterior.agenda.numero_sesion})
+              </span>
+              {resumenOpen ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
+            </button>
+            {resumenOpen && (
+              <div className="px-4 pb-4 space-y-2 border-t pt-3">
+                {resumenAnterior.puntos.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">La sesión anterior no dejó notas de seguimiento registradas.</p>
+                ) : resumenAnterior.puntos.map(p => (
+                  <div key={p.id} className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-sm font-semibold text-amber-900">{p.tema}</p>
+                    <p className="text-sm text-amber-800 mt-0.5">{p.notas_seguimiento}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PARTE 5.2 — Pendientes de la reunión anterior (checkbox, persiste de inmediato) */}
+        {pendientesAnteriores.length > 0 && (
+          <div className="bg-white rounded-xl border shadow-sm p-4 space-y-2">
+            <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-2">
+              <ListChecks size={15} className="text-amber-600"/> Pendientes de la reunión anterior
+            </h3>
+            {pendientesAnteriores.map(p => (
+              <label key={p.id} className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 cursor-pointer hover:bg-amber-100 transition-colors">
+                <button type="button" onClick={()=>togglePendienteCompletado(p, setPendientesAnteriores)} className="mt-0.5 shrink-0 text-amber-600 hover:text-green-600">
+                  {p.completado ? <CheckSquare size={18}/> : <Square size={18}/>}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-amber-900 font-medium">{p.descripcion}</p>
+                  {p.responsable && <p className="text-xs text-amber-600 flex items-center gap-1 mt-0.5"><User size={11}/>{p.responsable}</p>}
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
         {/* Puntos de la agenda */}
         <div className="space-y-3">
           <div className="flex justify-between items-center">
@@ -585,7 +793,7 @@ export default function AgendasView() {
             </h3>
             {!aprobada && (
               <button onClick={addPunto}
-                className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-100 flex items-center gap-1 border border-blue-200">
+                className="bg-caeduc-pinkLight text-caeduc-pink px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-pink-100 flex items-center gap-1 border border-pink-200">
                 <Plus size={13}/> Agregar punto
               </button>
             )}
@@ -603,6 +811,59 @@ export default function AgendasView() {
               onMove={(dir) => movePunto(idx, dir)}
             />
           ))}
+        </div>
+
+        {/* PARTE 5.2 — Pendientes de esta reunión (CRUD propio, con responsable) */}
+        <div className="bg-white rounded-xl border shadow-sm p-4 space-y-3">
+          <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+            <ListChecks size={15} className="text-caeduc-pink"/> Pendientes de esta reunión
+          </h3>
+          {pendientesActuales.length === 0 && (
+            <p className="text-sm text-gray-400 italic">Sin pendientes registrados todavía.</p>
+          )}
+          {pendientesActuales.map(p => (
+            <div key={p.id} className="flex items-start gap-2 bg-slate-50 border rounded-lg p-3">
+              <button type="button" onClick={()=>togglePendienteCompletado(p, setPendientesActuales)} className="mt-2 shrink-0 text-slate-400 hover:text-green-600">
+                {p.completado ? <CheckSquare size={18} className="text-green-600"/> : <Square size={18}/>}
+              </button>
+              <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr,160px] gap-2">
+                <input
+                  className="w-full border p-2 rounded-lg text-sm"
+                  value={p.descripcion}
+                  onChange={e=>updatePendienteActual(p.id,'descripcion',e.target.value)}
+                  onBlur={()=>savePendienteActualEdit(pendientesActuales.find(x=>x.id===p.id))}
+                />
+                <input
+                  className="w-full border p-2 rounded-lg text-sm"
+                  placeholder="Responsable"
+                  value={p.responsable||''}
+                  onChange={e=>updatePendienteActual(p.id,'responsable',e.target.value)}
+                  onBlur={()=>savePendienteActualEdit(pendientesActuales.find(x=>x.id===p.id))}
+                />
+              </div>
+              <button onClick={()=>removePendienteActual(p.id)} className="text-gray-300 hover:text-red-500 shrink-0 mt-2"><Trash2 size={15}/></button>
+            </div>
+          ))}
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr,160px,auto] gap-2 pt-1">
+            <input
+              className="w-full border p-2.5 rounded-lg text-sm"
+              placeholder="Nuevo pendiente..."
+              value={nuevoPendiente.descripcion}
+              onChange={e=>setNuevoPendiente(p=>({...p,descripcion:e.target.value}))}
+              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addPendienteActual();}}}
+            />
+            <input
+              className="w-full border p-2.5 rounded-lg text-sm"
+              placeholder="Responsable"
+              value={nuevoPendiente.responsable}
+              onChange={e=>setNuevoPendiente(p=>({...p,responsable:e.target.value}))}
+              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addPendienteActual();}}}
+            />
+            <button onClick={addPendienteActual} disabled={savingPendiente||!nuevoPendiente.descripcion.trim()}
+              className="bg-caeduc-pink text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-caeduc-pinkDark disabled:opacity-50 flex items-center justify-center gap-1.5">
+              <Plus size={14}/> Agregar
+            </button>
+          </div>
         </div>
 
         {/* Botones de guardado al fondo */}
@@ -665,7 +926,7 @@ function AgendaCard({ agenda, onOpen, onDownload }) {
     <div className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-shadow">
       <div className="p-4 flex items-center gap-4">
         {/* Número de sesión */}
-        <div className="bg-blue-600 text-white rounded-xl w-14 h-14 flex flex-col items-center justify-center shrink-0">
+        <div className="bg-caeduc-blue text-white rounded-xl w-14 h-14 flex flex-col items-center justify-center shrink-0">
           <span className="text-xs font-semibold opacity-80">Sesión</span>
           <span className="text-xl font-black leading-none">{agenda.numero_sesion}</span>
         </div>
@@ -693,12 +954,12 @@ function AgendaCard({ agenda, onOpen, onDownload }) {
             className={`px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-1.5 ${
               agenda.estado === 'Aprobada'
                 ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-caeduc-pink text-white hover:bg-caeduc-pinkDark'
             }`}>
             {agenda.estado === 'Aprobada' ? <><FileText size={14}/> Ver</> : <><Edit3 size={14}/> Editar</>}
           </button>
           <button onClick={onDownload}
-            className="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-xl hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1 font-bold text-sm"
+            className="bg-blue-50 text-caeduc-blue px-3 py-2 rounded-xl hover:bg-blue-100 border border-blue-200 flex items-center gap-1 font-bold text-sm"
             title="Descargar PDF">
             <Printer size={14}/> PDF
           </button>
@@ -745,7 +1006,6 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
         {/* Controles */}
         {!aprobada && (
           <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-            {/* Todos los puntos son movibles y eliminables */}
             <>
               <button onClick={() => onMove(-1)} disabled={idx === 0}
                 className="text-gray-300 hover:text-gray-600 disabled:opacity-30 p-1"><ChevronUp size={15}/></button>
@@ -763,7 +1023,6 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
       {/* Cuerpo expandible */}
       {expanded && !aprobada && (
         <div className="px-4 pb-4 space-y-3 border-t pt-3">
-          {/* Tema editable para todos los puntos */}
           <div>
             <label className="text-xs font-bold text-gray-500 mb-1 block flex items-center gap-1.5">
               Tema *
@@ -778,7 +1037,6 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
               value={punto.tema}
               onChange={e => onChange('tema', e.target.value)}/>
           </div>
-          {/* Descripción */}
           <div>
             <label className="text-xs font-bold text-gray-500 mb-1 block">Descripción / detalles (opcional)</label>
             <textarea rows={2} className="w-full border p-2 rounded-lg text-sm resize-none"
@@ -787,7 +1045,6 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
               onChange={e => onChange('descripcion', e.target.value)}/>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            {/* Responsable */}
             <div>
               <label className="text-xs font-bold text-gray-500 mb-1 block">Responsable</label>
               <input className="w-full border p-2 rounded-lg text-sm"
@@ -795,7 +1052,6 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
                 value={punto.responsable || ''}
                 onChange={e => onChange('responsable', e.target.value)}/>
             </div>
-            {/* Duración */}
             <div>
               <label className="text-xs font-bold text-gray-500 mb-1 block flex items-center gap-1">
                 <Clock size={11}/> Duración (minutos) *
@@ -812,7 +1068,6 @@ function PuntoCard({ punto, idx, total, aprobada, onChange, onRemove, onMove }) 
               )}
             </div>
           </div>
-          {/* Notas de seguimiento y resolución */}
           <div className="border-t mt-3 pt-3">
             <label className="text-xs font-bold text-amber-700 mb-1 block flex items-center gap-1">
               📋 Notas de seguimiento y resolución
