@@ -7,8 +7,16 @@ import {
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
   Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift,
-  Loader
+  Loader, Home, ChevronRight, Sparkles
 } from 'lucide-react';
+import {
+  SUPER_ADMIN, ROLES, MODULES, canDo,
+  ACTIVIDADES_REGLAMENTO, ACTIVITY_TYPES, labelActividadReglamento,
+  validarHorasActividad, MODALITIES, MOTIVOS_OFICIO,
+  computeSuggestedOficioNumero,
+} from './lib/constants.js';
+import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate, mergeInformeTecnico, parseJustificacionSections } from './lib/oficioTemplates.js';
+import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
 // Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
 // en vez de cargar las ~6,000 líneas de todas las vistas en el bundle inicial.
 const PlanificacionCAEDUCView = lazy(() => import('./PlanificacionCAEDUCView'));
@@ -17,6 +25,7 @@ const DirectorioView          = lazy(() => import('./DirectorioView'));
 const CartasSection           = lazy(() => import('./CartasView'));
 const SouvenirsView           = lazy(() => import('./SouvenirsView'));
 const AdminPasswordManager    = lazy(() => import('./AdminPasswordManager'));
+const InicioDashboardView     = lazy(() => import('./InicioDashboardView'));
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -67,38 +76,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-
-const ROLES = ['Coordinador(a)','Subcoordinador(a)','Secretario(a)','Prosecretario(a)','Gestor(a) del Conocimiento','Vocal I','Vocal II','Asistente JD','Junta Directiva'];
-
-// Módulos del sistema con sus etiquetas para el panel de permisos
-const MODULES = [
-  { id: 'planificacion', label: 'Planificación', icon: '✅' },
-  { id: 'avales',        label: 'Avales',        icon: '📋' },
-  { id: 'oficios',       label: 'Oficios y Cartas', icon: '✍️' },
-  { id: 'agendas',       label: 'Agendas',       icon: '📖' },
-  { id: 'directorio',    label: 'Directorio',    icon: '👥' },
-  { id: 'reportes',      label: 'Reportes',      icon: '🕐' },
-];
-
-// Helper: ¿puede el usuario hacer algo en un módulo?
-// Si no hay permissions definidos (null/undefined) se asume acceso completo.
-const canDo = (permissions, moduleId, action = 'view') => {
-  if (!permissions) return true;
-  const mod = permissions[moduleId];
-  if (mod === undefined || mod === null) return true;
-  return mod[action] !== false;
-};
-
-const ACTIVITY_TYPES = ['Especialización','Diplomado','Taller','Conferencia','Seminario','Congreso','Curso','Simposio','Foro','Jornada','Otro'];
-const MODALITIES = ['Virtual','Presencial','Híbrida'];
-const MOTIVOS_OFICIO = [
-  'Aprobación y asignación de recursos para realizar actividad',
-  'Solicitud de salón y equipo audiovisual',
-  'Solicitud de materiales e insumos',
-  'Informe de actividad realizada',
-  'Solicitud de difusión institucional',
-  'Otro (personalizado)'
-];
 
 // ── Utilidades de estado de subida ───────────────────────────────────────────
 // La carga real se realiza con el SDK de Supabase para respetar RLS y Storage.
@@ -490,14 +467,25 @@ const generateOficioHTML = (oficio, settings = {}) => {
   if (oficio.actividad_nombre && (oficio.actividad_tipo || oficio.actividad_fecha)) {
     detallesHTML = `<table style="margin:10px 0;border-collapse:collapse;">${dr('Tipo',oficio.actividad_tipo)}${dr('Modalidad',oficio.actividad_modalidad)}${dr('Duración',oficio.actividad_duracion)}${dr('Fecha',oficio.actividad_fecha)}${dr('Sede',oficio.actividad_sede)}</table>`;
   }
-  let recursosHTML = oficio.monto ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">Recursos solicitados</p>${parrafo(`Total solicitado: <strong>${oficio.monto}</strong>.`)}${oficio.monto_detalle ? `<p style="font-size:10px;font-weight:700;color:#1a5276;margin:8px 0 4px;">Detalle de lo solicitado:</p>${parrafo(oficio.monto_detalle)}` : ''}</div>` : '';
-  let justHTML = oficio.justificacion ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">Justificación técnica</p>${oficio.justificacion.split('\n').filter(l=>l.trim()).map(p=>parrafo(p)).join('')}</div>` : '';
+  // PARTE 4: informe técnico formal — parsea secciones estructuradas dentro de `justificacion`
+  const parsedInforme = parseJustificacionSections(oficio.justificacion || '');
+  const seccionHTML = (num, titulo, contenido) => contenido ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">${num}. ${titulo}</p>${String(contenido).split('\n').filter(l=>l.trim()).map(p=>parrafo(p)).join('')}</div>` : '';
+  const seccionNaturaleza = seccionHTML(1, 'Nombre y naturaleza de la actividad', [
+    oficio.actividad_nombre ? `"${oficio.actividad_nombre}"` : '',
+    oficio.actividad_tipo ? `Tipo: ${oficio.actividad_tipo}.` : '',
+    oficio.actividad_modalidad ? `Modalidad: ${oficio.actividad_modalidad}.` : '',
+  ].filter(Boolean).join(' '));
+  const seccionJustificacion = seccionHTML(2, 'Justificación y pertinencia gremial', parsedInforme.intro || (Object.keys(parsedInforme.sections).length ? '' : oficio.justificacion));
+  const seccionPoblacion = seccionHTML(3, 'Población objetivo y alcance esperado', parsedInforme.sections['Población objetivo y alcance esperado']);
+  let recursosHTML = oficio.monto ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">4. Recursos solicitados (desglose)</p>${parrafo(`Total solicitado: <strong>${oficio.monto}</strong>.`)}${oficio.monto_detalle ? `<p style="font-size:10px;font-weight:700;color:#1a5276;margin:8px 0 4px;">Detalle de lo solicitado:</p>${parrafo(oficio.monto_detalle)}` : ''}</div>` : '';
+  const seccionCronograma = seccionHTML(5, 'Cronograma resumido', parsedInforme.sections['Cronograma resumido'] || oficio.actividad_fecha);
+  const seccionResultados = seccionHTML(6, 'Resultados esperados', parsedInforme.sections['Resultados esperados']);
   let solHTML = oficio.solicitud_puntual ? `<div style="margin-top:12px;"><p style="font-size:10px;font-weight:700;color:#1a5276;text-transform:uppercase;margin-bottom:5px;">Solicitud puntual</p><ul style="padding-left:16px;margin:0;">${oficio.solicitud_puntual.split('\n').filter(l=>l.trim()).map(p=>`<li style="font-size:11.5px;line-height:1.75;margin-bottom:3px;">${p}</li>`).join('')}</ul></div>` : '';
   const firmaBlock = `<div style="margin-top:20px;"><p style="font-size:11.5px;margin-bottom:16px;text-align:left;">Cordialmente,</p><div style="text-align:center;"><div style="display:inline-flex;align-items:flex-end;gap:20px;">${f1FirmaUrl?`<div style="text-align:center;"><img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/><div style="width:200px;border-top:1.5px solid #333;padding-top:4px;"><div style="font-size:11.5px;font-weight:700;">${f1Name}</div><div style="font-size:10.5px;color:#555;">${f1Cargo}</div>${instLines.map(l=>`<div style="font-size:10px;color:#666;">${l}</div>`).join('')}</div></div>`:'<div></div>'}${selloUrl?`<div style="margin-bottom:10px;"><img src="${selloUrl}" alt="Sello" style="height:80px;width:auto;opacity:0.88;"/></div>`:''}</div></div></div><p style="font-size:10px;color:#888;margin-top:10px;">C.C: Archivo / CAEDUC</p>`;
   const footerHTML = `<div style="border-top:2px solid #E91E63;padding-top:10px;display:flex;justify-content:space-between;font-size:8px;color:#777;gap:8px;"><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel<br>+(502) 7764-7109</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div></div><p style="text-align:center;font-size:8.5px;color:white;background:#E91E63;padding:3px 0;margin:0;">colegiodepsicologos.org.gt • @colpsicogt</p>`;
   const mainPage = `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;min-height:11in;box-sizing:border-box;display:flex;flex-direction:column;"><div style="flex:1;"><div style="text-align:right;margin-bottom:18px;"><div style="font-size:12px;font-weight:700;color:#111;">${oficio.numero_oficio||'Of. ___.CAEDUC'}</div><div style="font-size:11.5px;color:#555;margin-top:1px;">Guatemala ${formatOficioDate(oficio.fecha)}</div></div><div style="margin-bottom:15px;font-size:11.5px;line-height:1.7;">${(oficio.dirigido_a||'').split(',').map(l=>l.trim()).filter(Boolean).join('<br>')}<br>Presente</div><p style="font-size:11.5px;font-weight:700;margin-bottom:12px;">Honorables miembros de la Junta Directiva:</p>${cuerpoHTML}${detallesHTML}${parrafo('Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.')}<p style="font-size:11.5px;margin-bottom:0;">Sin otro particular, me suscribo.</p>${firmaBlock}</div></div></div>`;
   const hasExtra = oficio.justificacion || oficio.solicitud_puntual || oficio.monto;
-  const extraPage = hasExtra ? `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;box-sizing:border-box;"><h2 style="font-size:14px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 5px;">Justificación técnica y aporte gremial</h2>${oficio.actividad_nombre?`<h3 style="font-size:12px;font-weight:600;color:#374151;text-align:center;margin:0 0 16px;">${oficio.actividad_nombre}</h3>`:''} ${justHTML}${recursosHTML}${solHTML}${parrafo('Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.')}</div></div>` : '';
+  const extraPage = hasExtra ? `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;box-sizing:border-box;"><h2 style="font-size:14px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 5px;">Informe Técnico</h2><p style="font-size:9.5px;color:#888;text-align:center;margin:0 0 5px;">Justificación técnica y aporte gremial</p>${oficio.actividad_nombre?`<h3 style="font-size:12px;font-weight:600;color:#374151;text-align:center;margin:0 0 16px;">${oficio.actividad_nombre}</h3>`:''}${seccionNaturaleza}${seccionJustificacion}${seccionPoblacion}${recursosHTML}${seccionCronograma}${seccionResultados}${solHTML}${parrafo('Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.')}</div></div>` : '';
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media print{body{-webkit-print-color-adjust:exact;}}</style></head><body>${mainPage}${extraPage}</body></html>`;
 };
 
@@ -508,44 +496,13 @@ const openOficioLetter = async (oficio, settings = {}, mode = 'download') => {
 };
 
 // ── UI Components ──────────────────────────────────────────────────────────────
-const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
-  if (!isOpen) return null;
-  const sizes = { sm: 'max-w-md', md: 'max-w-2xl', lg: 'max-w-4xl', xl: 'max-w-6xl' };
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
-      <div className={`bg-white rounded-lg shadow-xl w-full ${sizes[size]} m-auto`}>
-        <div className="flex justify-between items-center p-6 border-b">
-          <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-          <button onClick={onClose}><X size={24} className="text-gray-500 hover:text-red-500" /></button>
-        </div>
-        <div className="p-6 max-h-screen-80 overflow-y-auto">{children}</div>
-      </div>
-    </div>
-  );
-};
-
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-white rounded-lg shadow-md border border-gray-100 overflow-hidden ${className}`}>
-    <div className="p-6">{children}</div>
-  </div>
-);
-
-const Badge = ({ status }) => {
-  const colors = {
-    'Pendiente':'bg-yellow-100 text-yellow-800','En Proceso':'bg-blue-100 text-blue-800',
-    'Aprobado':'bg-green-100 text-green-800','Rechazado':'bg-red-100 text-red-800',
-    'Eliminado':'bg-gray-200 text-gray-600','Finalizado':'bg-gray-100 text-gray-800',
-    'Borrador':'bg-yellow-100 text-yellow-800','Enviado':'bg-green-100 text-green-800',
-    'Archivado':'bg-gray-200 text-gray-600'
-  };
-  return <span className={`px-2 py-1 rounded-full text-xs font-bold ${colors[status] || 'bg-gray-100'}`}>{status}</span>;
-};
-
-const BackButton = ({ onClick, label = '← Volver al Menú Principal' }) => (
-  <button onClick={onClick} className="flex items-center gap-2 text-gray-500 hover:text-gray-800 mb-4">
-    <ArrowLeft size={16} /> {label}
-  </button>
-);
+// Parte 7 (rediseño): Modal, Card, Badge y BackButton viven ahora en components/ui.jsx
+// con la paleta institucional CAEDUC. Se re-exportan aquí con los mismos nombres
+// para no tener que tocar cada punto de uso en este archivo.
+const Modal = UiModal;
+const Card = UiCard;
+const Badge = Pill;
+const BackButton = UiBackButton;
 
 // ── Barra de progreso de subida ────────────────────────────────────────────────
 const UploadProgressBar = ({ progress, phase }) => {
@@ -672,6 +629,11 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
   const reglamentoPath = appSettings?.reglamento_file_path || '';
   const reglamentoUrl = reglamentoPath ? buildStorageUrl(reglamentoPath, 'reglamento-avales') : null;
 
+  // PARTE 1: validación en vivo de horas mínimas según el Reglamento CAEDUC (art. 19)
+  const horasValidation = (data.activityType && data.duration)
+    ? validarHorasActividad(data.activityType, data.duration)
+    : { valid: true };
+
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -680,6 +642,10 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!horasValidation.valid) {
+      setFileError(null);
+      return;
+    }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
     if (!emailRegex.test(data.email)) {
       setFileError('El correo electrónico no parece válido. Verifica que incluya un dominio completo, por ejemplo: nombre@correo.com');
@@ -691,7 +657,8 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
     }
     setFileError(null);
     setSubmitting(true);
-    const rn = await submitAval(data, file);
+    const payload = { ...data, duration: data.duration ? `${data.duration} horas` : '' };
+    const rn = await submitAval(payload, file);
     if (rn) {
       setSubmittedNumber(rn);
     } else {
@@ -741,13 +708,29 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
             <input required placeholder="Nombre / Tema de la Actividad" className="w-full border p-2 rounded" value={data.activityName} onChange={e=>setData({...data,activityName:e.target.value})}/>
             <input placeholder="Tema específico" className="w-full border p-2 rounded" value={data.topic} onChange={e=>setData({...data,topic:e.target.value})}/>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-sm font-bold mb-1">Tipo *</label><select required className="w-full border p-2 rounded" value={data.activityType} onChange={e=>setData({...data,activityType:e.target.value})}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
+              <div><label className="block text-sm font-bold mb-1">Tipo *</label><select required className="w-full border p-2 rounded" value={data.activityType} onChange={e=>setData({...data,activityType:e.target.value})}><option value="">Seleccionar...</option>{ACTIVIDADES_REGLAMENTO.map(a=><option key={a.tipo} value={a.tipo}>{labelActividadReglamento(a)}</option>)}</select></div>
               <div><label className="block text-sm font-bold mb-1">Modalidad *</label><select required className="w-full border p-2 rounded" value={data.modality} onChange={e=>setData({...data,modality:e.target.value})}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-sm font-bold mb-1">Duración *</label><input required placeholder="Ej: 12 horas" className="w-full border p-2 rounded" value={data.duration} onChange={e=>setData({...data,duration:e.target.value})}/></div>
+              <div><label className="block text-sm font-bold mb-1">Duración (horas) *</label><input required type="number" min="1" step="1" placeholder="Ej: 12" className={`w-full border p-2 rounded ${!horasValidation.valid?'border-red-400 bg-red-50':''}`} value={data.duration} onChange={e=>setData({...data,duration:e.target.value})}/></div>
               <div><label className="block text-sm font-bold mb-1">Fecha *</label><input required type="date" className="w-full border p-2 rounded" value={data.activityDate} onChange={e=>setData({...data,activityDate:e.target.value})}/></div>
             </div>
+            {!horasValidation.valid && (
+              <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 space-y-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={18} className="text-red-600 shrink-0 mt-0.5"/>
+                  <p className="text-sm text-red-800 leading-relaxed">{horasValidation.message}</p>
+                </div>
+                {horasValidation.alternativasTexto && (
+                  <p className="text-sm text-red-700 pl-6">Con {data.duration} horas puedes optar a: <strong>{horasValidation.alternativasTexto}</strong>.</p>
+                )}
+                {reglamentoUrl && (
+                  <a href={reglamentoUrl} target="_blank" rel="noopener noreferrer" className="pl-6 inline-flex items-center gap-1.5 text-red-700 font-bold text-sm hover:underline">
+                    <BookOpen size={14}/> Descargar reglamento
+                  </a>
+                )}
+              </div>
+            )}
             <input required placeholder="Hora de la actividad (ej: 9:00 AM)" className="w-full border p-2 rounded" value={data.schedule} onChange={e=>setData({...data,schedule:e.target.value})}/>
             <input required placeholder="Lugar o Plataforma" className="w-full border p-2 rounded" value={data.platform} onChange={e=>setData({...data,platform:e.target.value})}/>
             <input required placeholder="Dirigido a" className="w-full border p-2 rounded" value={data.targetAudience} onChange={e=>setData({...data,targetAudience:e.target.value})}/>
@@ -798,7 +781,7 @@ const ExternalAvalesView = ({ submitAval, onBack, appSettings, uploadProgress = 
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !horasValidation.valid}
             className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg transition-all"
           >
             {submitting ? (
@@ -983,7 +966,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
         {oficios.map(o => <OficioCard key={o.id} oficio={o} appSettings={appSettings} onEdit={()=>handleEdit(o)} onStatusChange={(s)=>handleStatusChange(o,s)} onDelete={()=>setDeleteModal(o)} onSavePunto={(pd)=>handleSavePunto(o,pd)}/>)}
         {oficios.length===0 && <div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4"/><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>}
       </div>
-      {showForm && <OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} existingCount={oficios.length} appSettings={appSettings}/>}
+      {showForm && <OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} oficios={oficios} appSettings={appSettings}/>}
       <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Oficio" size="sm">
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-medium">¿Eliminar "{deleteModal?.numero_oficio}"?</p></div>
@@ -996,19 +979,22 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
 };
 
 // ── OficioFormModal ────────────────────────────────────────────────────────────
-const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, existingCount, appSettings }) => {
+const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, oficios, appSettings }) => {
   const today = new Date().toISOString().split('T')[0];
-  const suggestedNum = 'Of. ' + String((existingCount||0)+1).padStart(3,'0') + '.CAEDUC';
+  const suggestedNum = computeSuggestedOficioNumero(oficios || []);
   const [currentStep,setCurrentStep]=useState(1);const [saving,setSaving]=useState(false);const [fd,setFd]=useState(null);
+  const [showInforme,setShowInforme]=useState(false);
   useEffect(() => {
     if (!isOpen) return;
     setCurrentStep(1);
     const isCustomMotivo = (m) => m && !MOTIVOS_OFICIO.includes(m);
     if (preFillData && !initialData) {
-      setFd({ titulo:'', numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:'', monto:'', monto_detalle:'', justificacion:'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
+      setFd({ titulo:'', numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:preFillData.actividad_descripcion||'', monto:preFillData.monto||'', monto_detalle:preFillData.monto_detalle||'', justificacion:preFillData.justificacion||'', poblacion_objetivo:preFillData.poblacion_objetivo||'', resultados_esperados:preFillData.resultados_esperados||'', cronograma_resumen:preFillData.cronograma_resumen||'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
+      if (preFillData.justificacion) setShowInforme(true);
     } else {
       const m = initialData?.motivo || MOTIVOS_OFICIO[0];
-      setFd({ titulo:initialData?.titulo||'', numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:isCustomMotivo(m)?'Otro (personalizado)':m, motivo_custom:isCustomMotivo(m)?m:'', actividad_nombre:initialData?.actividad_nombre||'', actividad_tipo:initialData?.actividad_tipo||'', actividad_fecha:initialData?.actividad_fecha||'', actividad_duracion:initialData?.actividad_duracion||'', actividad_modalidad:initialData?.actividad_modalidad||'', actividad_sede:initialData?.actividad_sede||'', actividad_descripcion:initialData?.actividad_descripcion||'', monto:initialData?.monto||'', monto_detalle:initialData?.monto_detalle||'', justificacion:initialData?.justificacion||'', solicitud_puntual:initialData?.solicitud_puntual||'', cuerpo_personalizado:initialData?.cuerpo_personalizado||'', estado:initialData?.estado||'Borrador' });
+      const parsed = parseJustificacionSections(initialData?.justificacion || '');
+      setFd({ titulo:initialData?.titulo||'', numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:isCustomMotivo(m)?'Otro (personalizado)':m, motivo_custom:isCustomMotivo(m)?m:'', actividad_nombre:initialData?.actividad_nombre||'', actividad_tipo:initialData?.actividad_tipo||'', actividad_fecha:initialData?.actividad_fecha||'', actividad_duracion:initialData?.actividad_duracion||'', actividad_modalidad:initialData?.actividad_modalidad||'', actividad_sede:initialData?.actividad_sede||'', actividad_descripcion:initialData?.actividad_descripcion||'', monto:initialData?.monto||'', monto_detalle:initialData?.monto_detalle||'', justificacion:initialData?parsed.intro:'', poblacion_objetivo:parsed.sections['Población objetivo y alcance esperado']||'', resultados_esperados:parsed.sections['Resultados esperados']||'', cronograma_resumen:parsed.sections['Cronograma resumido']||'', solicitud_puntual:initialData?.solicitud_puntual||'', cuerpo_personalizado:initialData?.cuerpo_personalizado||'', estado:initialData?.estado||'Borrador' });
     }
   }, [isOpen, initialData, preFillData]);
   if (!isOpen||!fd) return null;
@@ -1016,10 +1002,30 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
   const isCustomMotivo = fd.motivo === 'Otro (personalizado)';
   const upd = (k,v) => setFd(p => ({...p,[k]:v}));
   const goToPreview = (e) => { e.preventDefault(); setCurrentStep(2); };
-  const handleSaveOficio = async () => { setSaving(true); const sd={...fd}; if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom; delete sd.motivo_custom; await onSave(sd); setSaving(false); };
+  // Consolida los campos del informe técnico dentro de `justificacion` (no se agregan columnas nuevas a oficios)
+  const buildSaveData = (base) => {
+    const sd={...base};
+    if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom;
+    delete sd.motivo_custom;
+    sd.justificacion = mergeInformeTecnico(sd.justificacion, sd);
+    delete sd.poblacion_objetivo; delete sd.resultados_esperados; delete sd.cronograma_resumen;
+    return sd;
+  };
+  const handleSaveOficio = async () => { setSaving(true); await onSave(buildSaveData(fd)); setSaving(false); };
   // Guarda directamente desde el editor (sin pasar por la vista previa) para no perder datos.
-  const handleSaveDraft = async () => { setSaving(true); const sd={...fd, estado: initialData?.estado || 'Borrador'}; if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom; delete sd.motivo_custom; await onSave(sd); setSaving(false); };
-  const getPreviewData = () => { const pd={...fd}; if(fd.motivo==='Otro (personalizado)'&&fd.motivo_custom)pd.motivo=fd.motivo_custom; return pd; };
+  const handleSaveDraft = async () => { setSaving(true); await onSave(buildSaveData({...fd, estado: initialData?.estado || 'Borrador'})); setSaving(false); };
+  const getPreviewData = () => buildSaveData(fd);
+  const generarPlantillaInforme = () => {
+    const ctx = { actividad: fd.actividad_nombre, tipo: fd.actividad_tipo, modalidad: fd.actividad_modalidad, fecha: fd.actividad_fecha, sede: fd.actividad_sede, monto: fd.monto };
+    setFd(p => ({
+      ...p,
+      justificacion: p.justificacion || buildJustificacionTemplate(ctx),
+      poblacion_objetivo: p.poblacion_objetivo || buildPoblacionObjetivoTemplate(ctx),
+      resultados_esperados: p.resultados_esperados || buildResultadosEsperadosTemplate(),
+      cronograma_resumen: p.cronograma_resumen || buildCronogramaTemplate(ctx),
+    }));
+    setShowInforme(true);
+  };
 
   if (currentStep === 2) return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-3 overflow-y-auto">
@@ -1063,7 +1069,26 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, ex
             </div>
             {isRecursos && (<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100"><h4 className="font-bold text-green-800 text-sm uppercase">Datos de la Actividad</h4><input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>upd('actividad_nombre',e.target.value)}/><textarea rows={3} placeholder="Descripción" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>upd('actividad_descripcion',e.target.value)}/><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>upd('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>upd('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div></div><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>upd('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>upd('actividad_fecha',e.target.value)}/></div></div><input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>upd('actividad_sede',e.target.value)}/></div>)}
             {isRecursos && (<div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100"><h4 className="font-bold text-rose-800 text-sm uppercase">Recursos Solicitados</h4><input placeholder="Monto (ej: Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e=>upd('monto',e.target.value)}/><textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e=>upd('monto_detalle',e.target.value)}/></div>)}
-            <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100"><h4 className="font-bold text-purple-800 text-sm uppercase">Justificación Técnica (opcional)</h4><textarea rows={4} placeholder="Justificación técnica..." className="w-full border p-2.5 rounded-lg" value={fd.justificacion} onChange={e=>upd('justificacion',e.target.value)}/></div>
+            <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
+              <button type="button" onClick={()=>setShowInforme(s=>!s)} className="w-full flex items-center justify-between">
+                <h4 className="font-bold text-purple-800 text-sm uppercase flex items-center gap-2"><FileText size={14}/> Informe técnico (opcional)</h4>
+                <ChevronDown size={16} className={`text-purple-500 transition-transform ${showInforme?'rotate-180':''}`}/>
+              </button>
+              <p className="text-xs text-purple-500 -mt-2">Se anexa como página 2 del oficio (Justificación técnica y aporte gremial) cuando se completa.</p>
+              {showInforme && (
+                <div className="space-y-3 pt-1">
+                  {isRecursos && (
+                    <button type="button" onClick={generarPlantillaInforme} className="text-xs font-bold text-purple-700 bg-purple-100 hover:bg-purple-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                      <Copy size={12}/> Generar plantilla con datos de la actividad
+                    </button>
+                  )}
+                  <div><label className="block text-xs font-bold text-purple-700 mb-1">1. Justificación / pertinencia gremial</label><textarea rows={4} placeholder="Justificación técnica y propósito de la actividad..." className="w-full border p-2.5 rounded-lg text-sm" value={fd.justificacion} onChange={e=>upd('justificacion',e.target.value)}/></div>
+                  <div><label className="block text-xs font-bold text-purple-700 mb-1">2. Población objetivo y alcance esperado</label><textarea rows={2} placeholder="¿A quién beneficia y cuántas personas se esperan?" className="w-full border p-2.5 rounded-lg text-sm" value={fd.poblacion_objetivo} onChange={e=>upd('poblacion_objetivo',e.target.value)}/></div>
+                  <div><label className="block text-xs font-bold text-purple-700 mb-1">3. Cronograma resumido</label><textarea rows={2} placeholder="Fechas y logística clave..." className="w-full border p-2.5 rounded-lg text-sm" value={fd.cronograma_resumen} onChange={e=>upd('cronograma_resumen',e.target.value)}/></div>
+                  <div><label className="block text-xs font-bold text-purple-700 mb-1">4. Resultados esperados</label><textarea rows={2} placeholder="Impacto esperado de la actividad..." className="w-full border p-2.5 rounded-lg text-sm" value={fd.resultados_esperados} onChange={e=>upd('resultados_esperados',e.target.value)}/></div>
+                </div>
+              )}
+            </div>
             <div className="bg-indigo-50 rounded-lg p-4 space-y-3 border border-indigo-100"><h4 className="font-bold text-indigo-800 text-sm uppercase">Solicitud Puntual (opcional)</h4><textarea rows={3} placeholder="Cada punto en una línea..." className="w-full border p-2.5 rounded-lg" value={fd.solicitud_puntual} onChange={e=>upd('solicitud_puntual',e.target.value)}/></div>
             <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200"><h4 className="font-bold text-gray-700 text-sm uppercase">Cuerpo Personalizado (opcional)</h4><textarea rows={4} placeholder="Déjalo vacío para texto automático..." className="w-full border p-2.5 rounded-lg" value={fd.cuerpo_personalizado} onChange={e=>upd('cuerpo_personalizado',e.target.value)}/></div>
             <div className="flex gap-3 pt-2"><button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-lg font-bold">Cancelar</button><button type="button" onClick={handleSaveDraft} disabled={saving} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2"><Save size={18}/> {saving?'Guardando...':'Guardar borrador'}</button><button type="submit" className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center justify-center gap-2"><Eye size={18}/> Vista Previa</button></div>
@@ -1104,8 +1129,6 @@ const FirmaUploader = ({ label, settingKey, appSettings, onUpdateSetting }) => {
 };
 
 // ── AdminConfigView ────────────────────────────────────────────────────────────
-const SUPER_ADMIN = 'lic.juanreyesr@gmail.com';
-
 const AdminConfigView = ({ appSettings, onUpdateSetting, members, onUpdateMember, userEmail }) => {
   const [activeTab,setActiveTab]=useState('users');
   const isSuperAdmin = userEmail === SUPER_ADMIN;
@@ -1356,32 +1379,52 @@ const ReportesView = ({ avales, docs, oficios }) => {
 };
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
-const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSuperAdmin }) => {
+const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSuperAdmin, avalesPendientes = 0, agendaPendientes = 0 }) => {
   const visible = (moduleId) => isSuperAdmin || canDo(permissions, moduleId, 'view');
   return (
-    <div className={`bg-slate-800 text-white fixed h-full z-20 transition-all ${isOpen?'w-64':'w-20'}`}>
-      <div className="p-4 flex justify-between border-b border-slate-700">{isOpen&&<h1 className="font-bold">CAEDUC App</h1>}<button onClick={toggle}><Menu size={20}/></button></div>
-      <nav className="p-2 space-y-2 mt-4">
-        {visible('planificacion') && <SidebarBtn icon={<CheckCircle/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>}
-        {visible('avales')        && <SidebarBtn icon={<Users/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen}/>}
-        {visible('oficios')       && <SidebarBtn icon={<FileSignature/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>}
-        {visible('agendas')       && <SidebarBtn icon={<BookOpen/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen}/>}
-        {visible('directorio')    && <SidebarBtn icon={<Users/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>}
-        {visible('reportes')      && <SidebarBtn icon={<Clock/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>}
-        <SidebarBtn icon={<Settings/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
+    <div className={`bg-caeduc-blueDark text-white fixed h-full z-20 transition-all flex flex-col ${isOpen?'w-64':'w-20'}`}>
+      <div className="p-4 flex items-center justify-between border-b border-white/10">
+        {isOpen && (
+          <div className="flex items-center gap-2 min-w-0">
+            <img src="/logo-CAEDUC.png" alt="CAEDUC" className="w-8 h-8 object-contain rounded-md bg-white/90 p-0.5 shrink-0"/>
+            <span className="font-extrabold tracking-tight truncate">CAEDUC</span>
+          </div>
+        )}
+        <button onClick={toggle} className="text-white/70 hover:text-white shrink-0 p-1 rounded-lg hover:bg-white/10 transition-colors"><Menu size={20}/></button>
+      </div>
+      <nav className="p-2 space-y-1 mt-3 flex-1 overflow-y-auto">
+        <SidebarBtn icon={<Home size={18}/>} label="Inicio" active={current==='inicio'} onClick={()=>setModule('inicio')} isOpen={isOpen}/>
+        {visible('planificacion') && <SidebarBtn icon={<CheckCircle size={18}/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>}
+        {visible('avales')        && <SidebarBtn icon={<Users size={18}/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen} badge={avalesPendientes}/>}
+        {visible('oficios')       && <SidebarBtn icon={<FileSignature size={18}/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>}
+        {visible('agendas')       && <SidebarBtn icon={<BookOpen size={18}/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen} badge={agendaPendientes}/>}
+        {visible('directorio')    && <SidebarBtn icon={<Users size={18}/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>}
+        {visible('reportes')      && <SidebarBtn icon={<Clock size={18}/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>}
+        <SidebarBtn icon={<Settings size={18}/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
       </nav>
-      <button onClick={logout} className="absolute bottom-4 left-4 flex gap-2 text-red-300 hover:text-white items-center"><LogOut size={18}/>{isOpen&&'Salir'}</button>
+      <button onClick={logout} className={`m-2 flex items-center gap-2 text-rose-200 hover:text-white hover:bg-white/10 rounded-xl p-3 transition-colors ${!isOpen && 'justify-center'}`}>
+        <LogOut size={18}/>{isOpen && <span className="text-sm font-semibold">Salir</span>}
+      </button>
     </div>
   );
 };
-const SidebarBtn = ({ icon, label, active, onClick, isOpen }) => (
-  <button onClick={onClick} className={`flex items-center gap-3 p-3 w-full rounded ${active?'bg-blue-600':'hover:bg-slate-700'}`}>{icon}{isOpen&&<span>{label}</span>}</button>
+const SidebarBtn = ({ icon, label, active, onClick, isOpen, badge = 0 }) => (
+  <button onClick={onClick} className={`flex items-center gap-3 p-3 w-full rounded-xl transition-colors text-sm font-semibold ${active?'bg-caeduc-pink text-white shadow-sm':'text-white/70 hover:bg-white/10 hover:text-white'} ${!isOpen && 'justify-center'}`}>
+    <span className="relative shrink-0">
+      {icon}
+      {badge > 0 && (
+        <span className="absolute -top-2 -right-2 bg-amber-400 text-slate-900 text-[10px] font-black rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>
+      )}
+    </span>
+    {isOpen && <span className="truncate flex-1 text-left">{label}</span>}
+  </button>
 );
 
 // ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
-  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('planificacion');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
   const [userPermissions,setUserPermissions]=useState(null); // null = acceso completo
+  const [agendaPendientesCount,setAgendaPendientesCount]=useState(0);
 
   // ── Estado de progreso de subida ──
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -1392,7 +1435,7 @@ export default function CAEDUCApp() {
 
   useEffect(()=>{fetchPublicSettings();supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session){setUserMode('admin');fetchData();}});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{setSession(session);if(session){setUserMode('admin');fetchData();}else setUserMode('public');});return()=>subscription.unsubscribe();},[fetchPublicSettings]);
 
-  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:settings}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('app_settings').select('key, value')]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}
+  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:settings},{count:pendCount}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('app_settings').select('key, value'),supabase.from('caeduc_agenda_pendientes').select('id',{count:'exact',head:true}).eq('completado',false)]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}setAgendaPendientesCount(pendCount||0);
     // Cargar permisos del usuario activo (null = acceso completo para super admin)
     const{data:{session:sess}}=await supabase.auth.getSession();
     if(sess?.user?.email){
@@ -1520,14 +1563,25 @@ export default function CAEDUCApp() {
   };
   const deleteOficio=async(id)=>{const{error}=await supabase.from('oficios').delete().eq('id',id);if(error){alert('Error: '+error.message);return;}fetchData();};
 
-  const handleNavigateToOficios=(activityData)=>{setOficioPreFill({actividad_nombre:activityData.actividad||'',actividad_tipo:activityData.tipo||'',actividad_fecha:activityData.fecha||'',actividad_duracion:'',actividad_modalidad:activityData.sede_modalidad||'',actividad_sede:activityData.t3_lugar||activityData.sede_modalidad||''});setCurrentModule('oficios');};
+  // PARTE 3.4: acepta directamente el objeto de prefill ya armado (actividad, tipo, fecha,
+  // duración, modalidad, sede, monto, monto_detalle, justificación pre-redactada, etc.)
+  // Retrocompatible con la forma antigua {actividad, tipo, sede_modalidad, t3_lugar}.
+  const handleNavigateToOficios=(prefill)=>{
+    const pf = prefill && prefill.actividad_nombre !== undefined
+      ? prefill
+      : { actividad_nombre:prefill?.actividad||'', actividad_tipo:prefill?.tipo||'', actividad_fecha:prefill?.fecha||'', actividad_duracion:'', actividad_modalidad:prefill?.sede_modalidad||'', actividad_sede:prefill?.t3_lugar||prefill?.sede_modalidad||'' };
+    setOficioPreFill(pf);
+    setCurrentModule('oficios');
+  };
 
   const adminClass = userMode === 'admin' ? (isSidebarOpen ? 'ml-64' : 'ml-20') : '';
+  const avalesPendientesCount = avales.filter(a=>!a.is_deleted && a.status==='En Proceso').length;
+  const displayName = members.find(m=>m.email===session?.user?.email)?.name || '';
 
   return (
     <ErrorBoundary>
-    <div className="flex min-h-screen bg-gray-100 font-sans text-gray-800">
-      {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout} permissions={userPermissions} isSuperAdmin={session?.user?.email===SUPER_ADMIN}/>}
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-800">
+      {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout} permissions={userPermissions} isSuperAdmin={session?.user?.email===SUPER_ADMIN} avalesPendientes={avalesPendientesCount} agendaPendientes={agendaPendientesCount}/>}
       <main className={"flex-1 p-4 md:p-8 transition-all " + adminClass} style={{overflowX:'hidden',minWidth:0}}>
         {userMode==='public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
         {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings} uploadProgress={uploadProgress} uploadPhase={uploadPhase} serverUploadError={uploadError}/>}
@@ -1535,6 +1589,7 @@ export default function CAEDUCApp() {
         {userMode==='verificar_aval' && <VerificarAvalView onBack={()=>setUserMode('public')}/>}
         {userMode==='admin' && (
           <Suspense fallback={<ViewLoader/>}>
+            {currentModule==='inicio' && <InicioDashboardView onNavigate={setCurrentModule} userName={displayName}/>}
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}

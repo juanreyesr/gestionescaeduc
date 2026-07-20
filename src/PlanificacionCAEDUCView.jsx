@@ -1,4 +1,4 @@
-// src/PlanificacionCAEDUCView.jsx  –  v2  (presupuesto completo)
+// src/PlanificacionCAEDUCView.jsx — v3 (fuente única de gastos + ficha unificada + aula virtual)
 import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
@@ -6,8 +6,12 @@ import {
   Edit3, Save, X, User, RefreshCw, Filter, Target, Clipboard,
   TrendingUp, DollarSign, MapPin, FileText, Phone, Mail,
   Info, Plus, Trash2, Printer,
-  PlusCircle, MinusCircle, Banknote, Receipt, Package
+  PlusCircle, MinusCircle, Banknote, Receipt, Package,
+  Link2, Send, ExternalLink, ListChecks, ChevronRight, GraduationCap,
+  ClipboardList, Video, CalendarPlus, CheckCircle2, Circle
 } from 'lucide-react';
+import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate } from './lib/oficioTemplates.js';
+import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, EmptyState, inputCls, selectCls, textareaCls } from './components/ui.jsx';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -98,6 +102,39 @@ const downloadReport = (html, filename) => {
   setTimeout(() => { w.print(); }, 800);
 };
 
+// Calcula el trimestre a partir de una fecha ISO (YYYY-MM-DD)
+const getTrimestreFromDate = (dateStr) => {
+  if (!dateStr) return TRIMESTRES[0];
+  const month = new Date(dateStr + 'T12:00:00').getMonth() + 1; // 1-12
+  if (month <= 3)  return 'T1 – Ene/Mar';
+  if (month <= 6)  return 'T2 – Abr/Jun';
+  if (month <= 9)  return 'T3 – Jul/Sep';
+  return 'T4 – Oct/Dic';
+};
+
+// Formatea una fecha ISO a texto legible para mostrar en la lista
+const formatFechaDisplay = (isoDate) => {
+  if (!isoDate) return '';
+  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const d = new Date(isoDate + 'T12:00:00');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+// Convierte texto "21 mar 2026" → "2026-03-21" para el input type="date"
+const fechaTextoToISO = (textoFecha) => {
+  if (!textoFecha) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(textoFecha)) return textoFecha.substring(0,10);
+  const MONTHS = {ene:'01',feb:'02',mar:'03',abr:'04',may:'05',jun:'06',
+                  jul:'07',ago:'08',sep:'09',oct:'10',nov:'11',dic:'12'};
+  const m = textoFecha.match(/(\d{1,2})\s+([a-záéíóú]{3})\s+(\d{4})/i);
+  if (m) {
+    const d = String(m[1]).padStart(2,'0');
+    const mo = MONTHS[m[2].toLowerCase()] || '01';
+    return `${m[3]}-${mo}-${d}`;
+  }
+  return '';
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const [tab,setTab]         = useState('actividades');
@@ -110,9 +147,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const [fondos,setFondos]               = useState([]);
   const [presAnual,setPresAnual]         = useState([]);   // [{anio, monto, id, notas}]
   const [editPresModal,setEditPresModal] = useState(false);
-  const [actModal,setActModal]           = useState(null);
+  const [actModal,setActModal]           = useState(null); // {mode:'new'|'edit', id: string|null}
   const [deleteActId,setDeleteActId]     = useState(null);
-  const [taskModal,setTaskModal]         = useState(null);
   const [fondoModal,setFondoModal]       = useState(false);
   const [gastoRubroModal,setGastoRubroModal] = useState(null);
   const [editingArea,setEditingArea]     = useState(null);
@@ -150,13 +186,21 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const totalFondos    = fondos.reduce((s,f)=>s+Number(f.monto||0),0);
   const totalGast      = totalActGast+totalRubGast;
 
+  // PARTE 3.2 — resumen presupuestario honesto
+  // Comprometido = suma de `monto` asignado de actividades NO finalizadas (Pendiente / En proceso)
+  const totalComprometido = actividades
+    .filter(a=>a.estado_general!=='Completado' && a.estado_general!=='Cancelado')
+    .reduce((s,a)=>s+Number(a.monto||0),0);
+
   // Presupuesto base = monto fijo aprobado por año (NO suma de actividades)
   const anioActual     = new Date().getFullYear();
   const presAnualActual= presAnual.find(p=>p.anio===anioActual) || presAnual[presAnual.length-1] || {monto:0,anio:anioActual};
   const presBase       = Number(presAnualActual.monto||0);
   // Total disponible = presupuesto aprobado + fondos adicionales
   const totalDisp      = presBase + totalFondos;
-  const saldo          = totalDisp - totalGast;
+  const saldoVsEjecutado    = totalDisp - totalGast;
+  // Escenario pesimista: si además de lo ya ejecutado se gastara TODO lo comprometido en actividades pendientes
+  const saldoSiComprometido = totalDisp - totalRubGast - totalComprometido;
 
   // Guardar/actualizar presupuesto anual
   const savePresAnual  = async(anio, monto, notas) => {
@@ -172,25 +216,27 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 
   const getRespName = area=>(responsables.find(r=>r.area===area)||{}).responsable||'Sin asignar';
 
-  // CRUD actividades
+  // CRUD actividades — devuelve el id guardado (la ficha permanece abierta tras
+  // guardar por primera vez, para poder seguir con gastos/tareas/acciones sin
+  // reabrir el modal — Parte 3.3, "adiós al ping-pong de modales").
   const saveActividad = async(data)=>{
-    // Siempre extraer id para no enviarlo accidentalmente en inserts
     const {id, ...cleanData} = data;
+    let savedId = id || null;
     if(id){
       const {error} = await supabase.from('planificacion_actividades')
         .update({...cleanData, updated_at:new Date().toISOString()}).eq('id',id);
-      if(error){ alert('Error al actualizar actividad: ' + error.message); return; }
+      if(error){ alert('Error al actualizar actividad: ' + error.message); return null; }
     } else {
-      // Auto-asignar número correlativo (siguiente al máximo existente)
       const maxNum = actividades.reduce((m,a)=>Math.max(m,Number(a.numero||0)),0);
       const {data:inserted, error} = await supabase
         .from('planificacion_actividades')
         .insert([{...cleanData, numero:maxNum+1}])
         .select();
-      if(error){ alert('Error al crear actividad: ' + error.message); return; }
+      if(error){ alert('Error al crear actividad: ' + error.message); return null; }
+      savedId = inserted?.[0]?.id || null;
     }
-    setActModal(null);
     await fetchAll();
+    return savedId;
   };
   const deleteActividad = async(id)=>{
     await supabase.from('planificacion_actividades').delete().eq('id',id);
@@ -202,24 +248,17 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       .update({estado_general,updated_at:new Date().toISOString()}).eq('id',id);
   };
 
-  // Gastos actividad
+  // ── Gastos actividad: fuente única de verdad = trigger en BD sobre monto_gastado.
+  // El cliente SOLO inserta/borra líneas y vuelve a leer (fetchAll) — nunca escribe monto_gastado.
   const addGastoAct = async(actividad_id,desc,monto,fecha)=>{
-    await supabase.from('planificacion_gastos_actividad')
+    const {error} = await supabase.from('planificacion_gastos_actividad')
       .insert([{actividad_id,descripcion:desc,monto:Number(monto),fecha}]);
-    const {data}=await supabase.from('planificacion_gastos_actividad')
-      .select('monto').eq('actividad_id',actividad_id);
-    const total=(data||[]).reduce((s,g)=>s+Number(g.monto),0);
-    await supabase.from('planificacion_actividades')
-      .update({monto_gastado:total,updated_at:new Date().toISOString()}).eq('id',actividad_id);
+    if(error){ alert('Error al registrar gasto: ' + error.message); return; }
     await fetchAll();
   };
-  const deleteGastoAct = async(gid,actividad_id)=>{
-    await supabase.from('planificacion_gastos_actividad').delete().eq('id',gid);
-    const {data}=await supabase.from('planificacion_gastos_actividad')
-      .select('monto').eq('actividad_id',actividad_id);
-    const total=(data||[]).reduce((s,g)=>s+Number(g.monto),0);
-    await supabase.from('planificacion_actividades')
-      .update({monto_gastado:total,updated_at:new Date().toISOString()}).eq('id',actividad_id);
+  const deleteGastoAct = async(gid)=>{
+    const {error} = await supabase.from('planificacion_gastos_actividad').delete().eq('id',gid);
+    if(error){ alert('Error al eliminar gasto: ' + error.message); return; }
     await fetchAll();
   };
 
@@ -256,15 +295,36 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     setEditingArea(null); await fetchAll();
   };
 
+  // PARTE 6 — Publicar / actualizar actividad en el calendario del aula virtual CPG
+  const publicarActividadAula = async (actividad, evento) => {
+    const { data: newId, error } = await supabase.rpc('aula_publicar_actividad', { p_evento: evento });
+    if (error) { alert('Error al publicar en el calendario del aula: ' + error.message); return false; }
+    const { error: upErr } = await supabase.from('planificacion_actividades')
+      .update({ aula_event_id: String(newId) }).eq('id', actividad.id);
+    if (upErr) alert('Se publicó en el aula, pero no se pudo guardar la referencia localmente: ' + upErr.message);
+    await fetchAll();
+    return true;
+  };
+  const actualizarActividadAula = async (actividad, evento) => {
+    const { data: ok, error } = await supabase.rpc('aula_actualizar_actividad', { p_event_id: actividad.aula_event_id, p_evento: evento });
+    if (error) { alert('Error al actualizar en el aula: ' + error.message); return { ok:false, exists:true }; }
+    if (!ok) return { ok:false, exists:false };
+    await fetchAll();
+    return { ok:true, exists:true };
+  };
+
   const enriched = actividades.map(a=>({
     ...a,
     responsable_nombre:getRespName(a.area),
     lineas_gasto:gastosAct.filter(g=>g.actividad_id===a.id),
   }));
-  // Años disponibles para el filtro (extraídos de las fechas de las actividades)
+  // Años disponibles para el filtro (extraídos de fecha_iso o del texto de fecha)
   const aniosDisponibles = [...new Set(
     actividades
-      .map(a=>{ const m=String(a.fecha||'').match(/(\d{4})$/); return m?m[1]:null; })
+      .map(a=>{
+        if (a.fecha_iso) return a.fecha_iso.substring(0,4);
+        const m=String(a.fecha||'').match(/(\d{4})$/); return m?m[1]:null;
+      })
       .filter(Boolean)
   )].sort();
 
@@ -272,12 +332,10 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     .filter(a=>{
       if(filters.trimestre&&a.trimestre!==filters.trimestre)return false;
       if(filters.area&&a.area!==filters.area)return false;
-      // Filtro por año: comparar con el año en la fecha de la actividad
       if(filters.anio){
-        const anioAct = String(a.fecha||'').match(/(\d{4})$/)?.[1]||'';
+        const anioAct = a.fecha_iso ? a.fecha_iso.substring(0,4) : (String(a.fecha||'').match(/(\d{4})$/)?.[1]||'');
         if(anioAct!==filters.anio)return false;
       }
-      // 'activas' = oculta Completado y Cancelado (comportamiento por defecto)
       if(filters.estado==='activas'){
         if(a.estado_general==='Completado'||a.estado_general==='Cancelado')return false;
       } else if(filters.estado&&filters.estado!=='todas'){
@@ -286,18 +344,18 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       return true;
     })
     .sort((a,b)=>{
-      // Ordenar por fecha — intentar parsear texto como "21 mar 2026"
+      // Preferir fecha_iso cuando existe (Parte 3.4); si no, parsear el texto legible
       const MONTHS = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11};
-      const parseDate = (str) => {
+      const parseDate = (act) => {
+        if(act.fecha_iso) return new Date(act.fecha_iso + 'T00:00:00');
+        const str=act.fecha;
         if(!str)return new Date(9999,0,1);
-        // Formato ISO YYYY-MM-DD
         if(/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str);
-        // Formato "21 mar 2026"
         const m = str.match(/(\d{1,2})\s+([a-záéíóú]{3})\s+(\d{4})/i);
         if(m) return new Date(Number(m[3]), MONTHS[m[2].toLowerCase()]||0, Number(m[1]));
         return new Date(9999,0,1);
       };
-      return parseDate(a.fecha) - parseDate(b.fecha);
+      return parseDate(a) - parseDate(b);
     });
   const areaStats = AREAS.map(area=>{
     const acts=actividades.filter(a=>a.area===area);
@@ -314,7 +372,6 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   const generateReport = ()=>{
     const pctEjec=totalDisp>0?Math.round((totalGast/totalDisp)*100):0;
 
-    // Rows: constrained columns
     const rowsActs=actividades.map((a,i)=>{
       const lineas=gastosAct.filter(g=>g.actividad_id===a.id);
       const gast=Number(a.monto_gastado||0);
@@ -366,33 +423,35 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       </tr>
     `).join('');
 
-    const thStyle = 'background:#1e3a5f;color:white;padding:5px;font-size:9px;text-align:left;';
+    const thStyle = 'background:#1a5276;color:white;padding:5px;font-size:9px;text-align:left;';
 
-    const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC 2026</title>
+    const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte Ejecución CAEDUC ${anioActual}</title>
     <style>
       @page{size:letter landscape;margin:0.35in 0.4in;}
       body{font-family:Arial,sans-serif;color:#111;background:white;font-size:9px;margin:0;padding:0;}
-      h1{font-size:15px;color:#1e3a5f;margin:0 0 3px;}
-      h2{font-size:11px;color:#1e3a5f;border-bottom:2px solid #3b82f6;padding-bottom:3px;margin:14px 0 6px;}
+      h1{font-size:15px;color:#1a5276;margin:0 0 3px;}
+      h2{font-size:11px;color:#1a5276;border-bottom:2px solid #E91E63;padding-bottom:3px;margin:14px 0 6px;}
       table{width:100%;border-collapse:collapse;margin-bottom:12px;table-layout:fixed;max-width:100%;}
       .card{display:inline-block;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;margin:3px;text-align:center;min-width:90px;}
       .card .val{font-size:13px;font-weight:800;}.card .lbl{font-size:8px;color:#6b7280;}
     </style>
   <script>window.onafterprint=()=>window.close();</script>
   </head><body>
-    <div style="text-align:right;margin-bottom:8px;"><button onclick="window.print()" style="background:#1e3a5f;color:white;border:none;padding:6px 16px;border-radius:4px;font-size:11px;cursor:pointer;font-family:Arial;">🖨️ Imprimir / Guardar PDF</button></div>
-    <div style="border-bottom:3px solid #1e3a5f;padding-bottom:8px;margin-bottom:12px;">
-      <h1>Reporte de Ejecución Presupuestaria — CAEDUC 2026</h1>
+    <div style="text-align:right;margin-bottom:8px;"><button onclick="window.print()" style="background:#1a5276;color:white;border:none;padding:6px 16px;border-radius:4px;font-size:11px;cursor:pointer;font-family:Arial;">🖨️ Imprimir / Guardar PDF</button></div>
+    <div style="border-bottom:3px solid #1a5276;padding-bottom:8px;margin-bottom:12px;">
+      <h1>Reporte de Ejecución Presupuestaria — CAEDUC ${anioActual}</h1>
       <p style="color:#6b7280;font-size:9px;margin:0;">Colegio de Psicólogos de Guatemala &nbsp;|&nbsp; Generado: ${nowTs()}</p>
     </div>
 
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
-      <div class="card"><div class="val" style="color:#1e3a5f;">Q${fmt(presBase)}</div><div class="lbl">Presupuesto Base</div></div>
+      <div class="card"><div class="val" style="color:#1a5276;">Q${fmt(presBase)}</div><div class="lbl">Presupuesto Base</div></div>
       <div class="card"><div class="val" style="color:#2563eb;">Q${fmt(totalFondos)}</div><div class="lbl">Fondos Adicionales</div></div>
       <div class="card"><div class="val" style="color:#16a34a;">Q${fmt(totalDisp)}</div><div class="lbl">Total Disponible</div></div>
+      <div class="card"><div class="val" style="color:#b45309;">Q${fmt(totalComprometido)}</div><div class="lbl">Comprometido</div></div>
       <div class="card"><div class="val" style="color:#dc2626;">Q${fmt(totalGast)}</div><div class="lbl">Total Ejecutado</div></div>
-      <div class="card"><div class="val" style="color:${saldo>=0?'#16a34a':'#dc2626'};">Q${fmt(saldo)}</div><div class="lbl">Saldo Disponible</div></div>
-      <div class="card"><div class="val" style="color:#7c3aed;">${pctEjec}%</div><div class="lbl">% Ejecutado</div></div>
+      <div class="card"><div class="val" style="color:${saldoVsEjecutado>=0?'#16a34a':'#dc2626'};">Q${fmt(saldoVsEjecutado)}</div><div class="lbl">Saldo vs Ejecutado</div></div>
+      <div class="card"><div class="val" style="color:${saldoSiComprometido>=0?'#16a34a':'#dc2626'};">Q${fmt(saldoSiComprometido)}</div><div class="lbl">Saldo si se ejecuta lo comprometido</div></div>
+      <div class="card"><div class="val" style="color:#E91E63;">${pctEjec}%</div><div class="lbl">% Ejecutado</div></div>
     </div>
 
     <h2>Actividades Planificadas (${actividades.length})</h2>
@@ -415,7 +474,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
         <th style="${thStyle}">Estado</th>
       </tr></thead>
       <tbody>${rowsActs}</tbody>
-      <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
+      <tfoot><tr style="background:#1a5276;color:white;font-weight:700;">
         <td colspan="2" style="padding:5px;font-size:9px;">TOTAL ACTIVIDADES</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActAsig)}</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalActGast)}</td>
@@ -435,7 +494,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
         <th></th>
       </tr></thead>
       <tbody>${rowsRubros}</tbody>
-      <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
+      <tfoot><tr style="background:#1a5276;color:white;font-weight:700;">
         <td colspan="4" style="padding:5px;font-size:9px;">TOTAL RUBROS</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalRubAsig)}</td>
         <td style="padding:5px;font-size:9px;text-align:right;">Q${fmt(totalRubGast)}</td>
@@ -450,7 +509,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       <colgroup><col style="width:10%"/><col style="width:12%"/><col style="width:38%"/><col style="width:40%"/></colgroup>
       <thead><tr><th style="${thStyle}" colspan="2">Fecha / Monto</th><th style="${thStyle}">Origen</th><th style="${thStyle}">Razón</th></tr></thead>
       <tbody>${rowsFondos}</tbody>
-      <tfoot><tr style="background:#1e3a5f;color:white;font-weight:700;">
+      <tfoot><tr style="background:#1a5276;color:white;font-weight:700;">
         <td style="padding:5px;font-size:9px;">TOTAL</td>
         <td style="padding:5px;font-size:9px;">Q${fmt(totalFondos)}</td>
         <td colspan="2"></td>
@@ -460,49 +519,49 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
     <div style="margin-top:16px;border-top:2px solid #e5e7eb;padding-top:10px;display:flex;justify-content:space-between;align-items:flex-end;">
       <div style="font-size:8px;color:#9ca3af;">CAEDUC App — colegiodepsicologos.org.gt</div>
       <div style="text-align:right;">
-        <div style="font-size:15px;font-weight:800;color:${saldo>=0?'#16a34a':'#dc2626'};">Saldo: Q${fmt(saldo)}</div>
+        <div style="font-size:15px;font-weight:800;color:${saldoVsEjecutado>=0?'#16a34a':'#dc2626'};">Saldo vs ejecutado: Q${fmt(saldoVsEjecutado)}</div>
         <div style="font-size:8px;color:#6b7280;">${pctEjec}% del presupuesto ejecutado</div>
       </div>
     </div>
     </body></html>`;
-    downloadReport(html,`Reporte_Ejecucion_CAEDUC_2026_${todayStr()}`);
+    downloadReport(html,`Reporte_Ejecucion_CAEDUC_${anioActual}_${todayStr()}`);
   };
 
   if(loading) return (
     <div className="flex items-center justify-center h-64">
-      <RefreshCw size={32} className="text-blue-500 animate-spin"/>
+      <RefreshCw size={32} className="text-caeduc-pink animate-spin"/>
       <span className="ml-3 text-gray-500">Cargando planificación...</span>
     </div>
   );
 
+  const activeActData = actModal
+    ? (actModal.id ? (enriched.find(a=>a.id===actModal.id) || {}) : {})
+    : null;
+
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex justify-between items-start">
+      <div className="flex justify-between items-start flex-wrap gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Planificación CAEDUC 2026</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Planificación CAEDUC {anioActual}</h2>
           <p className="text-sm text-gray-500">Actividades · Presupuesto · Seguimiento</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={generateReport} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2 text-sm font-medium shadow-sm">
+          <BlueButton onClick={generateReport} className="!px-4 !py-2 text-sm">
             <Printer size={16}/> Reporte PDF
-          </button>
-          <button onClick={fetchAll} className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 flex items-center gap-2 text-sm">
+          </BlueButton>
+          <SecondaryButton onClick={fetchAll} className="!px-3 !py-2 text-sm">
             <RefreshCw size={15}/> Actualizar
-          </button>
+          </SecondaryButton>
         </div>
       </div>
 
-      {/* Budget cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-
-        {/* Presupuesto base — con botón editar */}
-        <div className="bg-slate-50 rounded-xl p-3 border flex flex-col gap-1 col-span-2 md:col-span-1">
+      {/* Budget cards — Parte 3.2: resumen presupuestario honesto */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="bg-slate-50 rounded-xl p-3 border flex flex-col gap-1">
           <div className="text-slate-600 flex items-center justify-between">
             <div className="flex items-center gap-1 text-xs font-semibold"><Package size={15}/><span>Presupuesto {presAnualActual.anio}</span></div>
-            <button onClick={()=>setEditPresModal(true)}
-              title="Modificar presupuesto aprobado"
-              className="text-slate-400 hover:text-blue-600 transition-colors">
+            <button onClick={()=>setEditPresModal(true)} title="Modificar presupuesto aprobado" className="text-slate-400 hover:text-caeduc-pink transition-colors">
               <Edit3 size={13}/>
             </button>
           </div>
@@ -510,39 +569,40 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
           <div className="text-xs text-slate-400">Aprobado {presAnualActual.anio}</div>
         </div>
 
-        {/* Fondos adicionales */}
         <div className="bg-blue-50 rounded-xl p-3 border flex flex-col gap-1">
           <div className="text-blue-700 flex items-center gap-1 text-xs font-semibold"><PlusCircle size={15}/><span>Fondos extra</span></div>
           <div className="text-lg font-black text-blue-700">{fmtShort(totalFondos)}</div>
           <div className="text-xs text-blue-400">{fondos.length} ingreso{fondos.length!==1?'s':''}</div>
         </div>
 
-        {/* Total disponible */}
         <div className="bg-green-50 rounded-xl p-3 border flex flex-col gap-1">
-          <div className="text-green-700 flex items-center gap-1 text-xs font-semibold"><DollarSign size={15}/><span>Total disponible</span></div>
+          <div className="text-green-700 flex items-center gap-1 text-xs font-semibold"><DollarSign size={15}/><span>Disponible</span></div>
           <div className="text-lg font-black text-green-700">{fmtShort(totalDisp)}</div>
           <div className="text-xs text-green-500">base + fondos extra</div>
         </div>
 
-        {/* Total ejecutado */}
+        <div className="bg-amber-50 rounded-xl p-3 border flex flex-col gap-1">
+          <div className="text-amber-700 flex items-center gap-1 text-xs font-semibold"><ClipboardList size={15}/><span>Comprometido</span></div>
+          <div className="text-lg font-black text-amber-700">{fmtShort(totalComprometido)}</div>
+          <div className="text-xs text-amber-500">asignado a act. pendientes</div>
+        </div>
+
         <div className="bg-red-50 rounded-xl p-3 border flex flex-col gap-1">
           <div className="text-red-600 flex items-center gap-1 text-xs font-semibold"><MinusCircle size={15}/><span>Ejecutado</span></div>
           <div className="text-lg font-black text-red-600">{fmtShort(totalGast)}</div>
           <div className="text-xs text-red-400">gastos registrados</div>
         </div>
 
-        {/* Saldo */}
-        <div className={`${saldo>=0?'bg-green-50':'bg-red-50'} rounded-xl p-3 border flex flex-col gap-1`}>
-          <div className={`${saldo>=0?'text-green-700':'text-red-700'} flex items-center gap-1 text-xs font-semibold`}><Receipt size={15}/><span>Saldo</span></div>
-          <div className={`text-lg font-black ${saldo>=0?'text-green-700':'text-red-700'}`}>{fmtShort(saldo)}</div>
-          <div className={`text-xs ${saldo>=0?'text-green-400':'text-red-400'}`}>{saldo>=0?'disponible':'déficit'}</div>
+        <div className={`${saldoVsEjecutado>=0?'bg-green-50':'bg-red-50'} rounded-xl p-3 border flex flex-col gap-1`} title="Disponible menos lo ya gastado">
+          <div className={`${saldoVsEjecutado>=0?'text-green-700':'text-red-700'} flex items-center gap-1 text-xs font-semibold`}><Receipt size={15}/><span>Saldo vs ejecutado</span></div>
+          <div className={`text-lg font-black ${saldoVsEjecutado>=0?'text-green-700':'text-red-700'}`}>{fmtShort(saldoVsEjecutado)}</div>
+          <div className={`text-xs ${saldoVsEjecutado>=0?'text-green-400':'text-red-400'}`}>{saldoVsEjecutado>=0?'disponible':'déficit'}</div>
         </div>
 
-        {/* % Ejecutado */}
-        <div className="bg-violet-50 rounded-xl p-3 border flex flex-col gap-1">
-          <div className="text-violet-700 flex items-center gap-1 text-xs font-semibold"><TrendingUp size={15}/><span>Avance</span></div>
-          <div className="text-lg font-black text-violet-700">{totalDisp>0?Math.round((totalGast/totalDisp)*100):0}%</div>
-          <div className="text-xs text-violet-400">del presupuesto</div>
+        <div className={`${saldoSiComprometido>=0?'bg-violet-50':'bg-red-50'} rounded-xl p-3 border flex flex-col gap-1`} title="Disponible si se llega a gastar todo lo comprometido en actividades pendientes">
+          <div className={`${saldoSiComprometido>=0?'text-violet-700':'text-red-700'} flex items-center gap-1 text-xs font-semibold`}><TrendingUp size={15}/><span>Saldo si se ejecuta todo</span></div>
+          <div className={`text-lg font-black ${saldoSiComprometido>=0?'text-violet-700':'text-red-700'}`}>{fmtShort(saldoSiComprometido)}</div>
+          <div className={`text-xs ${saldoSiComprometido>=0?'text-violet-400':'text-red-400'}`}>escenario conservador</div>
         </div>
       </div>
 
@@ -556,7 +616,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
         ].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium flex-1 justify-center whitespace-nowrap transition-all
-              ${tab===t.id?'bg-white text-blue-700 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>
+              ${tab===t.id?'bg-white text-caeduc-pink shadow-sm':'text-gray-500 hover:text-gray-700'}`}>
             {t.icon}{t.label}
           </button>
         ))}
@@ -583,14 +643,13 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               <option value="Completado">Solo Completadas</option>
               <option value="Cancelado">Solo Canceladas</option>
             </select>
-            {/* Filtro por año — botones rápidos */}
             <div className="flex items-center gap-1 flex-wrap">
               {aniosDisponibles.map(a=>(
                 <button key={a} onClick={()=>setFilters({...filters,anio:filters.anio===a?'':a})}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
                     filters.anio===a
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-500 border-gray-300 hover:border-blue-400 hover:text-blue-600'
+                      ? 'bg-caeduc-pink text-white border-caeduc-pink'
+                      : 'bg-white text-gray-500 border-gray-300 hover:border-caeduc-pink hover:text-caeduc-pink'
                   }`}>
                   {a}{a===String(new Date().getFullYear())?' ★':''}
                 </button>
@@ -600,10 +659,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               <button onClick={()=>setFilters({trimestre:'',area:'',estado:'activas',anio:String(new Date().getFullYear())})} className="text-xs text-red-500 underline">Restablecer</button>
             )}
             <span className="ml-auto text-xs text-gray-400">{filteredActs.length} actividades</span>
-            <button onClick={()=>setActModal({mode:'new',data:{}})}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1.5">
+            <PrimaryButton onClick={()=>setActModal({mode:'new',id:null})} className="!px-4 !py-2 text-xs">
               <Plus size={14}/> Nueva actividad
-            </button>
+            </PrimaryButton>
           </div>
 
           <div className="space-y-2">
@@ -621,6 +679,11 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
                         <AreaTag area={act.area}/>
                         <span className="text-xs text-gray-400">{act.trimestre}</span>
                         {act.responsable_nombre!=='Sin asignar'&&<span className="text-xs text-gray-500 flex items-center gap-1"><User size={10}/>{act.responsable_nombre}</span>}
+                        {act.aula_event_id && (
+                          <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                            <GraduationCap size={11}/> Publicada en el aula ✓
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm font-semibold text-gray-800 leading-snug">{act.actividad}</p>
                       <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -638,7 +701,6 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
                               <span className="flex-1">{g.descripcion}</span>
                               <span className="font-medium text-red-500">-Q{fmt(g.monto)}</span>
                               {g.fecha&&<span className="text-gray-400">{g.fecha}</span>}
-                              <button onClick={()=>deleteGastoAct(g.id,act.id)} className="text-gray-300 hover:text-red-500 ml-1"><Trash2 size={11}/></button>
                             </div>
                           ))}
                         </div>
@@ -652,13 +714,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
                         {ESTADOS.map(e=><option key={e} value={e}>{e}</option>)}
                       </select>
                       <div className="flex gap-1">
-                        <button onClick={()=>setActModal({mode:'edit',data:act})}
-                          className="bg-gray-50 text-gray-600 px-2.5 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1">
-                          <Edit3 size={12}/> Editar
-                        </button>
-                        <button onClick={()=>setTaskModal(act)}
-                          className="bg-blue-600 text-white px-2.5 py-1.5 rounded-lg text-xs hover:bg-blue-700 flex items-center gap-1">
-                          <Clipboard size={12}/> Tareas
+                        <button onClick={()=>setActModal({mode:'edit',id:act.id})}
+                          className="bg-caeduc-pinkLight text-caeduc-pink px-2.5 py-1.5 rounded-lg text-xs hover:bg-pink-100 flex items-center gap-1 font-semibold">
+                          <Edit3 size={12}/> Abrir ficha
                         </button>
                         <button onClick={()=>setDeleteActId(act.id)}
                           className="bg-red-50 text-red-400 p-1.5 rounded-lg hover:bg-red-100">
@@ -671,10 +729,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               );
             })}
             {filteredActs.length===0&&(
-              <div className="text-center py-12 text-gray-400">
-                <Target size={36} className="mx-auto mb-2 opacity-40"/>
-                <p>Sin actividades con los filtros seleccionados</p>
-              </div>
+              <EmptyState icon={<Target size={36}/>} title="Sin actividades con los filtros seleccionados"/>
             )}
           </div>
         </div>
@@ -699,10 +754,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
                     <h3 className="font-bold text-gray-800 text-base flex items-center gap-2">
                       <Package size={18} className="text-slate-500"/>{r.nombre}
                     </h3>
-                    <button onClick={()=>setGastoRubroModal(r)}
-                      className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1">
+                    <PrimaryButton onClick={()=>setGastoRubroModal(r)} className="!px-3 !py-1.5 text-xs">
                       <Plus size={13}/> Registrar gasto
-                    </button>
+                    </PrimaryButton>
                   </div>
                   <div className="flex gap-6 mt-3 flex-wrap">
                     <div><p className="text-xs text-gray-500">Asignado</p><p className="text-lg font-bold text-slate-700">Q{fmt(r.monto_asignado)}</p></div>
@@ -745,10 +799,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
               <h3 className="text-lg font-bold text-gray-800">Fondos Adicionales</h3>
               <p className="text-sm text-gray-500">Origen y razón obligatorios para trazabilidad.</p>
             </div>
-            <button onClick={()=>setFondoModal(true)}
-              className="bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-green-700 flex items-center gap-2 text-sm">
+            <PrimaryButton onClick={()=>setFondoModal(true)} className="text-sm">
               <PlusCircle size={18}/> Agregar fondos
-            </button>
+            </PrimaryButton>
           </div>
           <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-3">
             <DollarSign size={28} className="text-green-600 shrink-0"/>
@@ -758,9 +811,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
             </div>
           </div>
           {fondos.length===0?(
-            <div className="text-center py-12 text-gray-400 bg-white rounded-xl border">
-              <Banknote size={36} className="mx-auto mb-2 opacity-40"/>
-              <p>Sin fondos adicionales registrados</p>
+            <div className="bg-white rounded-xl border">
+              <EmptyState icon={<Banknote size={36}/>} title="Sin fondos adicionales registrados"/>
             </div>
           ):(
             <div className="space-y-2">
@@ -792,7 +844,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
           </div>
           <div className="bg-white rounded-xl border p-4">
             <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span className="font-semibold">Avance global 2026</span>
+              <span className="font-semibold">Avance global {anioActual}</span>
               <span>{actividades.filter(a=>a.estado_general==='Completado').length}/{actividades.length} completadas</span>
             </div>
             <ProgressBar done={actividades.filter(a=>a.estado_general==='Completado').length} total={actividades.length}/>
@@ -814,7 +866,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
                       </div>
                       {!isEditing&&(
                         <button onClick={()=>openEditResp(area)}
-                          className="bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-xs hover:bg-blue-100 flex items-center gap-1 font-medium border border-blue-200">
+                          className="bg-caeduc-pinkLight text-caeduc-pink px-3 py-1.5 rounded-lg text-xs hover:bg-pink-100 flex items-center gap-1 font-medium border border-pink-200">
                           <Edit3 size={12}/>{resp.responsable?'Editar':'Asignar'}
                         </button>
                       )}
@@ -861,11 +913,22 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
 
       {/* ── Modals ── */}
       {actModal&&(
-        <ActividadFormModal
-          mode={actModal.mode} initialData={actModal.data}
-          onSave={saveActividad} onClose={()=>setActModal(null)}
-          onAddGasto={addGastoAct} onDeleteGasto={deleteGastoAct}
-          gastosLines={actModal.data?.id?gastosAct.filter(g=>g.actividad_id===actModal.data.id):[]}
+        <ActividadFicha
+          mode={actModal.mode}
+          initialData={activeActData}
+          onSave={async(data)=>{
+            const id = await saveActividad(data);
+            if(id) setActModal(m=> m ? {...m, id, mode:'edit'} : m);
+            return id;
+          }}
+          onClose={()=>setActModal(null)}
+          onAddGasto={addGastoAct}
+          onDeleteGasto={deleteGastoAct}
+          gastosLines={actModal.id?gastosAct.filter(g=>g.actividad_id===actModal.id):[]}
+          getRespName={getRespName}
+          onNavigateOficios={onNavigateOficios}
+          onPublicarAula={publicarActividadAula}
+          onActualizarAula={actualizarActividadAula}
         />
       )}
       {deleteActId&&(
@@ -884,17 +947,6 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
       )}
       {gastoRubroModal&&<GastoRubroModal rubro={gastoRubroModal} onAdd={addGastoRubro} onClose={()=>setGastoRubroModal(null)}/>}
       {fondoModal&&<FondoModal onAdd={addFondo} onClose={()=>setFondoModal(false)}/>}
-      {taskModal&&(
-        <TareasModal act={taskModal} getRespName={getRespName}
-          onSave={async(tf)=>{
-            await supabase.from('planificacion_actividades')
-              .update({...tf,updated_at:new Date().toISOString()}).eq('id',taskModal.id);
-            await fetchAll(); setTaskModal(null);
-          }}
-          onClose={()=>setTaskModal(null)}
-          onNavigateOficios={onNavigateOficios}
-        />
-      )}
 
       {/* ── Modal editar presupuesto anual ── */}
       {editPresModal&&(
@@ -912,51 +964,26 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   );
 }
 
-// ── Modal Actividad ──────────────────────────────────────────────────────────
-
-// Calcula el trimestre a partir de una fecha ISO (YYYY-MM-DD)
-const getTrimestreFromDate = (dateStr) => {
-  if (!dateStr) return TRIMESTRES[0];
-  const month = new Date(dateStr + 'T12:00:00').getMonth() + 1; // 1-12
-  if (month <= 3)  return 'T1 – Ene/Mar';
-  if (month <= 6)  return 'T2 – Abr/Jun';
-  if (month <= 9)  return 'T3 – Jul/Sep';
-  return 'T4 – Oct/Dic';
-};
-
-// Formatea una fecha ISO a texto legible para mostrar en la lista
-const formatFechaDisplay = (isoDate) => {
-  if (!isoDate) return '';
-  const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  const d = new Date(isoDate + 'T12:00:00');
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-};
-
-// Convierte texto "21 mar 2026" → "2026-03-21" para el input type="date"
-const fechaTextoToISO = (textoFecha) => {
-  if (!textoFecha) return '';
-  // Ya está en ISO
-  if (/^\d{4}-\d{2}-\d{2}/.test(textoFecha)) return textoFecha.substring(0,10);
-  const MONTHS = {ene:'01',feb:'02',mar:'03',abr:'04',may:'05',jun:'06',
-                  jul:'07',ago:'08',sep:'09',oct:'10',nov:'11',dic:'12'};
-  const m = textoFecha.match(/(\d{1,2})\s+([a-záéíóú]{3})\s+(\d{4})/i);
-  if (m) {
-    const d = String(m[1]).padStart(2,'0');
-    const mo = MONTHS[m[2].toLowerCase()] || '01';
-    return `${m[3]}-${mo}-${d}`;
-  }
-  return '';
-};
-
-function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDeleteGasto,gastosLines}){
+// ── Ficha unificada de actividad (Parte 3.3) ────────────────────────────────
+// Sustituye a ActividadFormModal + TareasModal: Datos generales | Presupuesto y
+// gastos | Tareas/avance | Acciones, en una sola ficha con pestañas.
+function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGasto,gastosLines,getRespName,onNavigateOficios,onPublicarAula,onActualizarAula}){
+  const [ftab,setFtab] = useState('generales');
   const [fd,setFd]=useState({
     trimestre:initialData?.trimestre||TRIMESTRES[0],
-    area:initialData?.area||AREAS[0],actividad:initialData?.actividad||'',
+    area:initialData?.area||AREAS[0],
+    actividad:initialData?.actividad||'',
     tipo:initialData?.tipo||TIPOS[0],
-    fecha:fechaTextoToISO(initialData?.fecha||''),  // Convierte "21 mar 2026" → "2026-03-21" para el date picker
-    monto:initialData?.monto||0,monto_gastado:initialData?.monto_gastado||0,
+    fecha:fechaTextoToISO(initialData?.fecha_iso || initialData?.fecha || ''),
+    monto:initialData?.monto||0,
     estado_general:initialData?.estado_general||'Pendiente',
-    sede_modalidad:initialData?.sede_modalidad||'',id:initialData?.id,
+    sede_modalidad:initialData?.sede_modalidad||'',
+    observaciones:initialData?.observaciones||'',
+    id:initialData?.id||null,
+    t1_estado:initialData?.t1_estado||'Pendiente',t1_fecha:initialData?.t1_fecha||'',t1_obs:initialData?.t1_obs||'',
+    t2_estado:initialData?.t2_estado||'Pendiente',t2_fecha:initialData?.t2_fecha||'',t2_ponente:initialData?.t2_ponente||'',
+    t3_estado:initialData?.t3_estado||'Pendiente',t3_fecha:initialData?.t3_fecha||'',t3_lugar:initialData?.t3_lugar||'',
+    t4_estado:initialData?.t4_estado||'Pendiente',t4_fecha:initialData?.t4_fecha||'',t4_num_oficio:initialData?.t4_num_oficio||'',
   });
   const [saving,setSaving]=useState(false);
   const [gDesc,setGDesc]=useState('');
@@ -964,15 +991,30 @@ function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDelete
   const [gFecha,setGFecha]=useState(todayStr());
   const [addingG,setAddingG]=useState(false);
 
-  const handleSave=async(e)=>{
-    e.preventDefault(); setSaving(true);
-    // Guardar fecha como texto legible y trimestre calculado automáticamente
+  // Aula virtual — diálogo de publicación
+  const [aulaOpen,setAulaOpen]=useState(false);
+  const [aulaTime,setAulaTime]=useState('18:00');
+  const [aulaMeetingLink,setAulaMeetingLink]=useState('');
+  const [aulaRegistrationLink,setAulaRegistrationLink]=useState('');
+  const [publishingAula,setPublishingAula]=useState(false);
+
+  const gastadoActual = Number(initialData?.monto_gastado||0);
+  const dispActual = Number(fd.monto||0) - gastadoActual;
+  const hasId = !!fd.id;
+
+  // Nota: al guardar por primera vez, la ficha permanece abierta (no se cierra
+  // automáticamente) para poder continuar con gastos, tareas y acciones sin
+  // tener que reabrirla — Parte 3.3 "adiós al ping-pong de modales".
+  const handleSave=async()=>{
+    setSaving(true);
     const dataToSave = {
       ...fd,
-      fecha: fd.fecha ? formatFechaDisplay(fd.fecha) : '',
+      fecha_iso: fd.fecha || null,
+      fecha: fd.fecha ? formatFechaDisplay(fd.fecha) : (initialData?.fecha || ''),
       trimestre: fd.fecha ? getTrimestreFromDate(fd.fecha) : fd.trimestre,
     };
-    await onSave(dataToSave);
+    const newId = await onSave(dataToSave);
+    if (newId && !fd.id) setFd(prev=>({...prev, id:newId}));
     setSaving(false);
   };
   const handleAddG=async()=>{
@@ -982,103 +1024,318 @@ function ActividadFormModal({mode,initialData,onSave,onClose,onAddGasto,onDelete
     await onAddGasto(fd.id,gDesc,gMonto,gFecha);
     setGDesc('');setGMonto('');setGFecha(todayStr());setAddingG(false);
   };
-  const disp=Number(fd.monto||0)-Number(fd.monto_gastado||0);
+
+  const buildEvento = () => ({
+    title: fd.actividad || '',
+    date: fd.fecha || '',
+    time: aulaTime || '18:00',
+    location: fd.sede_modalidad || '',
+    organizer: 'CAEDUC',
+    cost: '',
+    costType: 'free',
+    isFull: false,
+    meetingLink: aulaMeetingLink || '',
+    participants: '',
+    scholarshipAmt: 0,
+    scholarshipPct: 0,
+    registrationLink: aulaRegistrationLink || '',
+  });
+  const handlePublicarAula = async () => {
+    if(!fd.fecha){ alert('Define la fecha de la actividad antes de publicar en el aula.'); return; }
+    setPublishingAula(true);
+    await onPublicarAula(initialData, buildEvento());
+    setPublishingAula(false);
+    setAulaOpen(false);
+  };
+  const handleActualizarAula = async () => {
+    setPublishingAula(true);
+    const res = await onActualizarAula(initialData, buildEvento());
+    setPublishingAula(false);
+    if (res.ok) { setAulaOpen(false); return; }
+    if (!res.exists) {
+      if (window.confirm('El evento ya no existe en el calendario del aula virtual. ¿Deseas volver a publicarlo como uno nuevo?')) {
+        setPublishingAula(true);
+        await onPublicarAula(initialData, buildEvento());
+        setPublishingAula(false);
+        setAulaOpen(false);
+      }
+    }
+  };
+
+  const handleCrearOficio = (conInforme) => {
+    const fechaTxt = fd.fecha ? formatFechaDisplay(fd.fecha) : (initialData?.fecha || '');
+    const montoTxt = fd.monto ? `Q${fmt(fd.monto)}` : '';
+    const ctx = { actividad: fd.actividad, tipo: fd.tipo, modalidad: '', fecha: fechaTxt, sede: fd.sede_modalidad, monto: montoTxt };
+    const prefill = {
+      actividad_nombre: fd.actividad,
+      actividad_tipo: fd.tipo,
+      actividad_fecha: fechaTxt,
+      actividad_duracion: '',
+      actividad_modalidad: '',
+      actividad_sede: fd.sede_modalidad,
+      actividad_descripcion: '',
+      monto: montoTxt,
+      monto_detalle: gastosLines.length ? gastosLines.map(g=>`• ${g.descripcion}: Q${fmt(g.monto)}${g.fecha?` (${g.fecha})`:''}`).join('\n') : '',
+      justificacion: buildJustificacionTemplate(ctx),
+    };
+    if (conInforme) {
+      prefill.poblacion_objetivo = buildPoblacionObjetivoTemplate(ctx);
+      prefill.resultados_esperados = buildResultadosEsperadosTemplate();
+      prefill.cronograma_resumen = buildCronogramaTemplate(ctx);
+    }
+    onNavigateOficios(prefill);
+  };
+
+  const tBorder={blue:'border-blue-300 bg-blue-50',indigo:'border-indigo-300 bg-indigo-50',amber:'border-amber-300 bg-amber-50',violet:'border-violet-300 bg-violet-50'};
+  const tTitle={blue:'text-blue-700',indigo:'text-indigo-700',amber:'text-amber-700',violet:'text-violet-700'};
+
+  const TABS = [
+    {id:'generales', label:'Datos generales', icon:<FileText size={14}/>},
+    {id:'presupuesto', label:'Presupuesto y gastos', icon:<DollarSign size={14}/>},
+    {id:'tareas', label:'Tareas / avance', icon:<Clipboard size={14}/>},
+    {id:'acciones', label:'Acciones', icon:<Send size={14}/>},
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-4">
-        <div className="flex justify-between items-center p-5 border-b bg-gray-50 rounded-t-xl">
-          <h3 className="text-lg font-bold text-gray-800">{mode==='new'?'Nueva Actividad':'Editar Actividad'}</h3>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-4">
+        <div className="flex justify-between items-center p-5 border-b bg-slate-50 rounded-t-2xl">
+          <div className="min-w-0">
+            <h3 className="text-lg font-bold text-gray-800">{mode==='new'?'Nueva Actividad':'Ficha de Actividad'}</h3>
+            {mode==='edit' && <p className="text-sm text-gray-500 truncate">{fd.actividad || 'Sin nombre'}</p>}
+            {fd.id && initialData?.aula_event_id && (
+              <span className="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold mt-1">
+                <GraduationCap size={11}/> Publicada en el aula ✓
+              </span>
+            )}
+          </div>
           <button onClick={onClose}><X size={22} className="text-gray-400 hover:text-red-500"/></button>
         </div>
-        <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-          <form onSubmit={handleSave} className="space-y-4">
-            {/* Trimestre se asigna automáticamente — solo se muestra */}
-            {fd.fecha && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-800 flex items-center gap-2">
-                <Calendar size={13} className="shrink-0"/>
-                <span>Trimestre asignado automáticamente: <strong>{getTrimestreFromDate(fd.fecha)}</strong></span>
-              </div>
-            )}
-            <div><label className="text-xs font-bold text-gray-600 mb-1 block">Nombre de la actividad *</label>
-              <textarea required rows={2} className="w-full border p-2.5 rounded-lg text-sm resize-none" value={fd.actividad} onChange={e=>setFd({...fd,actividad:e.target.value})}/></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Área *</label>
-                <select required className="w-full border p-2.5 rounded-lg text-sm" value={fd.area} onChange={e=>setFd({...fd,area:e.target.value})}>
-                  {AREAS.map(a=><option key={a}>{a}</option>)}</select></div>
-              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Tipo</label>
-                <select className="w-full border p-2.5 rounded-lg text-sm" value={fd.tipo} onChange={e=>setFd({...fd,tipo:e.target.value})}>
-                  {TIPOS.map(t=><option key={t}>{t}</option>)}</select></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-bold text-gray-600 mb-1 block flex items-center gap-1">
-                  <Calendar size={12}/> Fecha de la actividad *
-                </label>
-                <input
-                  required
-                  type="date"
-                  className="w-full border p-2.5 rounded-lg text-sm focus:ring-2 focus:ring-blue-300 focus:outline-none cursor-pointer"
-                  value={fd.fecha}
-                  onChange={e=>{
-                    const newDate = e.target.value;
-                    setFd({...fd, fecha:newDate, trimestre:getTrimestreFromDate(newDate)});
-                  }}
-                />
-                {fd.fecha && (
-                  <p className="text-xs text-gray-400 mt-1">{formatFechaDisplay(fd.fecha)}</p>
-                )}
-              </div>
-              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Estado</label>
-                <select className="w-full border p-2.5 rounded-lg text-sm" value={fd.estado_general} onChange={e=>setFd({...fd,estado_general:e.target.value})}>
-                  {ESTADOS.map(s=><option key={s}>{s}</option>)}</select></div>
-            </div>
-            <div className="bg-green-50 rounded-xl p-4 border border-green-200 space-y-3">
-              <h4 className="text-sm font-bold text-green-800 flex items-center gap-2"><DollarSign size={15}/>Presupuesto</h4>
+
+        <div className="flex gap-1 bg-slate-100 p-1 mx-5 mt-4 rounded-lg overflow-x-auto">
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setFtab(t.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-bold flex-1 justify-center whitespace-nowrap transition-all ${ftab===t.id?'bg-white text-caeduc-pink shadow-sm':'text-gray-500 hover:text-gray-700'}`}>
+              {t.icon}{t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[65vh] overflow-y-auto">
+
+          {ftab==='generales' && (
+            <div className="space-y-4">
+              {fd.fecha && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-800 flex items-center gap-2">
+                  <Calendar size={13} className="shrink-0"/>
+                  <span>Trimestre asignado automáticamente: <strong>{getTrimestreFromDate(fd.fecha)}</strong></span>
+                </div>
+              )}
+              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Nombre de la actividad *</label>
+                <textarea required rows={2} className={textareaCls} value={fd.actividad} onChange={e=>setFd({...fd,actividad:e.target.value})}/></div>
               <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-xs font-bold text-gray-600 mb-1 block">Área *</label>
+                  <select required className={selectCls} value={fd.area} onChange={e=>setFd({...fd,area:e.target.value})}>
+                    {AREAS.map(a=><option key={a}>{a}</option>)}</select></div>
+                <div><label className="text-xs font-bold text-gray-600 mb-1 block">Tipo</label>
+                  <select className={selectCls} value={fd.tipo} onChange={e=>setFd({...fd,tipo:e.target.value})}>
+                    {TIPOS.map(t=><option key={t}>{t}</option>)}</select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-600 mb-1 block flex items-center gap-1">
+                    <Calendar size={12}/> Fecha de la actividad *
+                  </label>
+                  <input required type="date" className={inputCls + ' cursor-pointer'} value={fd.fecha}
+                    onChange={e=>{ const newDate = e.target.value; setFd({...fd, fecha:newDate, trimestre:getTrimestreFromDate(newDate)}); }}/>
+                  {fd.fecha && <p className="text-xs text-gray-400 mt-1">{formatFechaDisplay(fd.fecha)}</p>}
+                </div>
+                <div><label className="text-xs font-bold text-gray-600 mb-1 block">Estado</label>
+                  <select className={selectCls} value={fd.estado_general} onChange={e=>setFd({...fd,estado_general:e.target.value})}>
+                    {ESTADOS.map(s=><option key={s}>{s}</option>)}</select></div>
+              </div>
+              <div><label className="text-xs font-bold text-gray-600 mb-1 block">Sede / Modalidad</label>
+                <input className={inputCls} placeholder="Ej: Virtual Zoom, Sede Central..." value={fd.sede_modalidad} onChange={e=>setFd({...fd,sede_modalidad:e.target.value})}/></div>
+            </div>
+          )}
+
+          {ftab==='presupuesto' && (
+            <div className="space-y-4">
+              <div className="bg-green-50 rounded-xl p-4 border border-green-200 space-y-3">
+                <h4 className="text-sm font-bold text-green-800 flex items-center gap-2"><DollarSign size={15}/>Presupuesto asignado</h4>
                 <div><label className="text-xs font-bold text-gray-600 mb-1 block">Monto asignado (Q)</label>
-                  <input type="number" min="0" step="0.01" className="w-full border p-2.5 rounded-lg text-sm font-medium" value={fd.monto} onChange={e=>setFd({...fd,monto:e.target.value})}/></div>
-                <div><label className="text-xs font-bold text-gray-600 mb-1 block">Monto gastado (Q)</label>
-                  <input type="number" min="0" step="0.01" className="w-full border p-2.5 rounded-lg text-sm font-medium" value={fd.monto_gastado} onChange={e=>setFd({...fd,monto_gastado:e.target.value})}/></div>
-              </div>
-              <div className={`text-sm font-bold text-center p-2 rounded-lg ${disp>=0?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}`}>
-                Disponible: Q{disp.toLocaleString('es-GT',{minimumFractionDigits:2})}
-              </div>
-            </div>
-            <div><label className="text-xs font-bold text-gray-600 mb-1 block">Sede / Modalidad</label>
-              <input className="w-full border p-2.5 rounded-lg text-sm" placeholder="Ej: Virtual Zoom, Sede Central..." value={fd.sede_modalidad} onChange={e=>setFd({...fd,sede_modalidad:e.target.value})}/></div>
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200">Cancelar</button>
-              <button type="submit" disabled={saving} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                <Save size={16}/>{saving?'Guardando...':'Guardar actividad'}
-              </button>
-            </div>
-          </form>
-          {mode==='edit'&&(
-            <div className="mt-4 border-t pt-4 space-y-3">
-              <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Receipt size={15}/>Detalle de gastos</h4>
-              {gastosLines.map(g=>(
-                <div key={g.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 text-sm border">
-                  <span className="flex-1 text-gray-700">{g.descripcion}</span>
-                  {g.fecha&&<span className="text-xs text-gray-400">{g.fecha}</span>}
-                  <span className="font-bold text-red-500">-Q{fmt(g.monto)}</span>
-                  <button onClick={()=>onDeleteGasto(g.id,initialData.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14}/></button>
+                  <input type="number" min="0" step="0.01" className={inputCls + ' font-medium'} value={fd.monto} onChange={e=>setFd({...fd,monto:e.target.value})}/></div>
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="bg-white rounded-lg border p-2">
+                    <p className="text-xs text-gray-500">Gastado (calculado)</p>
+                    <p className="text-base font-black text-red-600">Q{fmt(gastadoActual)}</p>
+                  </div>
+                  <div className={`rounded-lg border p-2 ${dispActual>=0?'bg-white':'bg-red-50'}`}>
+                    <p className="text-xs text-gray-500">Disponible</p>
+                    <p className={`text-base font-black ${dispActual>=0?'text-green-700':'text-red-700'}`}>Q{fmt(dispActual)}</p>
+                  </div>
                 </div>
-              ))}
-              <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 space-y-2">
-                <p className="text-xs font-bold text-blue-700">Agregar línea de gasto</p>
-                <input placeholder="¿En qué se gastó? *" className="w-full border p-2 rounded-lg text-sm" value={gDesc} onChange={e=>setGDesc(e.target.value)}/>
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" placeholder="Monto (Q) *" min="0" step="0.01" className="border p-2 rounded-lg text-sm" value={gMonto} onChange={e=>setGMonto(e.target.value)}/>
-                  <input type="date" className="border p-2 rounded-lg text-sm" value={gFecha} onChange={e=>setGFecha(e.target.value)}/>
-                </div>
-                <button onClick={handleAddG} disabled={addingG||!gDesc.trim()||!gMonto}
-                  className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                  <Plus size={14}/>{addingG?'Registrando...':'Registrar gasto'}
-                </button>
+                <p className="text-xs text-green-600 flex items-center gap-1"><Info size={12}/> El monto gastado se calcula automáticamente a partir de las líneas de gasto — no es editable.</p>
+              </div>
+
+              <div className="border rounded-xl p-4 bg-white space-y-3">
+                <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Receipt size={15}/>Gastos de esta actividad</h4>
+                {!hasId && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 flex items-start gap-2">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5"/> Guarda la actividad primero (pestaña "Datos generales") para poder registrar gastos.
+                  </div>
+                )}
+                {gastosLines.map(g=>(
+                  <div key={g.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 text-sm border">
+                    <span className="flex-1 text-gray-700">{g.descripcion}</span>
+                    {g.fecha&&<span className="text-xs text-gray-400">{g.fecha}</span>}
+                    <span className="font-bold text-red-500">-Q{fmt(g.monto)}</span>
+                    <button onClick={()=>onDeleteGasto(g.id,fd.id)} className="text-gray-300 hover:text-red-500"><Trash2 size={14}/></button>
+                  </div>
+                ))}
+                {hasId && (
+                  <div className="bg-blue-50 rounded-xl p-3 border border-blue-200 space-y-2">
+                    <p className="text-xs font-bold text-blue-700">Agregar línea de gasto</p>
+                    <input placeholder="¿En qué se gastó? *" className="w-full border p-2 rounded-lg text-sm" value={gDesc} onChange={e=>setGDesc(e.target.value)}/>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input type="number" placeholder="Monto (Q) *" min="0" step="0.01" className="border p-2 rounded-lg text-sm" value={gMonto} onChange={e=>setGMonto(e.target.value)}/>
+                      <input type="date" className="border p-2 rounded-lg text-sm" value={gFecha} onChange={e=>setGFecha(e.target.value)}/>
+                    </div>
+                    <button onClick={handleAddG} disabled={addingG||!gDesc.trim()||!gMonto}
+                      className="w-full bg-blue-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                      <Plus size={14}/>{addingG?'Registrando...':'Registrar gasto'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
+
+          {ftab==='tareas' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border">
+                <span className="text-sm font-bold text-gray-700">Estado General:</span>
+                <select className="border p-2 rounded-lg text-sm font-medium flex-1" value={fd.estado_general} onChange={e=>setFd({...fd,estado_general:e.target.value})}>
+                  {ESTADOS.map(s=><option key={s}>{s}</option>)}
+                </select>
+                <StatusBadge status={fd.estado_general}/>
+              </div>
+              {TASKS_META.map(({key,label,color,fields})=>{
+                const ek=`${key}_estado`;
+                const est=fd[ek]||'Pendiente';
+                const bc=est==='Completado'?'border-green-300 bg-green-50':est==='En proceso'?tBorder[color]:'border-gray-200 bg-white';
+                const done = est==='Completado';
+                return (
+                  <div key={key} className={`border rounded-xl p-4 ${bc}`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <button type="button" onClick={()=>setFd({...fd,[ek]: done ? 'Pendiente' : 'Completado'})} className="flex items-center gap-2 text-left">
+                        {done ? <CheckCircle2 size={18} className="text-green-500 shrink-0"/> : <Circle size={18} className="text-gray-300 shrink-0"/>}
+                        <h4 className={`font-bold text-sm ${tTitle[color]}`}>{label}</h4>
+                      </button>
+                      <select className="border p-1.5 rounded-lg text-xs" value={fd[ek]||'Pendiente'} onChange={e=>setFd({...fd,[ek]:e.target.value})}>
+                        {ESTADOS.slice(0,3).map(s=><option key={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {fields.map(({k,label:fl,type})=>(
+                        <div key={k}>
+                          <label className="block text-xs font-bold text-gray-500 mb-1">{fl}</label>
+                          <input type={type==='date'?'date':'text'} placeholder={type!=='date'?fl:undefined}
+                            className="w-full border p-2 rounded-lg text-sm"
+                            value={fd[k]||''} onChange={e=>setFd({...fd,[k]:e.target.value})}/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="border rounded-xl p-4 bg-gray-50 space-y-2">
+                <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1"><FileText size={12}/>Observaciones</label>
+                <textarea rows={2} className="w-full border p-2 rounded-lg text-sm resize-none" value={fd.observaciones} onChange={e=>setFd({...fd,observaciones:e.target.value})}/>
+              </div>
+            </div>
+          )}
+
+          {ftab==='acciones' && (
+            <div className="space-y-4">
+              {!hasId ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-700 flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5"/> Guarda la actividad primero (pestaña "Datos generales") para desbloquear las acciones de oficio y publicación en el aula.
+                </div>
+              ) : (
+                <>
+                  <div className="border rounded-xl p-4 space-y-2">
+                    <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Send size={15}/>Oficios</h4>
+                    <p className="text-xs text-gray-500">Genera un oficio pre-llenado con los datos de esta actividad. Podrás editarlo antes de guardarlo.</p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <SecondaryButton onClick={()=>handleCrearOficio(false)} className="flex-1 text-sm">
+                        <FileText size={15}/> Crear oficio de solicitud
+                      </SecondaryButton>
+                      <SecondaryButton onClick={()=>handleCrearOficio(true)} className="flex-1 text-sm">
+                        <ClipboardList size={15}/> Generar informe técnico
+                      </SecondaryButton>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-xl p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><GraduationCap size={15}/>Calendario del aula virtual</h4>
+                    {initialData?.aula_event_id ? (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-700 flex items-center gap-2">
+                        <CheckCircle size={16} className="shrink-0"/> Esta actividad ya está publicada en el aula virtual.
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">Publica esta actividad en el calendario público del aula virtual CPG.</p>
+                    )}
+                    {!aulaOpen ? (
+                      <SecondaryButton onClick={()=>setAulaOpen(true)} className="w-full text-sm">
+                        <CalendarPlus size={15}/> {initialData?.aula_event_id ? 'Actualizar en calendario' : 'Publicar en calendario del aula virtual'}
+                      </SecondaryButton>
+                    ) : (
+                      <div className="space-y-3 bg-slate-50 border rounded-xl p-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div><label className="text-xs font-bold text-gray-600 mb-1 block">Hora</label>
+                            <input type="time" className="w-full border p-2 rounded-lg text-sm" value={aulaTime} onChange={e=>setAulaTime(e.target.value)}/></div>
+                          <div><label className="text-xs font-bold text-gray-600 mb-1 block flex items-center gap-1"><Link2 size={11}/>Enlace de reunión (opcional)</label>
+                            <input className="w-full border p-2 rounded-lg text-sm" placeholder="https://..." value={aulaMeetingLink} onChange={e=>setAulaMeetingLink(e.target.value)}/></div>
+                        </div>
+                        <div><label className="text-xs font-bold text-gray-600 mb-1 block flex items-center gap-1"><ExternalLink size={11}/>Enlace de inscripción (opcional)</label>
+                          <input className="w-full border p-2 rounded-lg text-sm" placeholder="https://..." value={aulaRegistrationLink} onChange={e=>setAulaRegistrationLink(e.target.value)}/></div>
+
+                        {/* Vista previa del evento */}
+                        <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-3">
+                          <p className="text-xs font-bold text-slate-400 uppercase mb-1">Vista previa</p>
+                          <p className="font-bold text-slate-800 text-sm">{fd.actividad || 'Sin título'}</p>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
+                            <span className="flex items-center gap-1"><Calendar size={11}/>{fd.fecha?formatFechaDisplay(fd.fecha):'Sin fecha'}</span>
+                            <span className="flex items-center gap-1"><Clock size={11}/>{aulaTime}</span>
+                            {fd.sede_modalidad && <span className="flex items-center gap-1"><MapPin size={11}/>{fd.sede_modalidad}</span>}
+                            <span className="flex items-center gap-1"><User size={11}/>CAEDUC</span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button onClick={()=>setAulaOpen(false)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm font-bold hover:bg-gray-200">Cancelar</button>
+                          <PrimaryButton
+                            onClick={initialData?.aula_event_id ? handleActualizarAula : handlePublicarAula}
+                            disabled={publishingAula}
+                            className="flex-1 text-sm">
+                            {publishingAula ? 'Enviando...' : (initialData?.aula_event_id ? 'Actualizar en el aula' : 'Publicar en el aula')}
+                          </PrimaryButton>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 p-5 border-t bg-slate-50 rounded-b-2xl">
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200">{hasId?'Cerrar':'Cancelar'}</button>
+          <PrimaryButton onClick={handleSave} disabled={saving || !fd.actividad?.trim() || !fd.fecha} className="flex-1">
+            <Save size={16}/>{saving?'Guardando...':(hasId?'Guardar cambios':'Guardar y continuar')}
+          </PrimaryButton>
         </div>
       </div>
     </div>
@@ -1171,7 +1428,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
   const [notas, setNotas]               = useState(presAnualActual.notas || '');
   const [saving, setSaving]             = useState(false);
 
-  // Cuando cambia el año, cargar el monto de ese año si existe
   const handleAnioChange = (anio) => {
     setSelectedAnio(Number(anio));
     const found = presAnual.find(p=>p.anio===Number(anio));
@@ -1191,7 +1447,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
   const totalDisp = Number(monto||0) + totalFondos;
   const saldo     = totalDisp - totalGast;
 
-  // Años disponibles para editar: año actual ± 1 y los que ya existen
   const aniosDisp = [...new Set([
     anioActual - 1, anioActual, anioActual + 1,
     ...presAnual.map(p=>p.anio)
@@ -1209,14 +1464,12 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
-          {/* Info box */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-start gap-2">
             <Info size={14} className="shrink-0 mt-0.5"/>
             <span>Este es el presupuesto aprobado para el año. Para aumentarlo, usa <strong>"Fondos Adicionales"</strong> (requiere origen y justificación). Las nuevas actividades se financian con el saldo disponible.</span>
           </div>
 
           <form onSubmit={handleSave} className="space-y-4">
-            {/* Año */}
             <div>
               <label className="text-xs font-bold text-gray-600 mb-1 block">Año *</label>
               <select className="w-full border p-2.5 rounded-lg text-sm font-medium"
@@ -1229,7 +1482,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
               </select>
             </div>
 
-            {/* Monto */}
             <div>
               <label className="text-xs font-bold text-gray-600 mb-1 block">Presupuesto aprobado (Q) *</label>
               <input required type="number" min="0" step="0.01" placeholder="0.00"
@@ -1237,7 +1489,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
                 value={monto} onChange={e=>setMonto(e.target.value)}/>
             </div>
 
-            {/* Notas */}
             <div>
               <label className="text-xs font-bold text-gray-600 mb-1 block">Notas / descripción</label>
               <input type="text" placeholder="Ej: Presupuesto aprobado sesión ordinaria CPG..."
@@ -1245,7 +1496,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
                 value={notas} onChange={e=>setNotas(e.target.value)}/>
             </div>
 
-            {/* Preview de impacto */}
             {monto && Number(monto)>0 && (
               <div className="bg-gray-50 rounded-xl p-3 border space-y-1.5">
                 <p className="text-xs font-bold text-gray-600 mb-2">Vista previa con este monto:</p>
@@ -1284,7 +1534,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
             </div>
           </form>
 
-          {/* Historial por año */}
           {presAnual.length>0 && (
             <div className="border-t pt-3">
               <p className="text-xs font-bold text-gray-500 mb-2">Historial de presupuestos registrados:</p>
@@ -1301,102 +1550,6 @@ function EditPresAnualModal({presAnual,anioActual,presAnualActual,totalFondos,to
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Modal Tareas ─────────────────────────────────────────────────────────────
-function TareasModal({act,getRespName,onSave,onClose,onNavigateOficios}){
-  const [tf,setTf]=useState({
-    estado_general:act.estado_general||'Pendiente',
-    sede_modalidad:act.sede_modalidad||'',observaciones:act.observaciones||'',
-    t1_estado:act.t1_estado||'Pendiente',t1_fecha:act.t1_fecha||'',t1_obs:act.t1_obs||'',
-    t2_estado:act.t2_estado||'Pendiente',t2_fecha:act.t2_fecha||'',t2_ponente:act.t2_ponente||'',
-    t3_estado:act.t3_estado||'Pendiente',t3_fecha:act.t3_fecha||'',t3_lugar:act.t3_lugar||'',
-    t4_estado:act.t4_estado||'Pendiente',t4_fecha:act.t4_fecha||'',t4_num_oficio:act.t4_num_oficio||'',
-  });
-  const [saving,setSaving]=useState(false);
-  const tBorder={blue:'border-blue-300 bg-blue-50',indigo:'border-indigo-300 bg-indigo-50',amber:'border-amber-300 bg-amber-50',violet:'border-violet-300 bg-violet-50'};
-  const tTitle={blue:'text-blue-700',indigo:'text-indigo-700',amber:'text-amber-700',violet:'text-violet-700'};
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl my-4">
-        <div className="flex justify-between items-start p-5 border-b bg-gray-50 rounded-t-xl">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <AreaTag area={act.area}/>
-              <span className="text-xs text-gray-400">{act.trimestre} · #{act.numero}</span>
-            </div>
-            <h3 className="text-sm font-bold text-gray-800">{act.actividad}</h3>
-            <div className="flex gap-3 mt-1">
-              <span className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={10}/>{act.fecha}</span>
-              <span className="text-xs text-gray-500 flex items-center gap-1"><User size={10}/>{getRespName(act.area)}</span>
-            </div>
-          </div>
-          <button onClick={onClose}><X size={22} className="text-gray-400 hover:text-red-500"/></button>
-        </div>
-        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border">
-            <span className="text-sm font-bold text-gray-700">Estado General:</span>
-            <select className="border p-2 rounded-lg text-sm font-medium flex-1" value={tf.estado_general} onChange={e=>setTf({...tf,estado_general:e.target.value})}>
-              {ESTADOS.map(s=><option key={s}>{s}</option>)}
-            </select>
-            <StatusBadge status={tf.estado_general}/>
-          </div>
-          {TASKS_META.map(({key,label,color,fields})=>{
-            const ek=`${key}_estado`;
-            const est=tf[ek]||'Pendiente';
-            const bc=est==='Completado'?'border-green-300 bg-green-50':est==='En proceso'?tBorder[color]:'border-gray-200 bg-white';
-            return (
-              <div key={key} className={`border rounded-xl p-4 ${bc}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className={`font-bold text-sm ${tTitle[color]}`}>{label}</h4>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={est}/>
-                    {est==='Completado'&&<CheckCircle size={16} className="text-green-500"/>}
-                  </div>
-                </div>
-                <select className="w-full border p-2 rounded-lg text-sm mb-2" value={tf[ek]||'Pendiente'} onChange={e=>setTf({...tf,[ek]:e.target.value})}>
-                  {ESTADOS.map(s=><option key={s}>{s}</option>)}
-                </select>
-                <div className="grid grid-cols-2 gap-2">
-                  {fields.map(({k,label:fl,type})=>(
-                    <div key={k}>
-                      <label className="block text-xs font-bold text-gray-500 mb-1">{fl}</label>
-                      <input type={type==='date'?'date':'text'} placeholder={type!=='date'?fl:undefined}
-                        className="w-full border p-2 rounded-lg text-sm"
-                        value={tf[k]||''} onChange={e=>setTf({...tf,[k]:e.target.value})}/>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          <div className="border rounded-xl p-4 bg-gray-50 space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1"><MapPin size={12}/>Sede / Modalidad</label>
-              <input type="text" placeholder="Ej: Sede Central, Virtual vía Zoom" className="w-full border p-2 rounded-lg text-sm" value={tf.sede_modalidad} onChange={e=>setTf({...tf,sede_modalidad:e.target.value})}/>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-1"><FileText size={12}/>Observaciones</label>
-              <textarea rows={2} className="w-full border p-2 rounded-lg text-sm resize-none" value={tf.observaciones} onChange={e=>setTf({...tf,observaciones:e.target.value})}/>
-            </div>
-          </div>
-          <div className="flex gap-3 pt-1">
-            <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-200 text-sm">Cancelar</button>
-            {onNavigateOficios&&(
-              <button onClick={()=>{onClose();onNavigateOficios(act);}}
-                className="bg-indigo-50 text-indigo-700 px-4 py-2.5 rounded-xl font-bold hover:bg-indigo-100 text-sm flex items-center gap-1 border border-indigo-200">
-                <FileText size={14}/>Crear Oficio
-              </button>
-            )}
-            <button onClick={async()=>{setSaving(true);await onSave(tf);setSaving(false);}} disabled={saving}
-              className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm">
-              <Save size={16}/>{saving?'Guardando...':'Guardar'}
-            </button>
-          </div>
         </div>
       </div>
     </div>
