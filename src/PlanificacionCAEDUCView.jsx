@@ -136,7 +136,7 @@ const fechaTextoToISO = (textoFecha) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function PlanificacionCAEDUCView({onNavigateOficios}){
+export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActividadId, onClearAbrirActividad}){
   const [tab,setTab]         = useState('actividades');
   const [loading,setLoading] = useState(true);
   const [responsables,setResponsables]   = useState([]);
@@ -177,6 +177,15 @@ export default function PlanificacionCAEDUCView({onNavigateOficios}){
   },[]);
 
   useEffect(()=>{fetchAll();},[fetchAll]);
+
+  // Al llegar desde el inicio con una actividad seleccionada, abrir su ficha directamente
+  useEffect(()=>{
+    if(!abrirActividadId || loading) return;
+    if(actividades.some(a=>a.id===abrirActividadId)){
+      setActModal({mode:'edit', id:abrirActividadId});
+    }
+    onClearAbrirActividad?.();
+  },[abrirActividadId, loading, actividades, onClearAbrirActividad]);
 
   // Totales
   const totalActAsig   = actividades.reduce((s,a)=>s+Number(a.monto||0),0);

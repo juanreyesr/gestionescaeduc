@@ -1423,6 +1423,7 @@ const SidebarBtn = ({ icon, label, active, onClick, isOpen, badge = 0 }) => (
 // ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
   const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+  const [actividadDesdeInicio,setActividadDesdeInicio]=useState(null); // id de actividad a abrir al entrar a planificación
   const [userPermissions,setUserPermissions]=useState(null); // null = acceso completo
   const [agendaPendientesCount,setAgendaPendientesCount]=useState(0);
 
@@ -1589,8 +1590,8 @@ export default function CAEDUCApp() {
         {userMode==='verificar_aval' && <VerificarAvalView onBack={()=>setUserMode('public')}/>}
         {userMode==='admin' && (
           <Suspense fallback={<ViewLoader/>}>
-            {currentModule==='inicio' && <InicioDashboardView onNavigate={setCurrentModule} userName={displayName}/>}
-            {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios}/>}
+            {currentModule==='inicio' && <InicioDashboardView onNavigate={setCurrentModule} userName={displayName} onOpenActividad={(id)=>{setActividadDesdeInicio(id);setCurrentModule('planificacion');}}/>}
+            {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios} abrirActividadId={actividadDesdeInicio} onClearAbrirActividad={()=>setActividadDesdeInicio(null)}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='agendas' && <AgendasView/>}

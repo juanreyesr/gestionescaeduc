@@ -14,11 +14,14 @@ const supabase = createClient(
 
 const fmtQ = (n) => 'Q' + Number(n || 0).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export default function InicioDashboardView({ onNavigate, userName }) {
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fmtMes = (iso) => MESES[Number(iso.slice(5, 7)) - 1] || '';
+
+export default function InicioDashboardView({ onNavigate, userName, onOpenActividad }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
     avalesPendientes: 0,
-    proximoEvento: null,
+    proximosEventos: [],
     saldo: 0,
     presBase: 0,
     totalFondos: 0,
@@ -55,10 +58,11 @@ export default function InicioDashboardView({ onNavigate, userName }) {
       const avalesPendientes = (avales || []).filter(a => !a.is_deleted && a.status === 'En Proceso').length;
 
       const activas = (actividades || []).filter(a => a.estado_general !== 'Completado' && a.estado_general !== 'Cancelado');
-      const futuras = activas
-        .filter(a => (a.fecha_iso || '') >= hoy)
-        .sort((a, b) => (a.fecha_iso || '9999').localeCompare(b.fecha_iso || '9999'));
-      const proximoEvento = futuras[0] || null;
+      // Eventos de las próximas 3 semanas (hoy incluido)
+      const en3Semanas = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
+      const proximosEventos = activas
+        .filter(a => a.fecha_iso && a.fecha_iso >= hoy && a.fecha_iso <= en3Semanas)
+        .sort((a, b) => a.fecha_iso.localeCompare(b.fecha_iso));
 
       const presAnualActual = (presAnual || []).find(p => p.anio === anioActual) || (presAnual || [])[(presAnual || []).length - 1] || { monto: 0 };
       const presBase = Number(presAnualActual.monto || 0);
@@ -69,7 +73,7 @@ export default function InicioDashboardView({ onNavigate, userName }) {
 
       setData({
         avalesPendientes,
-        proximoEvento,
+        proximosEventos,
         saldo, presBase, totalFondos, totalGastado,
         pendientesAgenda: (pendientes || []).length,
         ultimosOficios: oficios || [],
@@ -132,7 +136,7 @@ export default function InicioDashboardView({ onNavigate, userName }) {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <SectionCard
-          title="Próximo evento planificado"
+          title="Próximos eventos (3 semanas)"
           icon={<Calendar size={16} />}
           right={
             <button onClick={() => onNavigate('planificacion')} className="text-xs font-bold text-caeduc-pink flex items-center gap-1 hover:underline">
@@ -140,18 +144,31 @@ export default function InicioDashboardView({ onNavigate, userName }) {
             </button>
           }
         >
-          {data.proximoEvento ? (
-            <button onClick={() => onNavigate('planificacion')} className="w-full text-left group">
-              <p className="font-semibold text-slate-800 group-hover:text-caeduc-pink transition-colors">{data.proximoEvento.actividad}</p>
-              <div className="flex items-center gap-3 mt-2 text-sm text-slate-500 flex-wrap">
-                <span className="flex items-center gap-1"><Clock size={13} />{data.proximoEvento.fecha}</span>
-                {data.proximoEvento.sede_modalidad && (
-                  <span className="flex items-center gap-1"><MapPin size={13} />{data.proximoEvento.sede_modalidad}</span>
-                )}
-              </div>
-            </button>
+          {data.proximosEventos.length > 0 ? (
+            <div className="space-y-1">
+              {data.proximosEventos.map(ev => (
+                <button
+                  key={ev.id}
+                  onClick={() => (onOpenActividad ? onOpenActividad(ev.id) : onNavigate('planificacion'))}
+                  className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors group"
+                >
+                  <div className="shrink-0 w-12 text-center rounded-lg bg-caeduc-pink/10 py-1">
+                    <p className="text-base font-black text-caeduc-pink leading-tight">{ev.fecha_iso.slice(8, 10)}</p>
+                    <p className="text-[10px] font-bold uppercase text-caeduc-pink/70 leading-tight">{fmtMes(ev.fecha_iso)}</p>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-700 truncate group-hover:text-caeduc-pink transition-colors">{ev.actividad}</p>
+                    <div className="flex items-center gap-3 text-xs text-slate-400">
+                      <span className="flex items-center gap-1"><Clock size={11} />{ev.fecha}</span>
+                      {ev.sede_modalidad && <span className="flex items-center gap-1 truncate"><MapPin size={11} />{ev.sede_modalidad}</span>}
+                    </div>
+                  </div>
+                  <ArrowRight size={14} className="shrink-0 text-slate-300 group-hover:text-caeduc-pink transition-colors" />
+                </button>
+              ))}
+            </div>
           ) : (
-            <EmptyState icon={<Calendar size={32} />} title="Sin eventos próximos" subtitle="No hay actividades futuras planificadas" />
+            <EmptyState icon={<Calendar size={32} />} title="Sin eventos próximos" subtitle="No hay actividades planificadas en las próximas 3 semanas" />
           )}
         </SectionCard>
 
