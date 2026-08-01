@@ -93,7 +93,7 @@ export const Badge = Pill;
 // ── Tarjeta simple de contenido (retrocompat con <Card/> del código anterior) ─
 export const Card = ({ children, className = '' }) => (
   <div className={`bg-white rounded-2xl shadow-soft border border-slate-200 overflow-hidden ${className}`}>
-    <div className="p-6">{children}</div>
+    <div className="p-4 sm:p-6">{children}</div>
   </div>
 );
 
@@ -168,13 +168,13 @@ export const Modal = ({ isOpen, onClose, title, children, size = 'md' }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 overflow-y-auto backdrop-blur-[2px]">
       <div className={`bg-white rounded-2xl shadow-2xl w-full ${sizes[size]} m-auto`}>
-        <div className="flex justify-between items-center p-5 border-b border-slate-100">
-          <h3 className="text-lg font-bold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-caeduc-pink transition-colors">
+      <div className="flex justify-between items-center gap-3 p-4 sm:p-5 border-b border-slate-100">
+          <h3 className="text-base sm:text-lg font-bold text-slate-800 min-w-0">{title}</h3>
+          <button onClick={onClose} aria-label="Cerrar ventana" className="text-slate-400 hover:text-caeduc-pink transition-colors shrink-0 p-2 -m-2">
             <X size={22} />
           </button>
         </div>
-        <div className="p-5 max-h-screen-80 overflow-y-auto">{children}</div>
+        <div className="p-4 sm:p-5 max-h-screen-80 overflow-y-auto">{children}</div>
       </div>
     </div>
   );

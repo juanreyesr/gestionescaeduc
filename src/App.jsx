@@ -1382,7 +1382,7 @@ const ReportesView = ({ avales, docs, oficios }) => {
 const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSuperAdmin, avalesPendientes = 0, agendaPendientes = 0 }) => {
   const visible = (moduleId) => isSuperAdmin || canDo(permissions, moduleId, 'view');
   return (
-    <div className={`bg-caeduc-blueDark text-white fixed h-full z-20 transition-all flex flex-col ${isOpen?'w-64':'w-20'}`}>
+    <aside aria-label="Navegación principal" className={`bg-caeduc-blueDark text-white fixed inset-y-0 left-0 z-30 w-72 md:z-20 md:w-auto transition-[transform,width] duration-200 ease-out flex flex-col ${isOpen ? 'translate-x-0 md:w-64' : '-translate-x-full md:translate-x-0 md:w-20'}`}>
       <div className="p-4 flex items-center justify-between border-b border-white/10">
         {isOpen && (
           <div className="flex items-center gap-2 min-w-0">
@@ -1405,7 +1405,7 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSu
       <button onClick={logout} className={`m-2 flex items-center gap-2 text-rose-200 hover:text-white hover:bg-white/10 rounded-xl p-3 transition-colors ${!isOpen && 'justify-center'}`}>
         <LogOut size={18}/>{isOpen && <span className="text-sm font-semibold">Salir</span>}
       </button>
-    </div>
+    </aside>
   );
 };
 const SidebarBtn = ({ icon, label, active, onClick, isOpen, badge = 0 }) => (
@@ -1422,7 +1422,7 @@ const SidebarBtn = ({ icon, label, active, onClick, isOpen, badge = 0 }) => (
 
 // ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
-  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(true);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(()=>window.innerWidth >= 768);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
   const [actividadDesdeInicio,setActividadDesdeInicio]=useState(null); // id de actividad a abrir al entrar a planificación
   const [userPermissions,setUserPermissions]=useState(null); // null = acceso completo
   const [agendaPendientesCount,setAgendaPendientesCount]=useState(0);
@@ -1435,6 +1435,14 @@ export default function CAEDUCApp() {
   const fetchPublicSettings=useCallback(async()=>{try{const{data}=await supabase.from('app_settings').select('key, value');if(data){const m={};data.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}}catch(e){console.error(e);}},[]);
 
   useEffect(()=>{fetchPublicSettings();supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session){setUserMode('admin');fetchData();}});const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{setSession(session);if(session){setUserMode('admin');fetchData();}else setUserMode('public');});return()=>subscription.unsubscribe();},[fetchPublicSettings]);
+
+  useEffect(() => {
+    const mobile = window.matchMedia('(max-width: 767px)');
+    const closeDrawerOnMobile = () => { if (mobile.matches) setSidebarOpen(false); };
+    closeDrawerOnMobile();
+    mobile.addEventListener('change', closeDrawerOnMobile);
+    return () => mobile.removeEventListener('change', closeDrawerOnMobile);
+  }, []);
 
   const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:settings},{count:pendCount}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('app_settings').select('key, value'),supabase.from('caeduc_agenda_pendientes').select('id',{count:'exact',head:true}).eq('completado',false)]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}setAgendaPendientesCount(pendCount||0);
     // Cargar permisos del usuario activo (null = acceso completo para super admin)
@@ -1575,7 +1583,8 @@ export default function CAEDUCApp() {
     setCurrentModule('oficios');
   };
 
-  const adminClass = userMode === 'admin' ? (isSidebarOpen ? 'ml-64' : 'ml-20') : '';
+  const adminClass = userMode === 'admin' ? (isSidebarOpen ? 'md:ml-64' : 'md:ml-20') : '';
+  const moduleLabel = {inicio:'Inicio',planificacion:'Planificación',avales:'Avales',oficios:'Oficios y Cartas',agendas:'Agendas',directorio:'Directorio',reportes:'Reportes',admin_config:'Administración'}[currentModule] || 'CAEDUC';
   const avalesPendientesCount = avales.filter(a=>!a.is_deleted && a.status==='En Proceso').length;
   const displayName = members.find(m=>m.email===session?.user?.email)?.name || '';
 
@@ -1583,7 +1592,13 @@ export default function CAEDUCApp() {
     <ErrorBoundary>
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-800">
       {userMode==='admin' && <Sidebar isOpen={isSidebarOpen} toggle={()=>setSidebarOpen(!isSidebarOpen)} current={currentModule} setModule={(mod)=>{if(mod!=='oficios')setOficioPreFill(null);setCurrentModule(mod);}} logout={handleLogout} permissions={userPermissions} isSuperAdmin={session?.user?.email===SUPER_ADMIN} avalesPendientes={avalesPendientesCount} agendaPendientes={agendaPendientesCount}/>}
-      <main className={"flex-1 p-4 md:p-8 transition-all " + adminClass} style={{overflowX:'hidden',minWidth:0}}>
+      {userMode==='admin' && isSidebarOpen && <button aria-label="Cerrar menú" onClick={()=>setSidebarOpen(false)} className="md:hidden fixed inset-0 z-20 bg-slate-950/35 backdrop-blur-[1px]"/>}
+      <main className={"flex-1 min-w-0 p-4 md:p-8 transition-[margin] duration-200 " + adminClass} style={{overflowX:'hidden'}}>
+        {userMode==='admin' && <header className="mobile-app-header md:hidden sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur">
+          <button onClick={()=>setSidebarOpen(true)} aria-label="Abrir menú" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-caeduc-blueDark text-white shadow-sm active:scale-95 transition-transform"><Menu size={21}/></button>
+          <span className="min-w-0 flex-1 truncate text-sm font-extrabold text-slate-700">{moduleLabel}</span>
+          <img src="/logo-CAEDUC.png" alt="CAEDUC" className="h-9 w-9 rounded-lg bg-white object-contain p-0.5 shadow-sm"/>
+        </header>}
         {userMode==='public' && <LoginView handleLogin={handleLogin} loading={loading} authError={authError} setUserMode={setUserMode} appSettings={appSettings}/>}
         {userMode==='external' && <ExternalAvalesView submitAval={submitAval} onBack={()=>setUserMode('public')} appSettings={appSettings} uploadProgress={uploadProgress} uploadPhase={uploadPhase} serverUploadError={uploadError}/>}
         {userMode==='consultar_estado' && <ConsultarEstadoView onBack={()=>setUserMode('public')} appSettings={appSettings}/>}

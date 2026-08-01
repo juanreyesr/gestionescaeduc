@@ -1,3 +1,43 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  input, select, textarea, button {
+    max-width: 100%;
+  }
+}
+
+/* La aplicación mantiene su composición de escritorio, pero en un teléfono
+   prioriza una columna legible y evita que tarjetas o formularios se salgan. */
+@media (max-width: 639px) {
+  .grid.grid-cols-3,
+  .grid.grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fixed.inset-0.z-50 {
+    padding: 0.75rem;
+  }
+
+  .fixed.inset-0.z-50 > .bg-white {
+    max-height: calc(100dvh - 1.5rem);
+  }
+
+  .mobile-app-header {
+    margin: -1rem -1rem 1.25rem;
+  }
+}
+
+@media (max-width: 479px) {
+  .grid.grid-cols-2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

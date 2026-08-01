@@ -214,7 +214,7 @@ export default function AdminPasswordManager({ supabase, app = 'caeduc' }) {
       {loading ? (
         <div className="flex justify-center py-16"><RefreshCw size={28} className="text-gray-300 animate-spin"/></div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b">
@@ -248,7 +248,7 @@ export default function AdminPasswordManager({ supabase, app = 'caeduc' }) {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => { setTarget(u); setMsg(null); }}
-                      className="opacity-0 group-hover:opacity-100 bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 flex items-center gap-1.5 ml-auto transition-all">
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 flex items-center gap-1.5 ml-auto transition-all">
                       <Lock size={11}/> Cambiar
                     </button>
                   </td>
