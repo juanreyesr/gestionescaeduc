@@ -1493,6 +1493,146 @@ const previewTarifario = (settings) => {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 };
 
+// ── MODELO DE FACTURA ─────────────────────────────────────────────────────────
+const NIT_COLEGIO = '55273092';
+const NOMBRE_COLEGIO = 'COLEGIO DE PSICÓLOGOS DE GUATEMALA';
+
+const montoFactura = (monto) => {
+  const numero = String(monto || '').match(/\d[\d,]*(?:\.\d+)?/);
+  const valor = Number((numero?.[0] || '').replace(/,/g, ''));
+  return Number.isFinite(valor) && valor > 0 ? fmtQ(valor) : 'No indicado en el oficio';
+};
+
+const horaDesdeActividad = (oficio) => {
+  const texto = `${oficio?.actividad_descripcion || ''} ${oficio?.actividad_fecha || ''}`;
+  const match = texto.match(/a\s+las\s+(\d{1,2})(?::(\d{2}))?\s*(?:horas?|hrs?\.?|h)?/i);
+  if (!match) return 'hora indicada en el oficio';
+  return `${String(match[1]).padStart(2, '0')}:${match[2] || '00'}hrs.`;
+};
+
+const conceptoFactura = (oficio) => {
+  if (!oficio) return '';
+  const tipo = (oficio.actividad_tipo || 'actividad').trim().toLowerCase();
+  const nombre = (oficio.actividad_nombre || 'sin nombre').trim().replace(/[.]+$/, '');
+  const fecha = (oficio.actividad_fecha || 'fecha indicada en el oficio').trim();
+  return `Por ${tipo} ${nombre} el ${fecha} a las ${horaDesdeActividad(oficio)}`;
+};
+
+const generateFacturaHTML = (oficio) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Modelo de factura — ${oficio.numero_oficio}</title>
+  <style>@page{size:letter;margin:0.65in;}*{box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;}</style>
+</head><body>
+  <main style="border:1.5px solid #cbd5e1;border-radius:14px;padding:38px 42px;min-height:8.8in;">
+    <div style="border-bottom:2px solid #1a5276;padding-bottom:20px;margin-bottom:30px;">
+      <p style="margin:0;color:#1a5276;font-size:11px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;">Comisión de Acreditación y Educación Continua</p>
+      <h1 style="margin:6px 0 0;font-size:25px;color:#172554;">Modelo de factura</h1>
+      <p style="margin:7px 0 0;color:#64748b;font-size:12px;">Referencia: ${oficio.numero_oficio || 'Oficio CAEDUC'}</p>
+    </div>
+    <section style="font-size:14px;line-height:1.7;">
+      <div style="margin-bottom:19px;"><strong>NIT:</strong> ${NIT_COLEGIO}</div>
+      <div style="margin-bottom:19px;"><strong>A nombre de:</strong> ${NOMBRE_COLEGIO}</div>
+      <div style="margin-bottom:19px;"><strong>Fecha:</strong> ${oficio.actividad_fecha || 'No indicada en el oficio'}</div>
+      <div style="margin-bottom:19px;"><strong>Concepto:</strong><p style="margin:7px 0 0;padding:14px 16px;background:#f8fafc;border-left:4px solid #1a5276;border-radius:4px;line-height:1.7;">${conceptoFactura(oficio)}</p></div>
+      <div><strong>Monto:</strong> <span style="font-size:18px;font-weight:800;color:#166534;">${montoFactura(oficio.monto)}</span></div>
+    </section>
+    <p style="margin:52px 0 0;color:#64748b;font-size:10.5px;line-height:1.6;">Este modelo sirve como guía para emitir la factura correspondiente a la actividad autorizada mediante el oficio indicado.</p>
+  </main>
+</body></html>`;
+
+const downloadFacturaPDF = async (oficio) => {
+  const html2pdf = await loadHtml2Pdf();
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;right:-9999px;top:0;width:8.5in;height:11in;border:0;';
+  document.body.appendChild(iframe);
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open(); doc.write(generateFacturaHTML(oficio)); doc.close();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    await html2pdf().set({
+      margin: 0,
+      filename: `Modelo de factura - ${(oficio.numero_oficio || 'CAEDUC').replace(/[^a-z0-9.-]+/gi, '_')}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, logging: false, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+    }).from(doc.body).save();
+  } finally {
+    document.body.removeChild(iframe);
+  }
+};
+
+function ModeloFacturaSection() {
+  const [oficios, setOficios] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    supabase.from('oficios').select('id,numero_oficio,actividad_nombre,actividad_tipo,actividad_fecha,actividad_descripcion,monto,estado')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) { alert(`No se pudieron cargar los oficios: ${error.message}`); }
+        const conActividad = (data || []).filter(o => o.actividad_nombre && o.estado !== 'Borrador');
+        setOficios(conActividad);
+        if (conActividad.length) setSelectedId(conActividad[0].id);
+        setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const oficio = oficios.find(item => item.id === selectedId);
+
+  const handleDownload = async () => {
+    if (!oficio) return;
+    setPdfLoading(true);
+    try { await downloadFacturaPDF(oficio); }
+    catch (err) { alert(`No se pudo generar el modelo: ${err?.message || err}`); }
+    setPdfLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><FileText size={20} className="text-emerald-600"/> Modelo de facturación</h2>
+        <p className="text-sm text-gray-500">Selecciona la actividad del oficio y revisa el modelo antes de descargarlo.</p>
+      </div>
+
+      <Card className="max-w-3xl">
+        <label className="block text-sm font-bold text-gray-700 mb-2">Actividad autorizada mediante oficio</label>
+        <select value={selectedId} onChange={e => setSelectedId(e.target.value)} disabled={loading || !oficios.length}
+          className="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-gray-50">
+          {loading && <option>Cargando oficios...</option>}
+          {!loading && !oficios.length && <option>No hay oficios de actividades disponibles</option>}
+          {oficios.map(item => <option key={item.id} value={item.id}>{item.numero_oficio} — {item.actividad_nombre}</option>)}
+        </select>
+        <p className="text-xs text-gray-400 mt-2">Se incluyen oficios enviados y archivados que tienen una actividad registrada.</p>
+      </Card>
+
+      {oficio && <div className="max-w-3xl space-y-4">
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
+            <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Vista previa</p>
+            <h3 className="text-white text-xl font-black mt-1">Modelo de factura</h3>
+            <p className="text-slate-300 text-sm mt-1">{oficio.numero_oficio} · {oficio.actividad_nombre}</p>
+          </div>
+          <div className="p-6 sm:p-8 text-sm text-gray-700 space-y-4">
+            <p><span className="font-bold text-gray-900">NIT:</span> {NIT_COLEGIO}</p>
+            <p><span className="font-bold text-gray-900">A nombre de:</span> {NOMBRE_COLEGIO}</p>
+            <p><span className="font-bold text-gray-900">Fecha:</span> {oficio.actividad_fecha || 'No indicada en el oficio'}</p>
+            <div><span className="font-bold text-gray-900">Concepto:</span><p className="mt-2 bg-slate-50 border-l-4 border-emerald-600 rounded-r-lg px-4 py-3 leading-6">{conceptoFactura(oficio)}</p></div>
+            <p><span className="font-bold text-gray-900">Monto:</span> <span className="font-black text-emerald-700 text-base">{montoFactura(oficio.monto)}</span></p>
+          </div>
+        </div>
+        <button onClick={handleDownload} disabled={pdfLoading}
+          className="bg-emerald-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
+          {pdfLoading ? <Loader size={17} className="animate-spin"/> : <Download size={17}/>} {pdfLoading ? 'Generando...' : 'Descargar modelo de factura'}
+        </button>
+      </div>}
+    </div>
+  );
+}
+
 function TarifarioSection() {
   const [settings, setSettings] = useState({});
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -1604,12 +1744,21 @@ export default function DirectorioView() {
         >
           <Award size={15}/> Tarifario
         </button>
+        <button
+          onClick={() => setActiveTab('factura')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
+            activeTab === 'factura' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <FileText size={15}/> Modelo de factura
+        </button>
       </div>
 
       {activeTab === 'directorio'     && <DirectorioSection/>}
       {activeTab === 'proveedores'    && <ProveedoresSection/>}
       {activeTab === 'procedimientos' && <ProcedimientosSection/>}
       {activeTab === 'tarifario'      && <TarifarioSection/>}
+      {activeTab === 'factura'        && <ModeloFacturaSection/>}
     </div>
   );
 }
