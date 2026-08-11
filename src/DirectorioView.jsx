@@ -7,8 +7,9 @@ import {
   ClipboardList, Clock, AlertCircle, CheckCircle,
   ShoppingBag, Tag, Upload, Eye, Settings,
   FileText, RefreshCw, Filter,
-  Award, GraduationCap, Printer, Download, Loader
+  Award, GraduationCap, Printer, Download, Loader, Copy, Check
 } from 'lucide-react';
+import { buildFacturaText, escapeFacturaHtml } from './lib/factura.js';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -1505,60 +1506,29 @@ const previewTarifario = (settings, tarifas) => {
 };
 
 // ── MODELO DE FACTURA ─────────────────────────────────────────────────────────
-const NIT_COLEGIO = '55273092';
-const NOMBRE_COLEGIO = 'COLEGIO DE PSICÓLOGOS DE GUATEMALA';
-
-const montoFactura = (monto) => {
-  const numero = String(monto || '').match(/\d[\d,]*(?:\.\d+)?/);
-  const valor = Number((numero?.[0] || '').replace(/,/g, ''));
-  return Number.isFinite(valor) && valor > 0 ? fmtQ(valor) : 'No indicado en el oficio';
-};
-
-const horaDesdeActividad = (oficio) => {
-  if (oficio?.actividad_hora) return `${oficio.actividad_hora}hrs.`;
-  const texto = `${oficio?.actividad_descripcion || ''} ${oficio?.actividad_fecha || ''}`;
-  const match = texto.match(/a\s+las\s+(\d{1,2})(?::(\d{2}))?\s*(?:horas?|hrs?\.?|h)?/i);
-  if (!match) return 'hora indicada en el oficio';
-  return `${String(match[1]).padStart(2, '0')}:${match[2] || '00'}hrs.`;
-};
-
-const conceptoFactura = (oficio) => {
-  if (!oficio) return '';
-  const tipo = (oficio.actividad_tipo || 'actividad').trim().toLowerCase();
-  const nombre = (oficio.actividad_nombre || 'sin nombre').trim().replace(/[.]+$/, '');
-  const fecha = (oficio.actividad_fecha || 'fecha indicada en el oficio').trim();
-  return `Por ${tipo} ${nombre} el ${fecha} a las ${horaDesdeActividad(oficio)}`;
-};
-
-const generateFacturaHTML = (oficio, fechaFactura) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-  <title>Modelo de factura — ${oficio.numero_oficio}</title>
+const generateFacturaHTML = (oficio, textoFactura) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Modelo de factura — ${escapeFacturaHtml(oficio.numero_oficio)}</title>
   <style>@page{size:letter;margin:0.65in;}*{box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;}</style>
 </head><body>
   <main style="border:1.5px solid #cbd5e1;border-radius:14px;padding:38px 42px;min-height:8.8in;">
     <div style="border-bottom:2px solid #1a5276;padding-bottom:20px;margin-bottom:30px;">
       <p style="margin:0;color:#1a5276;font-size:11px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;">Comisión de Acreditación y Educación Continua</p>
       <h1 style="margin:6px 0 0;font-size:25px;color:#172554;">Modelo de factura</h1>
-      <p style="margin:7px 0 0;color:#64748b;font-size:12px;">Referencia: ${oficio.numero_oficio || 'Oficio CAEDUC'}</p>
+      <p style="margin:7px 0 0;color:#64748b;font-size:12px;">Referencia: ${escapeFacturaHtml(oficio.numero_oficio || 'Oficio CAEDUC')}</p>
     </div>
-    <section style="font-size:14px;line-height:1.7;">
-      <div style="margin-bottom:19px;"><strong>NIT:</strong> ${NIT_COLEGIO}</div>
-      <div style="margin-bottom:19px;"><strong>A nombre de:</strong> ${NOMBRE_COLEGIO}</div>
-      <div style="margin-bottom:19px;"><strong>Fecha:</strong> ${fechaLarga(fechaFactura)}</div>
-      <div style="margin-bottom:19px;"><strong>Concepto:</strong><p style="margin:7px 0 0;padding:14px 16px;background:#f8fafc;border-left:4px solid #1a5276;border-radius:4px;line-height:1.7;">${conceptoFactura(oficio)}</p></div>
-      <div><strong>Monto:</strong> <span style="font-size:18px;font-weight:800;color:#166534;">${montoFactura(oficio.monto)}</span></div>
-    </section>
+    <section style="font-size:14px;line-height:1.8;white-space:pre-wrap;background:#f8fafc;border-left:4px solid #1a5276;border-radius:4px;padding:18px 20px;">${escapeFacturaHtml(textoFactura)}</section>
     <p style="margin:52px 0 0;color:#64748b;font-size:10.5px;line-height:1.6;">Este modelo sirve como guía para emitir la factura correspondiente a la actividad autorizada mediante el oficio indicado.</p>
   </main>
 </body></html>`;
 
-const downloadFacturaPDF = async (oficio, fechaFactura) => {
+const downloadFacturaPDF = async (oficio, textoFactura) => {
   const html2pdf = await loadHtml2Pdf();
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;right:-9999px;top:0;width:8.5in;height:11in;border:0;';
   document.body.appendChild(iframe);
   try {
     const doc = iframe.contentDocument || iframe.contentWindow.document;
-    doc.open(); doc.write(generateFacturaHTML(oficio, fechaFactura)); doc.close();
+    doc.open(); doc.write(generateFacturaHTML(oficio, textoFactura)); doc.close();
     await new Promise(resolve => setTimeout(resolve, 150));
     await html2pdf().set({
       margin: 0,
@@ -1578,6 +1548,8 @@ function ModeloFacturaSection() {
   const [fechaFactura, setFechaFactura] = useState(() => new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [textoFactura, setTextoFactura] = useState('');
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -1596,10 +1568,33 @@ function ModeloFacturaSection() {
 
   const oficio = oficios.find(item => item.id === selectedId);
 
+  useEffect(() => {
+    setTextoFactura(buildFacturaText(oficio, fechaFactura));
+    setCopiado(false);
+  }, [oficio, fechaFactura]);
+
+  const handleCopy = async () => {
+    if (!textoFactura.trim()) return;
+    try {
+      await navigator.clipboard.writeText(textoFactura);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = textoFactura;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    setCopiado(true);
+    window.setTimeout(() => setCopiado(false), 2500);
+  };
+
   const handleDownload = async () => {
     if (!oficio) return;
     setPdfLoading(true);
-    try { await downloadFacturaPDF(oficio, fechaFactura); }
+    try { await downloadFacturaPDF(oficio, textoFactura); }
     catch (err) { alert(`No se pudo generar el modelo: ${err?.message || err}`); }
     setPdfLoading(false);
   };
@@ -1608,7 +1603,7 @@ function ModeloFacturaSection() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><FileText size={20} className="text-emerald-600"/> Modelo de facturación</h2>
-        <p className="text-sm text-gray-500">Selecciona la actividad del oficio y revisa el modelo antes de descargarlo.</p>
+        <p className="text-sm text-gray-500">Selecciona la actividad, edita el texto si lo necesitas y cópialo para enviarlo por mensaje.</p>
       </div>
 
       <Card className="max-w-3xl">
@@ -1632,22 +1627,34 @@ function ModeloFacturaSection() {
       {oficio && <div className="max-w-3xl space-y-4">
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
-            <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Vista previa</p>
+            <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Texto plano editable</p>
             <h3 className="text-white text-xl font-black mt-1">Modelo de factura</h3>
             <p className="text-slate-300 text-sm mt-1">{oficio.numero_oficio} · {oficio.actividad_nombre}</p>
           </div>
-          <div className="p-6 sm:p-8 text-sm text-gray-700 space-y-4">
-            <p><span className="font-bold text-gray-900">NIT:</span> {NIT_COLEGIO}</p>
-            <p><span className="font-bold text-gray-900">A nombre de:</span> {NOMBRE_COLEGIO}</p>
-            <p><span className="font-bold text-gray-900">Fecha:</span> {fechaLarga(fechaFactura)}</p>
-            <div><span className="font-bold text-gray-900">Concepto:</span><p className="mt-2 bg-slate-50 border-l-4 border-emerald-600 rounded-r-lg px-4 py-3 leading-6">{conceptoFactura(oficio)}</p></div>
-            <p><span className="font-bold text-gray-900">Monto:</span> <span className="font-black text-emerald-700 text-base">{montoFactura(oficio.monto)}</span></p>
+          <div className="p-5 sm:p-6">
+            <label htmlFor="texto-modelo-factura" className="block text-sm font-bold text-gray-800">Contenido del mensaje</label>
+            <p className="mt-1 text-xs text-gray-500">Puedes cambiar cualquier detalle antes de copiar o descargar.</p>
+            <textarea id="texto-modelo-factura" rows={9} value={textoFactura} onChange={e => { setTextoFactura(e.target.value); setCopiado(false); }}
+              className="mt-3 min-h-56 w-full resize-y rounded-xl border border-gray-300 bg-slate-50 px-4 py-3 text-base leading-7 text-gray-800 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"/>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-gray-500" aria-live="polite">{copiado ? 'Texto copiado. Ya puedes pegarlo en tu mensaje.' : 'El PDF también utilizará este texto editado.'}</p>
+              <button type="button" onClick={() => setTextoFactura(buildFacturaText(oficio, fechaFactura))}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">
+                <RefreshCw size={16}/> Restablecer texto
+              </button>
+            </div>
           </div>
         </div>
-        <button onClick={handleDownload} disabled={pdfLoading}
-          className="bg-emerald-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
-          {pdfLoading ? <Loader size={17} className="animate-spin"/> : <Download size={17}/>} {pdfLoading ? 'Generando...' : 'Descargar modelo de factura'}
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button type="button" onClick={handleCopy} disabled={!textoFactura.trim()}
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {copiado ? <Check size={18}/> : <Copy size={18}/>} {copiado ? 'Texto copiado' : 'Copiar texto'}
+          </button>
+          <button type="button" onClick={handleDownload} disabled={pdfLoading || !textoFactura.trim()}
+            className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-700 px-5 py-3 font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+            {pdfLoading ? <Loader size={17} className="animate-spin"/> : <Download size={17}/>} {pdfLoading ? 'Generando...' : 'Descargar PDF'}
+          </button>
+        </div>
       </div>}
     </div>
   );
