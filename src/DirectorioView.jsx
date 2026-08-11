@@ -1348,12 +1348,23 @@ function ProcedimientosSection() {
 // ── TARIFARIO DE HONORARIOS ─────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
-const TARIFAS = [
+const TARIFAS_DEFAULT = [
   { grado: 'Licenciatura',    monto: 2000 },
   { grado: 'Maestría',        monto: 2500 },
   { grado: 'Doctorado',       monto: 3000 },
   { grado: 'Post Doctorado',  monto: 3500 },
 ];
+
+const parseTarifas = (value) => {
+  if (!value) return TARIFAS_DEFAULT;
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed) || !parsed.length) return TARIFAS_DEFAULT;
+    return parsed.map(item => ({ grado: String(item.grado || ''), monto: Number(item.monto || 0) }));
+  } catch {
+    return TARIFAS_DEFAULT;
+  }
+};
 
 const fmtQ = (n) => 'Q. ' + n.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -1373,7 +1384,7 @@ const loadHtml2Pdf = () => new Promise((resolve, reject) => {
   document.body.appendChild(s);
 });
 
-const generateTarifarioHTML = (settings = {}) => {
+const generateTarifarioHTML = (settings = {}, tarifas = TARIFAS_DEFAULT) => {
   const f1Name     = settings.firmante1_nombre     || 'M. A. Juan J. Reyes';
   const f1Cargo    = settings.firmante1_cargo      || 'Coordinador';
   const f1Inst     = settings.firmante1_institucion || 'Comisión de Acreditación y Educación Continua, Colegio de Psicólogos de Guatemala';
@@ -1384,7 +1395,7 @@ const generateTarifarioHTML = (settings = {}) => {
     : '/fondo-oficios.jpg';
   const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
 
-  const filas = TARIFAS.map((t, i) => `
+  const filas = tarifas.map((t, i) => `
     <tr style="background:${i % 2 === 0 ? '#f8fafc' : '#ffffff'};">
       <td style="padding:11px 18px;font-size:12px;color:#1f2937;border-bottom:1px solid #e5e7eb;">${t.grado}</td>
       <td style="padding:11px 18px;font-size:12px;font-weight:700;color:#1a5276;text-align:right;border-bottom:1px solid #e5e7eb;white-space:nowrap;">${fmtQ(t.monto)}</td>
@@ -1459,9 +1470,9 @@ const generateTarifarioHTML = (settings = {}) => {
   </body></html>`;
 };
 
-const downloadTarifarioPDF = async (settings) => {
+const downloadTarifarioPDF = async (settings, tarifas) => {
   const html2pdf = await loadHtml2Pdf();
-  const html = generateTarifarioHTML(settings);
+  const html = generateTarifarioHTML(settings, tarifas);
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;right:-9999px;top:0;width:8.5in;height:11in;border:0;';
   document.body.appendChild(iframe);
@@ -1486,8 +1497,8 @@ const downloadTarifarioPDF = async (settings) => {
   }
 };
 
-const previewTarifario = (settings) => {
-  const url = URL.createObjectURL(new Blob([generateTarifarioHTML(settings)], { type: 'text/html' }));
+const previewTarifario = (settings, tarifas) => {
+  const url = URL.createObjectURL(new Blob([generateTarifarioHTML(settings, tarifas)], { type: 'text/html' }));
   const w = window.open(url, '_blank');
   if (!w) { URL.revokeObjectURL(url); alert('Permite las ventanas emergentes para ver la vista previa.'); return; }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -1575,7 +1586,7 @@ function ModeloFacturaSection() {
       .then(({ data, error }) => {
         if (!active) return;
         if (error) { alert(`No se pudieron cargar los oficios: ${error.message}`); }
-        const conActividad = (data || []).filter(o => o.actividad_nombre && o.estado !== 'Borrador');
+        const conActividad = (data || []).filter(o => o.actividad_nombre);
         setOficios(conActividad);
         if (conActividad.length) setSelectedId(conActividad[0].id);
         setLoading(false);
@@ -1606,9 +1617,9 @@ function ModeloFacturaSection() {
           className="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-gray-50">
           {loading && <option>Cargando oficios...</option>}
           {!loading && !oficios.length && <option>No hay oficios de actividades disponibles</option>}
-          {oficios.map(item => <option key={item.id} value={item.id}>{item.numero_oficio} — {item.actividad_nombre}</option>)}
+          {oficios.map(item => <option key={item.id} value={item.id}>{item.numero_oficio} — {item.actividad_nombre}{item.estado === 'Borrador' ? ' (Borrador)' : ''}</option>)}
         </select>
-        <p className="text-xs text-gray-400 mt-2">Se incluyen oficios enviados y archivados que tienen una actividad registrada.</p>
+        <p className="text-xs text-gray-500 mt-2">Se incluyen también los oficios en borrador que tienen una actividad registrada.</p>
       </Card>
 
       <Card className="max-w-3xl">
@@ -1644,20 +1655,120 @@ function ModeloFacturaSection() {
 
 function TarifarioSection() {
   const [settings, setSettings] = useState({});
+  const [tarifas, setTarifas] = useState(TARIFAS_DEFAULT);
+  const [draftTarifas, setDraftTarifas] = useState(TARIFAS_DEFAULT);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     supabase.from('app_settings').select('key, value').then(({ data }) => {
-      if (data) { const m = {}; data.forEach(r => { m[r.key] = r.value; }); setSettings(m); }
+      if (data) {
+        const m = {};
+        data.forEach(r => { m[r.key] = r.value; });
+        const savedTarifas = parseTarifas(m.honorarios_tarifario);
+        setSettings(m);
+        setTarifas(savedTarifas);
+        setDraftTarifas(savedTarifas);
+      }
     });
   }, []);
 
   const handleDownload = async () => {
     setPdfLoading(true);
-    try { await downloadTarifarioPDF(settings); }
+    try { await downloadTarifarioPDF(settings, tarifas); }
     catch (err) { alert('No se pudo generar el PDF: ' + (err?.message || err)); }
     setPdfLoading(false);
   };
+
+  const handleSaveTarifas = async () => {
+    const clean = draftTarifas
+      .map(item => ({ grado: item.grado.trim(), monto: Number(item.monto) }))
+      .filter(item => item.grado);
+    if (!clean.length || clean.some(item => !Number.isFinite(item.monto) || item.monto <= 0)) {
+      setFeedback('Cada grado debe tener un nombre y un valor mayor que cero.');
+      return;
+    }
+    setSaving(true);
+    setFeedback('');
+    const value = JSON.stringify(clean);
+    const { error } = await supabase.from('app_settings').upsert(
+      { key: 'honorarios_tarifario', value, updated_at: new Date().toISOString() },
+      { onConflict: 'key' },
+    );
+    if (error) setFeedback(`No se pudieron guardar los valores: ${error.message}`);
+    else {
+      setTarifas(clean);
+      setDraftTarifas(clean);
+      setSettings(current => ({ ...current, honorarios_tarifario: value }));
+      setEditing(false);
+      setFeedback('Tarifario actualizado.');
+    }
+    setSaving(false);
+  };
+
+  const handleOficioUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setFeedback('Selecciona un archivo PDF.');
+      return;
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      setFeedback('El PDF debe pesar 6 MB o menos para una carga confiable.');
+      return;
+    }
+    setUploading(true);
+    setFeedback('');
+    const safeName = file.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
+    const path = `tarifario/${Date.now()}_${safeName}`;
+    const { data: uploaded, error: uploadError } = await supabase.storage
+      .from('avales-files')
+      .upload(path, file, { upsert: false, cacheControl: '3600', contentType: 'application/pdf' });
+    if (uploadError) {
+      setFeedback(`No se pudo cargar el oficio: ${uploadError.message}`);
+      setUploading(false);
+      return;
+    }
+    const newPath = uploaded?.path || path;
+    const oldPath = settings.tarifario_oficio_path;
+    const { error: settingError } = await supabase.from('app_settings').upsert(
+      { key: 'tarifario_oficio_path', value: newPath, updated_at: new Date().toISOString() },
+      { onConflict: 'key' },
+    );
+    if (settingError) {
+      await supabase.storage.from('avales-files').remove([newPath]);
+      setFeedback(`El PDF se cargó, pero no pudo asociarse al tarifario: ${settingError.message}`);
+    } else {
+      setSettings(current => ({ ...current, tarifario_oficio_path: newPath }));
+      if (oldPath && oldPath !== newPath) await supabase.storage.from('avales-files').remove([oldPath]);
+      setFeedback(oldPath ? 'Oficio PDF reemplazado.' : 'Oficio PDF adjuntado.');
+    }
+    setUploading(false);
+  };
+
+  const handleOficioDownload = async () => {
+    const path = settings.tarifario_oficio_path;
+    if (!path) return;
+    const { data, error } = await supabase.storage.from('avales-files').download(path);
+    if (error) {
+      setFeedback(`No se pudo descargar el oficio: ${error.message}`);
+      return;
+    }
+    const url = URL.createObjectURL(data);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = path.split('/').pop() || 'Oficio_tarifario_CAEDUC.pdf';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const oficioUrl = buildStorageUrl(settings.tarifario_oficio_path, 'avales-files');
 
   return (
     <div className="space-y-6">
@@ -1668,8 +1779,12 @@ function TarifarioSection() {
           </h2>
           <p className="text-sm text-gray-500">Pago a ponentes y conferencistas según grado académico</p>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={() => previewTarifario(settings)}
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <button onClick={() => { setDraftTarifas(tarifas); setEditing(true); setFeedback(''); }}
+            className="bg-amber-100 text-amber-800 px-4 py-2.5 rounded-xl font-bold hover:bg-amber-200 flex items-center gap-2">
+            <Edit3 size={16}/> Editar valores
+          </button>
+          <button onClick={() => previewTarifario(settings, tarifas)}
             className="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-xl font-bold hover:bg-gray-200 flex items-center gap-2">
             <Eye size={16}/> Vista previa
           </button>
@@ -1681,6 +1796,8 @@ function TarifarioSection() {
         </div>
       </div>
 
+      {feedback && <div role="status" className="max-w-2xl mx-auto rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">{feedback}</div>}
+
       <div className="max-w-2xl mx-auto w-full">
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5 text-center">
@@ -1689,8 +1806,8 @@ function TarifarioSection() {
             <p className="text-slate-300 text-xs mt-1">Ponentes y conferencistas · por actividad académica</p>
           </div>
           <div className="divide-y divide-gray-100">
-            {TARIFAS.map((t, i) => (
-              <div key={t.grado} className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
+            {tarifas.map((t, i) => (
+              <div key={`${t.grado}-${i}`} className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
                     <GraduationCap size={18} className="text-purple-600"/>
@@ -1706,6 +1823,53 @@ function TarifarioSection() {
           </div>
         </div>
       </div>
+
+      <Card className="max-w-2xl mx-auto">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 font-bold text-slate-800"><FileText size={18} className="text-blue-600"/> Oficio enviado a Junta Directiva</h3>
+            <p className="mt-1 text-xs text-slate-500">Adjunta el PDF que respalda este tarifario. Podrás verlo, descargarlo o reemplazarlo.</p>
+          </div>
+          <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700">
+            <Upload size={16}/> {uploading ? 'Cargando...' : oficioUrl ? 'Reemplazar PDF' : 'Adjuntar PDF'}
+            <input type="file" accept="application/pdf,.pdf" disabled={uploading} onChange={handleOficioUpload} className="sr-only"/>
+          </label>
+        </div>
+        {oficioUrl ? (
+          <div className="mt-4 flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-emerald-900">Oficio PDF disponible</p>
+              <p className="text-xs text-emerald-700">Documento vigente asociado al tarifario.</p>
+            </div>
+            <a href={oficioUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50"><Eye size={16}/> Ver</a>
+            <button type="button" onClick={handleOficioDownload} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"><Download size={16}/> Descargar</button>
+          </div>
+        ) : <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">Aún no hay un oficio PDF adjunto.</p>}
+      </Card>
+
+      <Modal isOpen={editing} onClose={() => setEditing(false)} title="Editar valores del tarifario" size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">Modifica los montos, elimina grados o agrega los que necesites.</p>
+          {draftTarifas.map((item, index) => (
+            <div key={index} className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[1fr_180px_auto] sm:items-end">
+              <div>
+                <label className="block text-sm font-bold text-slate-700">Grado académico</label>
+                <input value={item.grado} onChange={event => setDraftTarifas(current => current.map((row, rowIndex) => rowIndex === index ? { ...row, grado: event.target.value } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2"/>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700">Valor (Q)</label>
+                <input type="number" min="0.01" step="0.01" inputMode="decimal" value={item.monto} onChange={event => setDraftTarifas(current => current.map((row, rowIndex) => rowIndex === index ? { ...row, monto: event.target.value } : row))} className="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2"/>
+              </div>
+              <button type="button" aria-label={`Eliminar ${item.grado || `grado ${index + 1}`}`} onClick={() => setDraftTarifas(current => current.filter((_, rowIndex) => rowIndex !== index))} disabled={draftTarifas.length === 1} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 size={18}/></button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setDraftTarifas(current => [...current, { grado: '', monto: '' }])} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-blue-300 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50"><Plus size={16}/> Agregar grado</button>
+          <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setEditing(false)} className="min-h-11 rounded-xl bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancelar</button>
+            <button type="button" onClick={handleSaveTarifas} disabled={saving} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"><Save size={16}/>{saving ? 'Guardando...' : 'Guardar valores'}</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

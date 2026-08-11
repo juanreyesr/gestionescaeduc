@@ -43,3 +43,24 @@ export const parseJustificacionSections = (txt) => {
   });
   return { intro, sections };
 };
+
+const EXPOSITORES_SECTION = 'Expositor(es)';
+
+// Mantiene los expositores dentro del bloque estructurado de `justificacion`.
+// Esto conserva compatibilidad con la tabla actual de oficios sin requerir una
+// migración y permite que otros módulos reutilicen el dato de forma segura.
+export const getOficioExpositores = (oficioOrText) => {
+  const text = typeof oficioOrText === 'string'
+    ? oficioOrText
+    : oficioOrText?.justificacion || '';
+  return parseJustificacionSections(text).sections[EXPOSITORES_SECTION] || '';
+};
+
+export const setOficioExpositores = (text, expositores) => {
+  const source = text || '';
+  const sectionPattern = /(?:^|\n)###\s*Expositor\(es\)\s*\n[\s\S]*?(?=\n###\s|$)/i;
+  const cleaned = source.replace(sectionPattern, '').trim();
+  const value = String(expositores || '').trim();
+  if (!value) return cleaned;
+  return `${cleaned ? `${cleaned}\n\n` : ''}### ${EXPOSITORES_SECTION}\n${value}`;
+};

@@ -7,7 +7,7 @@ import {
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
   Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift,
-  Loader, Home, ChevronRight, Sparkles
+  Loader, Home, ChevronRight, Sparkles, Megaphone
 } from 'lucide-react';
 import {
   SUPER_ADMIN, ROLES, MODULES, canDo,
@@ -15,7 +15,7 @@ import {
   validarHorasActividad, MODALITIES, MOTIVOS_OFICIO,
   computeSuggestedOficioNumero,
 } from './lib/constants.js';
-import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate, mergeInformeTecnico, parseJustificacionSections } from './lib/oficioTemplates.js';
+import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate, mergeInformeTecnico, parseJustificacionSections, getOficioExpositores, setOficioExpositores } from './lib/oficioTemplates.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
 // Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
 // en vez de cargar las ~6,000 líneas de todas las vistas en el bundle inicial.
@@ -26,6 +26,7 @@ const CartasSection           = lazy(() => import('./CartasView'));
 const SouvenirsView           = lazy(() => import('./SouvenirsView'));
 const AdminPasswordManager    = lazy(() => import('./AdminPasswordManager'));
 const InicioDashboardView     = lazy(() => import('./InicioDashboardView'));
+const PublicacionesView       = lazy(() => import('./PublicacionesView'));
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -465,7 +466,7 @@ const generateOficioHTML = (oficio, settings = {}) => {
   const dr = (label, val) => val ? `<tr><td style="font-weight:600;font-size:11px;padding:2px 10px 2px 0;white-space:nowrap;">${label}:</td><td style="font-size:11px;padding:2px 0;">${val}</td></tr>` : '';
   let detallesHTML = '';
   if (oficio.actividad_nombre && (oficio.actividad_tipo || oficio.actividad_fecha)) {
-    detallesHTML = `<table style="margin:10px 0;border-collapse:collapse;">${dr('Tipo',oficio.actividad_tipo)}${dr('Modalidad',oficio.actividad_modalidad)}${dr('Duración',oficio.actividad_duracion)}${dr('Fecha',oficio.actividad_fecha)}${dr('Hora de la actividad',oficio.actividad_hora)}${dr('Sede',oficio.actividad_sede)}</table>`;
+    detallesHTML = `<table style="margin:10px 0;border-collapse:collapse;">${dr('Tipo',oficio.actividad_tipo)}${dr('Modalidad',oficio.actividad_modalidad)}${dr('Duración',oficio.actividad_duracion)}${dr('Fecha',oficio.actividad_fecha)}${dr('Hora de la actividad',oficio.actividad_hora)}${dr('Sede / Plataforma',oficio.actividad_sede)}${dr('Expositor(es)',getOficioExpositores(oficio))}</table>`;
   }
   // PARTE 4: informe técnico formal — parsea secciones estructuradas dentro de `justificacion`
   const parsedInforme = parseJustificacionSections(oficio.justificacion || '');
@@ -989,12 +990,12 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
     setCurrentStep(1);
     const isCustomMotivo = (m) => m && !MOTIVOS_OFICIO.includes(m);
     if (preFillData && !initialData) {
-      setFd({ titulo:'', numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_hora:preFillData.actividad_hora||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_descripcion:preFillData.actividad_descripcion||'', monto:preFillData.monto||'', monto_detalle:preFillData.monto_detalle||'', justificacion:preFillData.justificacion||'', poblacion_objetivo:preFillData.poblacion_objetivo||'', resultados_esperados:preFillData.resultados_esperados||'', cronograma_resumen:preFillData.cronograma_resumen||'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
+      setFd({ titulo:'', numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_hora:preFillData.actividad_hora||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_expositores:preFillData.actividad_expositores||getOficioExpositores(preFillData.justificacion||''), actividad_descripcion:preFillData.actividad_descripcion||'', monto:preFillData.monto||'', monto_detalle:preFillData.monto_detalle||'', justificacion:preFillData.justificacion||'', poblacion_objetivo:preFillData.poblacion_objetivo||'', resultados_esperados:preFillData.resultados_esperados||'', cronograma_resumen:preFillData.cronograma_resumen||'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
       if (preFillData.justificacion) setShowInforme(true);
     } else {
       const m = initialData?.motivo || MOTIVOS_OFICIO[0];
       const parsed = parseJustificacionSections(initialData?.justificacion || '');
-      setFd({ titulo:initialData?.titulo||'', numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:isCustomMotivo(m)?'Otro (personalizado)':m, motivo_custom:isCustomMotivo(m)?m:'', actividad_nombre:initialData?.actividad_nombre||'', actividad_tipo:initialData?.actividad_tipo||'', actividad_fecha:initialData?.actividad_fecha||'', actividad_hora:initialData?.actividad_hora||'', actividad_duracion:initialData?.actividad_duracion||'', actividad_modalidad:initialData?.actividad_modalidad||'', actividad_sede:initialData?.actividad_sede||'', actividad_descripcion:initialData?.actividad_descripcion||'', monto:initialData?.monto||'', monto_detalle:initialData?.monto_detalle||'', justificacion:initialData?parsed.intro:'', poblacion_objetivo:parsed.sections['Población objetivo y alcance esperado']||'', resultados_esperados:parsed.sections['Resultados esperados']||'', cronograma_resumen:parsed.sections['Cronograma resumido']||'', solicitud_puntual:initialData?.solicitud_puntual||'', cuerpo_personalizado:initialData?.cuerpo_personalizado||'', estado:initialData?.estado||'Borrador' });
+      setFd({ titulo:initialData?.titulo||'', numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:isCustomMotivo(m)?'Otro (personalizado)':m, motivo_custom:isCustomMotivo(m)?m:'', actividad_nombre:initialData?.actividad_nombre||'', actividad_tipo:initialData?.actividad_tipo||'', actividad_fecha:initialData?.actividad_fecha||'', actividad_hora:initialData?.actividad_hora||'', actividad_duracion:initialData?.actividad_duracion||'', actividad_modalidad:initialData?.actividad_modalidad||'', actividad_sede:initialData?.actividad_sede||'', actividad_expositores:getOficioExpositores(initialData)||'', actividad_descripcion:initialData?.actividad_descripcion||'', monto:initialData?.monto||'', monto_detalle:initialData?.monto_detalle||'', justificacion:initialData?parsed.intro:'', poblacion_objetivo:parsed.sections['Población objetivo y alcance esperado']||'', resultados_esperados:parsed.sections['Resultados esperados']||'', cronograma_resumen:parsed.sections['Cronograma resumido']||'', solicitud_puntual:initialData?.solicitud_puntual||'', cuerpo_personalizado:initialData?.cuerpo_personalizado||'', estado:initialData?.estado||'Borrador' });
     }
   }, [isOpen, initialData, preFillData]);
   if (!isOpen||!fd) return null;
@@ -1007,7 +1008,8 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
     const sd={...base};
     if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom;
     delete sd.motivo_custom;
-    sd.justificacion = mergeInformeTecnico(sd.justificacion, sd);
+    sd.justificacion = setOficioExpositores(mergeInformeTecnico(sd.justificacion, sd), sd.actividad_expositores);
+    delete sd.actividad_expositores;
     delete sd.poblacion_objetivo; delete sd.resultados_esperados; delete sd.cronograma_resumen;
     return sd;
   };
@@ -1038,6 +1040,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
             <div className="border-t pt-3 space-y-2 text-sm">
               <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Motivo:</span><span className="text-gray-800">{isCustomMotivo?fd.motivo_custom:fd.motivo}</span></div>
               {fd.actividad_nombre && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Actividad:</span><span className="text-gray-800">{fd.actividad_nombre}</span></div>}
+              {fd.actividad_expositores && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Expositor(es):</span><span className="text-gray-800">{fd.actividad_expositores}</span></div>}
               {fd.monto && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Monto:</span><span className="text-green-700 font-bold">{fd.monto}</span></div>}
             </div>
           </div>
@@ -1067,7 +1070,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
               <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e=>upd('motivo',e.target.value)}>{MOTIVOS_OFICIO.map(m=><option key={m} value={m}>{m}</option>)}</select>
               {isCustomMotivo && <textarea required rows={3} placeholder="Describe el motivo..." className="w-full border p-2.5 rounded-lg text-sm resize-none" value={fd.motivo_custom} onChange={e=>upd('motivo_custom',e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.stopPropagation();}}/>}
             </div>
-            {isRecursos && (<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100"><h4 className="font-bold text-green-800 text-sm uppercase">Datos de la Actividad</h4><input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>upd('actividad_nombre',e.target.value)}/><textarea rows={3} placeholder="Descripción" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>upd('actividad_descripcion',e.target.value)}/><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>upd('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>upd('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div></div><div className="grid grid-cols-3 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>upd('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>upd('actividad_fecha',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Hora de la actividad</label><input type="time" className="w-full border p-2.5 rounded-lg" value={fd.actividad_hora} onChange={e=>upd('actividad_hora',e.target.value)}/></div></div><input placeholder="Sede / Plataforma" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>upd('actividad_sede',e.target.value)}/></div>)}
+            {isRecursos && (<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100"><h4 className="font-bold text-green-800 text-sm uppercase">Datos de la Actividad</h4><input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>upd('actividad_nombre',e.target.value)}/><textarea rows={3} placeholder="Descripción" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>upd('actividad_descripcion',e.target.value)}/><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>upd('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>upd('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>upd('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>upd('actividad_fecha',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Hora de la actividad</label><input type="time" className="w-full border p-2.5 rounded-lg" value={fd.actividad_hora} onChange={e=>upd('actividad_hora',e.target.value)}/></div></div><div><label className="block text-sm font-bold mb-1">Sede / Plataforma</label><input placeholder="Dirección, aula virtual o ambas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>upd('actividad_sede',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Nombre de expositor(es)</label><textarea rows={2} placeholder="Escribe uno o varios nombres" className="w-full border p-2.5 rounded-lg" value={fd.actividad_expositores} onChange={e=>upd('actividad_expositores',e.target.value)}/><p className="mt-1 text-xs text-green-700">Se incluirán en el oficio y en la solicitud de publicación.</p></div></div>)}
             {isRecursos && (<div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100"><h4 className="font-bold text-rose-800 text-sm uppercase">Recursos Solicitados</h4><input placeholder="Monto (ej: Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e=>upd('monto',e.target.value)}/><textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e=>upd('monto_detalle',e.target.value)}/></div>)}
             <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
               <button type="button" onClick={()=>setShowInforme(s=>!s)} className="w-full flex items-center justify-between">
@@ -1397,6 +1400,7 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSu
         {visible('planificacion') && <SidebarBtn icon={<CheckCircle size={18}/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>}
         {visible('avales')        && <SidebarBtn icon={<Users size={18}/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen} badge={avalesPendientes}/>}
         {visible('oficios')       && <SidebarBtn icon={<FileSignature size={18}/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>}
+        {visible('publicaciones') && <SidebarBtn icon={<Megaphone size={18}/>} label="Solicitud de publicación" active={current==='publicaciones'} onClick={()=>setModule('publicaciones')} isOpen={isOpen}/>}
         {visible('agendas')       && <SidebarBtn icon={<BookOpen size={18}/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen} badge={agendaPendientes}/>}
         {visible('directorio')    && <SidebarBtn icon={<Users size={18}/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>}
         {visible('reportes')      && <SidebarBtn icon={<Clock size={18}/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>}
@@ -1584,7 +1588,7 @@ export default function CAEDUCApp() {
   };
 
   const adminClass = userMode === 'admin' ? (isSidebarOpen ? 'md:ml-64' : 'md:ml-20') : '';
-  const moduleLabel = {inicio:'Inicio',planificacion:'Planificación',avales:'Avales',oficios:'Oficios y Cartas',agendas:'Agendas',directorio:'Directorio',reportes:'Reportes',admin_config:'Administración'}[currentModule] || 'CAEDUC';
+  const moduleLabel = {inicio:'Inicio',planificacion:'Planificación',avales:'Avales',oficios:'Oficios y Cartas',publicaciones:'Solicitud de publicación',agendas:'Agendas',directorio:'Directorio',reportes:'Reportes',admin_config:'Administración'}[currentModule] || 'CAEDUC';
   const avalesPendientesCount = avales.filter(a=>!a.is_deleted && a.status==='En Proceso').length;
   const displayName = members.find(m=>m.email===session?.user?.email)?.name || '';
 
@@ -1609,6 +1613,7 @@ export default function CAEDUCApp() {
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios} abrirActividadId={actividadDesdeInicio} onClearAbrirActividad={()=>setActividadDesdeInicio(null)}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
+            {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting}/>}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
             {currentModule==='reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>}
