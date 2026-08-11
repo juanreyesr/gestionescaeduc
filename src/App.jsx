@@ -1400,11 +1400,11 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSu
         {visible('planificacion') && <SidebarBtn icon={<CheckCircle size={18}/>} label="Planificación" active={current==='planificacion'} onClick={()=>setModule('planificacion')} isOpen={isOpen}/>}
         {visible('avales')        && <SidebarBtn icon={<Users size={18}/>} label="Avales" active={current==='avales'} onClick={()=>setModule('avales')} isOpen={isOpen} badge={avalesPendientes}/>}
         {visible('oficios')       && <SidebarBtn icon={<FileSignature size={18}/>} label="Oficios y Cartas" active={current==='oficios'} onClick={()=>setModule('oficios')} isOpen={isOpen}/>}
-        {visible('publicaciones') && <SidebarBtn icon={<Megaphone size={18}/>} label="Solicitud de publicación" active={current==='publicaciones'} onClick={()=>setModule('publicaciones')} isOpen={isOpen}/>}
         {visible('agendas')       && <SidebarBtn icon={<BookOpen size={18}/>} label="Agendas" active={current==='agendas'} onClick={()=>setModule('agendas')} isOpen={isOpen} badge={agendaPendientes}/>}
         {visible('directorio')    && <SidebarBtn icon={<Users size={18}/>} label="Directorio" active={current==='directorio'} onClick={()=>setModule('directorio')} isOpen={isOpen}/>}
         {visible('reportes')      && <SidebarBtn icon={<Clock size={18}/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>}
         <SidebarBtn icon={<Settings size={18}/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
+        {visible('publicaciones') && <SidebarBtn icon={<Megaphone size={18}/>} label="Solicitud de publicación" active={current==='publicaciones'} onClick={()=>setModule('publicaciones')} isOpen={isOpen}/>}
       </nav>
       <button onClick={logout} className={`m-2 flex items-center gap-2 text-rose-200 hover:text-white hover:bg-white/10 rounded-xl p-3 transition-colors ${!isOpen && 'justify-center'}`}>
         <LogOut size={18}/>{isOpen && <span className="text-sm font-semibold">Salir</span>}
