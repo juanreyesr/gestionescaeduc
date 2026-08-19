@@ -52,5 +52,6 @@ test('escapa el contenido editable antes de crear el HTML del PDF', () => {
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /&lt;script&gt;/);
   assert.match(html, /Ana &amp; Luis/);
+  assert.doesNotMatch(html, /border-top/);
   assert.equal(escapeInformeHTML('A&B'), 'A&amp;B');
 });
