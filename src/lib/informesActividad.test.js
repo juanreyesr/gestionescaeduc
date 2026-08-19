@@ -34,7 +34,8 @@ test('redacta el informe en tercera persona con audiencia y autorización', () =
 
   assert.match(draft.cuerpo, /que Dra\. Ana López impartió la conferencia/);
   assert.doesNotMatch(draft.cuerpo, /persona ponente/i);
-  assert.match(draft.cuerpo, /profesionales de la Psicología que se encontraban activos/);
+  assert.match(draft.cuerpo, /psicólogos con colegiado activo en el Colegio de Psicólogos de Guatemala/);
+  assert.doesNotMatch(draft.cuerpo, /profesionales de la Psicología/i);
   assert.match(draft.cuerpo, /autoriza que.*material.*Aula Virtual/s);
   assert.doesNotMatch(draft.cuerpo, /solicitamos/i);
   assert.equal(draft.actividad_duracion, '2 horas');
