@@ -7,6 +7,7 @@ import {
   buildInformeActividadDraft,
   formatInformeDate,
   getInformePonentes,
+  replaceInformePonente,
 } from './lib/informesActividad.js';
 
 const inputClass = 'mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200';
@@ -34,9 +35,7 @@ const PaperPreview = ({ draft }) => (
       {String(draft.cuerpo || '').split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
     </div>
     <p className="mt-[5%]">Atentamente,</p>
-    <div className="mx-auto mt-[9%] w-[55%] border-t border-slate-700 pt-2 text-center font-bold">
-      {draft.ponente_nombre || 'Nombre del ponente pendiente'}
-    </div>
+    {draft.ponente_nombre ? <div className="mx-auto mt-[9%] text-center font-bold">{draft.ponente_nombre}</div> : null}
   </article>
 );
 
@@ -99,7 +98,13 @@ export default function InformesActividadesView({
       setFeedback({ type: 'info', text: 'Se preparó un informe independiente para el ponente seleccionado.' });
       return;
     }
-    update('ponente_nombre', value);
+    setDraft(current => ({
+      ...current,
+      ponente_nombre: value,
+      cuerpo: replaceInformePonente(current.cuerpo, current.ponente_nombre, value),
+    }));
+    setDirty(true);
+    setFeedback(null);
   };
 
   const regenerate = () => {
@@ -198,6 +203,7 @@ export default function InformesActividadesView({
             <div><p className="text-xs font-extrabold uppercase tracking-widest text-blue-600">Vista previa primero</p><h2 className="text-lg font-black text-slate-800">Hoja con membrete institucional</h2></div>
             <FileText className="text-slate-400" size={24}/>
           </div>
+          {!draft.ponente_nombre ? <p role="status" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold leading-5 text-amber-800"><AlertCircle className="mt-0.5 shrink-0" size={17}/>Escribe el nombre completo y grado académico del ponente para mostrarlo al final del informe.</p> : null}
           <PaperPreview draft={draft}/>
         </div>
       </section>

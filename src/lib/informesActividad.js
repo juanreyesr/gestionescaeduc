@@ -44,6 +44,18 @@ export const normalizeInformeDuration = (value) => {
   return number ? `${number.replace(',', '.')} horas` : source;
 };
 
+const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export const replaceInformePonente = (body = '', previous = '', next = '') => {
+  const replacement = String(next || '').trim() || '[Nombre del ponente]';
+  const current = String(previous || '').trim();
+  let updated = String(body || '');
+  if (!current) return updated.replace(/\[Nombre del ponente\]/g, replacement);
+  const escaped = escapeRegExp(current);
+  updated = updated.replace(new RegExp(`(que\\s+)${escaped}(\\s+impartió)`, 'g'), (_, prefix, suffix) => `${prefix}${replacement}${suffix}`);
+  return updated.replace(new RegExp(`(Asimismo,\\s+)${escaped}(\\s+autoriza)`, 'g'), (_, prefix, suffix) => `${prefix}${replacement}${suffix}`);
+};
+
 const usefulProposalDetails = (oficio = {}) => {
   const parsed = parseJustificacionSections(oficio.justificacion || '');
   const candidates = [oficio.actividad_descripcion, parsed.intro]

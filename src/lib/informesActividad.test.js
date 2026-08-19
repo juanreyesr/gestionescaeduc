@@ -7,6 +7,7 @@ import {
   formatInformeDate,
   generateInformeActividadHTML,
   normalizeInformeDuration,
+  replaceInformePonente,
   splitPonentes,
 } from './informesActividad.js';
 
@@ -20,6 +21,15 @@ test('separa varios ponentes sin dividir nombres por comas', () => {
   assert.deepEqual(splitPonentes('Dra. Ana López\nLic. Mario Pérez y M.A. Julia Ruiz'), [
     'Dra. Ana López', 'Lic. Mario Pérez', 'M.A. Julia Ruiz',
   ]);
+});
+
+test('actualiza las menciones del ponente sin regenerar el informe', () => {
+  const pending = 'Se comunica que [Nombre del ponente] impartió el taller.\n\nAsimismo, [Nombre del ponente] autoriza el material.';
+  const completed = replaceInformePonente(pending, '', 'Dra. Ana López');
+  assert.doesNotMatch(completed, /\[Nombre del ponente\]/);
+  assert.match(completed, /que Dra\. Ana López impartió/);
+  assert.match(completed, /Asimismo, Dra\. Ana López autoriza/);
+  assert.match(replaceInformePonente(completed, 'Dra. Ana López', 'Dr. Luis Pérez'), /que Dr\. Luis Pérez impartió/);
 });
 
 test('redacta el informe en tercera persona con audiencia y autorización', () => {
