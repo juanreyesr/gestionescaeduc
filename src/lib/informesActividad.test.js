@@ -32,7 +32,8 @@ test('redacta el informe en tercera persona con audiencia y autorización', () =
     actividad_descripcion: 'Solicitamos recursos para brindar herramientas clínicas de abordaje.',
   }, 'Dra. Ana López', '2026-08-10');
 
-  assert.match(draft.cuerpo, /La persona ponente Dra\. Ana López informa/);
+  assert.match(draft.cuerpo, /que Dra\. Ana López impartió la conferencia/);
+  assert.doesNotMatch(draft.cuerpo, /persona ponente/i);
   assert.match(draft.cuerpo, /profesionales de la Psicología que se encontraban activos/);
   assert.match(draft.cuerpo, /autoriza que.*material.*Aula Virtual/s);
   assert.doesNotMatch(draft.cuerpo, /solicitamos/i);

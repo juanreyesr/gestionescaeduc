@@ -70,11 +70,11 @@ export const buildInformeActividadDraft = (oficio = {}, ponente = '', fechaInfor
   const person = ponenteNombre || '[Nombre del ponente]';
   const article = /^(taller|seminario|simposio|congreso|diplomado)\b/i.test(actividadTipo) ? 'el' : 'la';
   const paragraphs = [
-    `La persona ponente ${person} informa a la Junta Directiva del Colegio de Psicólogos de Guatemala que se realizó ${article} ${actividadTipo.toLowerCase()} denominada "${actividadNombre || '[Nombre de la actividad]'}", en fecha ${formatInformeDate(actividadFecha) || '[Fecha de realización]'}, en modalidad ${actividadModalidad.toLowerCase()}, con una duración de ${actividadDuracion}.`,
+    `Por medio del presente informe, se comunica a la Junta Directiva del Colegio de Psicólogos de Guatemala que ${person} impartió ${article} ${actividadTipo.toLowerCase()} denominada "${actividadNombre || '[Nombre de la actividad]'}", en fecha ${formatInformeDate(actividadFecha) || '[Fecha de realización]'}, en modalidad ${actividadModalidad.toLowerCase()}, con una duración de ${actividadDuracion}.`,
     details ? `De acuerdo con la propuesta técnica, la actividad desarrolló los siguientes aspectos: ${details}` : `Durante la actividad se desarrollaron contenidos de actualización profesional relacionados con "${actividadNombre || 'el tema programado'}", de acuerdo con la propuesta técnica presentada a la Junta Directiva.`,
     'La actividad estuvo dirigida exclusivamente a profesionales de la Psicología que se encontraban activos en el Colegio de Psicólogos de Guatemala, con el propósito de fortalecer su actualización científico-académica y su ejercicio profesional.',
     results || 'La actividad permitió fortalecer conocimientos y competencias aplicables al ejercicio profesional, en congruencia con los objetivos de educación continua de CAEDUC.',
-    `Asimismo, la persona ponente ${person} autoriza que, al finalizar la actividad, el material utilizado pueda ser cargado en el Aula Virtual del Colegio de Psicólogos de Guatemala para consulta y aprovechamiento académico de los profesionales activos.`,
+    `Asimismo, ${person} autoriza que, al finalizar la actividad, el material utilizado pueda ser cargado en el Aula Virtual del Colegio de Psicólogos de Guatemala para consulta y aprovechamiento académico de los profesionales activos.`,
   ];
 
   return {
