@@ -13,6 +13,7 @@ export const MODULES = [
   { id: 'avales',        label: 'Avales',        icon: '📋' },
   { id: 'oficios',       label: 'Oficios y Cartas', icon: '✍️' },
   { id: 'publicaciones', label: 'Solicitud de publicación', icon: '📣' },
+  { id: 'informes_actividades', label: 'Informes de actividades', icon: '📄' },
   { id: 'agendas',       label: 'Agendas',       icon: '📖' },
   { id: 'directorio',    label: 'Directorio',    icon: '👥' },
   { id: 'reportes',      label: 'Reportes',      icon: '🕐' },

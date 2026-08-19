@@ -7,7 +7,7 @@ import {
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
   Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift,
-  Loader, Home, ChevronRight, Sparkles, Megaphone
+  Loader, Home, ChevronRight, Sparkles, Megaphone, FileCheck2
 } from 'lucide-react';
 import {
   SUPER_ADMIN, ROLES, MODULES, canDo,
@@ -16,6 +16,7 @@ import {
   computeSuggestedOficioNumero,
 } from './lib/constants.js';
 import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate, mergeInformeTecnico, parseJustificacionSections, getOficioExpositores, setOficioExpositores } from './lib/oficioTemplates.js';
+import { generateInformeActividadHTML, informeFileName } from './lib/informesActividad.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
 // Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
 // en vez de cargar las ~6,000 líneas de todas las vistas en el bundle inicial.
@@ -27,6 +28,7 @@ const SouvenirsView           = lazy(() => import('./SouvenirsView'));
 const AdminPasswordManager    = lazy(() => import('./AdminPasswordManager'));
 const InicioDashboardView     = lazy(() => import('./InicioDashboardView'));
 const PublicacionesView       = lazy(() => import('./PublicacionesView'));
+const InformesActividadesView = lazy(() => import('./InformesActividadesView'));
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -496,6 +498,15 @@ const openOficioLetter = async (oficio, settings = {}, mode = 'download') => {
   else await downloadPDF(html, `Oficio_${(oficio.numero_oficio || 'CAEDUC').replace(/\s+/g, '_')}`);
 };
 
+const openInformeActividad = async (informe, settings = {}, mode = 'download') => {
+  const membreteUrl = settings.membrete_path
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
+    : '/fondo-oficios.jpg';
+  const html = generateInformeActividadHTML(informe, { membreteUrl });
+  if (mode === 'preview') previewHTML(html);
+  else await downloadPDF(html, informeFileName(informe));
+};
+
 // ── UI Components ──────────────────────────────────────────────────────────────
 // Parte 7 (rediseño): Modal, Card, Badge y BackButton viven ahora en components/ui.jsx
 // con la paleta institucional CAEDUC. Se re-exportan aquí con los mismos nombres
@@ -844,7 +855,7 @@ const VerificarAvalView = ({ onBack }) => {
 };
 
 // ── OficioCard ────────────────────────────────────────────────────────────────
-const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete, onSavePunto }) => {
+const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, onEdit, onStatusChange, onDelete, onSavePunto }) => {
   const [expanded, setExpanded] = useState(false);
   const [editingPunto, setEditingPunto] = useState(false);
   const [puntoNumber, setPuntoNumber] = useState(o.numero_punto_resolutivo || '');
@@ -885,6 +896,18 @@ const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete, 
             {o.estado==='Enviado' && <button onClick={(e)=>{e.stopPropagation();onStatusChange('Archivado');}} className="bg-gray-50 text-gray-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-gray-100 flex items-center gap-1"><Archive size={12}/> Archivar</button>}
             <button onClick={(e)=>{e.stopPropagation();onDelete();}} className="bg-red-50 text-red-500 px-2.5 py-1.5 rounded-lg text-xs hover:bg-red-100 flex items-center gap-1 ml-auto"><Trash2 size={12}/> Eliminar</button>
           </div>
+          {informes.length > 0 && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3" onClick={e=>e.stopPropagation()}>
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase text-emerald-800"><FileCheck2 size={13}/> Informes guardados</p>
+              <div className="flex flex-wrap gap-2">
+                {informes.map(informe => (
+                  <button key={informe.id} type="button" onClick={()=>onDownloadInforme(informe)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition-colors hover:bg-emerald-100">
+                    <Download size={12}/> {informe.ponente_nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Punto Resolutivo */}
           <div className="border-t pt-3 mt-1" onClick={e=>e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-2">
@@ -936,7 +959,7 @@ const OficioCard = ({ oficio: o, appSettings, onEdit, onStatusChange, onDelete, 
 };
 
 // ── OficiosAdminView ───────────────────────────────────────────────────────────
-const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings, preFillData, onClearPreFill }) => {
+const OficiosAdminView = ({ oficios, informes = [], onDownloadInforme, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings, preFillData, onClearPreFill }) => {
   const [showForm,setShowForm]=useState(false);const [editingOficio,setEditingOficio]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [deleting,setDeleting]=useState(false);const [cartasTab,setCartasTab]=useState('oficios');
   useEffect(()=>{if(preFillData){setEditingOficio(null);setShowForm(true);}},[preFillData]);
   const handleNew=()=>{setEditingOficio(null);if(onClearPreFill)onClearPreFill();setShowForm(true);};
@@ -964,7 +987,7 @@ const OficiosAdminView = ({ oficios, onCreateOficio, onUpdateOficio, onDeleteOfi
         <Card><div className="text-center"><p className="text-3xl font-bold text-green-600">{oficios.filter(o=>o.estado==='Enviado').length}</p><p className="text-sm text-gray-500">Enviados</p></div></Card>
       </div>
       <div className="space-y-2">
-        {oficios.map(o => <OficioCard key={o.id} oficio={o} appSettings={appSettings} onEdit={()=>handleEdit(o)} onStatusChange={(s)=>handleStatusChange(o,s)} onDelete={()=>setDeleteModal(o)} onSavePunto={(pd)=>handleSavePunto(o,pd)}/>)}
+        {oficios.map(o => <OficioCard key={o.id} oficio={o} appSettings={appSettings} informes={informes.filter(informe=>informe.oficio_id===o.id)} onDownloadInforme={onDownloadInforme} onEdit={()=>handleEdit(o)} onStatusChange={(s)=>handleStatusChange(o,s)} onDelete={()=>setDeleteModal(o)} onSavePunto={(pd)=>handleSavePunto(o,pd)}/>)}
         {oficios.length===0 && <div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4"/><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>}
       </div>
       {showForm && <OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} oficios={oficios} appSettings={appSettings}/>}
@@ -1405,6 +1428,7 @@ const Sidebar = ({ isOpen, toggle, current, setModule, logout, permissions, isSu
         {visible('reportes')      && <SidebarBtn icon={<Clock size={18}/>} label="Reportes" active={current==='reportes'} onClick={()=>setModule('reportes')} isOpen={isOpen}/>}
         <SidebarBtn icon={<Settings size={18}/>} label="Admin" active={current==='admin_config'} onClick={()=>setModule('admin_config')} isOpen={isOpen}/>
         {visible('publicaciones') && <SidebarBtn icon={<Megaphone size={18}/>} label="Solicitud de publicación" active={current==='publicaciones'} onClick={()=>setModule('publicaciones')} isOpen={isOpen}/>}
+        {visible('informes_actividades') && <SidebarBtn icon={<FileCheck2 size={18}/>} label="Informes de actividades" active={current==='informes_actividades'} onClick={()=>setModule('informes_actividades')} isOpen={isOpen}/>}
       </nav>
       <button onClick={logout} className={`m-2 flex items-center gap-2 text-rose-200 hover:text-white hover:bg-white/10 rounded-xl p-3 transition-colors ${!isOpen && 'justify-center'}`}>
         <LogOut size={18}/>{isOpen && <span className="text-sm font-semibold">Salir</span>}
@@ -1426,7 +1450,7 @@ const SidebarBtn = ({ icon, label, active, onClick, isOpen, badge = 0 }) => (
 
 // ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
-  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(()=>window.innerWidth >= 768);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(()=>window.innerWidth >= 768);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [informesActividades,setInformesActividades]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
   const [actividadDesdeInicio,setActividadDesdeInicio]=useState(null); // id de actividad a abrir al entrar a planificación
   const [userPermissions,setUserPermissions]=useState(null); // null = acceso completo
   const [agendaPendientesCount,setAgendaPendientesCount]=useState(0);
@@ -1448,7 +1472,7 @@ export default function CAEDUCApp() {
     return () => mobile.removeEventListener('change', closeDrawerOnMobile);
   }, []);
 
-  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:settings},{count:pendCount}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('app_settings').select('key, value'),supabase.from('caeduc_agenda_pendientes').select('id',{count:'exact',head:true}).eq('completado',false)]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}setAgendaPendientesCount(pendCount||0);
+  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:informes},{data:settings},{count:pendCount}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('caeduc_informes_actividades').select('*').order('updated_at',{ascending:false}),supabase.from('app_settings').select('key, value'),supabase.from('caeduc_agenda_pendientes').select('id',{count:'exact',head:true}).eq('completado',false)]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(informes)setInformesActividades(informes);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}setAgendaPendientesCount(pendCount||0);
     // Cargar permisos del usuario activo (null = acceso completo para super admin)
     const{data:{session:sess}}=await supabase.auth.getSession();
     if(sess?.user?.email){
@@ -1576,6 +1600,30 @@ export default function CAEDUCApp() {
   };
   const deleteOficio=async(id)=>{const{error}=await supabase.from('oficios').delete().eq('id',id);if(error){alert('Error: '+error.message);return;}fetchData();};
 
+  const saveInformeActividad=async(informe)=>{
+    const payload={
+      oficio_id:informe.oficio_id||null,
+      numero_oficio:informe.numero_oficio||'',
+      fecha_informe:informe.fecha_informe,
+      dirigido_a:'Junta Directiva del Colegio de Psicólogos de Guatemala',
+      ponente_nombre:String(informe.ponente_nombre||'').trim(),
+      actividad_nombre:informe.actividad_nombre||'',
+      actividad_tipo:informe.actividad_tipo||'',
+      actividad_fecha:informe.actividad_fecha||'',
+      actividad_modalidad:informe.actividad_modalidad||'',
+      actividad_duracion:informe.actividad_duracion||'2 horas',
+      cuerpo:informe.cuerpo||'',
+      updated_at:new Date().toISOString(),
+    };
+    const query=informe.id
+      ? supabase.from('caeduc_informes_actividades').update(payload).eq('id',informe.id)
+      : supabase.from('caeduc_informes_actividades').insert([payload]);
+    const{data,error}=await query.select().single();
+    if(error)throw error;
+    await fetchData();
+    return data;
+  };
+
   // PARTE 3.4: acepta directamente el objeto de prefill ya armado (actividad, tipo, fecha,
   // duración, modalidad, sede, monto, monto_detalle, justificación pre-redactada, etc.)
   // Retrocompatible con la forma antigua {actividad, tipo, sede_modalidad, t3_lugar}.
@@ -1588,7 +1636,7 @@ export default function CAEDUCApp() {
   };
 
   const adminClass = userMode === 'admin' ? (isSidebarOpen ? 'md:ml-64' : 'md:ml-20') : '';
-  const moduleLabel = {inicio:'Inicio',planificacion:'Planificación',avales:'Avales',oficios:'Oficios y Cartas',publicaciones:'Solicitud de publicación',agendas:'Agendas',directorio:'Directorio',reportes:'Reportes',admin_config:'Administración'}[currentModule] || 'CAEDUC';
+  const moduleLabel = {inicio:'Inicio',planificacion:'Planificación',avales:'Avales',oficios:'Oficios y Cartas',publicaciones:'Solicitud de publicación',informes_actividades:'Informes de actividades',agendas:'Agendas',directorio:'Directorio',reportes:'Reportes',admin_config:'Administración'}[currentModule] || 'CAEDUC';
   const avalesPendientesCount = avales.filter(a=>!a.is_deleted && a.status==='En Proceso').length;
   const displayName = members.find(m=>m.email===session?.user?.email)?.name || '';
 
@@ -1612,8 +1660,9 @@ export default function CAEDUCApp() {
             {currentModule==='inicio' && <InicioDashboardView onNavigate={setCurrentModule} userName={displayName} onOpenActividad={(id)=>{setActividadDesdeInicio(id);setCurrentModule('planificacion');}}/>}
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios} abrirActividadId={actividadDesdeInicio} onClearAbrirActividad={()=>setActividadDesdeInicio(null)}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
-            {currentModule==='oficios' && <OficiosAdminView oficios={oficios} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
+            {currentModule==='oficios' && <OficiosAdminView oficios={oficios} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting}/>}
+            {currentModule==='informes_actividades' && <InformesActividadesView oficios={oficios} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')}/>}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
             {currentModule==='reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>}
