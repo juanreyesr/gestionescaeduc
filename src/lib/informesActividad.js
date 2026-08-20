@@ -1,4 +1,5 @@
 import { getOficioExpositores, parseJustificacionSections } from './oficioTemplates.js';
+import { ACTIVITY_SOURCE_PUBLICACION } from './activitySources.js';
 
 const MONTHS = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -90,7 +91,9 @@ export const buildInformeActividadDraft = (oficio = {}, ponente = '', fechaInfor
   ];
 
   return {
-    oficio_id: oficio.id || null,
+    origen: oficio.source_type === ACTIVITY_SOURCE_PUBLICACION ? ACTIVITY_SOURCE_PUBLICACION : 'oficio',
+    oficio_id: oficio.source_type === ACTIVITY_SOURCE_PUBLICACION ? null : oficio.id || null,
+    publicacion_id: oficio.source_type === ACTIVITY_SOURCE_PUBLICACION ? oficio.id || null : null,
     numero_oficio: oficio.numero_oficio || '',
     fecha_informe: fechaInforme || todayGuatemalaISO(),
     dirigido_a: 'Junta Directiva del Colegio de Psicólogos de Guatemala',
@@ -104,7 +107,9 @@ export const buildInformeActividadDraft = (oficio = {}, ponente = '', fechaInfor
   };
 };
 
-export const getInformePonentes = (oficio = {}) => splitPonentes(getOficioExpositores(oficio));
+export const getInformePonentes = (oficio = {}) => splitPonentes(
+  oficio.ponente_nombre || getOficioExpositores(oficio),
+);
 
 export const informeFileName = (informe = {}) => {
   const base = `Informe_${informe.actividad_nombre || informe.numero_oficio || 'Actividad'}_${informe.ponente_nombre || 'Ponente'}`;

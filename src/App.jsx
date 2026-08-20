@@ -1450,7 +1450,7 @@ const SidebarBtn = ({ icon, label, active, onClick, isOpen, badge = 0 }) => (
 
 // ── CAEDUCApp (MODIFICADO: uploadProgress + submitAval con progreso) ──────────
 export default function CAEDUCApp() {
-  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(()=>window.innerWidth >= 768);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [informesActividades,setInformesActividades]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
+  const [session,setSession]=useState(null);const [userMode,setUserMode]=useState('public');const [currentModule,setCurrentModule]=useState('inicio');const [isSidebarOpen,setSidebarOpen]=useState(()=>window.innerWidth >= 768);const [loading,setLoading]=useState(false);const [authError,setAuthError]=useState(null);const [avales,setAvales]=useState([]);const [members,setMembers]=useState([]);const [internalDocs,setInternalDocs]=useState([]);const [oficios,setOficios]=useState([]);const [publicaciones,setPublicaciones]=useState([]);const [informesActividades,setInformesActividades]=useState([]);const [appSettings,setAppSettings]=useState({});const [oficioPreFill,setOficioPreFill]=useState(null);
   const [actividadDesdeInicio,setActividadDesdeInicio]=useState(null); // id de actividad a abrir al entrar a planificación
   const [userPermissions,setUserPermissions]=useState(null); // null = acceso completo
   const [agendaPendientesCount,setAgendaPendientesCount]=useState(0);
@@ -1472,7 +1472,7 @@ export default function CAEDUCApp() {
     return () => mobile.removeEventListener('change', closeDrawerOnMobile);
   }, []);
 
-  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:informes},{data:settings},{count:pendCount}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('caeduc_informes_actividades').select('*').order('updated_at',{ascending:false}),supabase.from('app_settings').select('key, value'),supabase.from('caeduc_agenda_pendientes').select('id',{count:'exact',head:true}).eq('completado',false)]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(informes)setInformesActividades(informes);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}setAgendaPendientesCount(pendCount||0);
+  const fetchData=async()=>{setLoading(true);try{const[{data:avl},{data:mem},{data:docs},{data:ofi},{data:pubs},{data:informes},{data:settings},{count:pendCount}]=await Promise.all([supabase.from('avales').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('internal_documents').select('*').limit(50),supabase.from('oficios').select('*').order('created_at',{ascending:false}),supabase.from('caeduc_publicaciones').select('*').order('updated_at',{ascending:false}),supabase.from('caeduc_informes_actividades').select('*').order('updated_at',{ascending:false}),supabase.from('app_settings').select('key, value'),supabase.from('caeduc_agenda_pendientes').select('id',{count:'exact',head:true}).eq('completado',false)]);if(avl)setAvales(avl);if(mem)setMembers(mem);if(docs)setInternalDocs(docs);if(ofi)setOficios(ofi);if(pubs)setPublicaciones(pubs);if(informes)setInformesActividades(informes);if(settings){const m={};settings.forEach(r=>{m[r.key]=r.value;});setAppSettings(m);}setAgendaPendientesCount(pendCount||0);
     // Cargar permisos del usuario activo (null = acceso completo para super admin)
     const{data:{session:sess}}=await supabase.auth.getSession();
     if(sess?.user?.email){
@@ -1602,7 +1602,9 @@ export default function CAEDUCApp() {
 
   const saveInformeActividad=async(informe)=>{
     const payload={
+      origen:informe.origen==='publicacion'?'publicacion':'oficio',
       oficio_id:informe.oficio_id||null,
+      publicacion_id:informe.origen==='publicacion'?(informe.publicacion_id||null):null,
       numero_oficio:informe.numero_oficio||'',
       fecha_informe:informe.fecha_informe,
       dirigido_a:'Junta Directiva del Colegio de Psicólogos de Guatemala',
@@ -1662,7 +1664,9 @@ export default function CAEDUCApp() {
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting}/>}
-            {currentModule==='informes_actividades' && <InformesActividadesView oficios={oficios} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')}/>}
+            {currentModule==='informes_actividades' && (
+              <InformesActividadesView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')}/>
+            )}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
             {currentModule==='reportes' && <ReportesView avales={avales} docs={internalDocs} oficios={oficios}/>}
