@@ -10,6 +10,14 @@ import {
   Award, GraduationCap, Printer, Download, Loader, Copy, Check
 } from 'lucide-react';
 import { buildFacturaText, escapeFacturaHtml } from './lib/factura.js';
+import {
+  ACTIVITY_SOURCE_OFICIO,
+  ACTIVITY_SOURCE_PUBLICACION,
+  activitySourceDescription,
+  activitySourceReference,
+  oficioToActivity,
+  publicationToActivity,
+} from './lib/activitySources.js';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -1506,33 +1514,33 @@ const previewTarifario = (settings, tarifas) => {
 };
 
 // ── MODELO DE FACTURA ─────────────────────────────────────────────────────────
-const generateFacturaHTML = (oficio, textoFactura) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-  <title>Modelo de factura — ${escapeFacturaHtml(oficio.numero_oficio)}</title>
+const generateFacturaHTML = (actividad, textoFactura) => `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+  <title>Modelo de factura — ${escapeFacturaHtml(activitySourceReference(actividad))}</title>
   <style>@page{size:letter;margin:0.65in;}*{box-sizing:border-box;}body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;}</style>
 </head><body>
   <main style="border:1.5px solid #cbd5e1;border-radius:14px;padding:38px 42px;min-height:8.8in;">
     <div style="border-bottom:2px solid #1a5276;padding-bottom:20px;margin-bottom:30px;">
       <p style="margin:0;color:#1a5276;font-size:11px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;">Comisión de Acreditación y Educación Continua</p>
       <h1 style="margin:6px 0 0;font-size:25px;color:#172554;">Modelo de factura</h1>
-      <p style="margin:7px 0 0;color:#64748b;font-size:12px;">Referencia: ${escapeFacturaHtml(oficio.numero_oficio || 'Oficio CAEDUC')}</p>
+      <p style="margin:7px 0 0;color:#64748b;font-size:12px;">Referencia: ${escapeFacturaHtml(activitySourceReference(actividad))}</p>
     </div>
     <section style="font-size:14px;line-height:1.8;white-space:pre-wrap;background:#f8fafc;border-left:4px solid #1a5276;border-radius:4px;padding:18px 20px;">${escapeFacturaHtml(textoFactura)}</section>
-    <p style="margin:52px 0 0;color:#64748b;font-size:10.5px;line-height:1.6;">Este modelo sirve como guía para emitir la factura correspondiente a la actividad autorizada mediante el oficio indicado.</p>
+    <p style="margin:52px 0 0;color:#64748b;font-size:10.5px;line-height:1.6;">Este modelo sirve como guía para emitir la factura correspondiente. ${escapeFacturaHtml(activitySourceDescription(actividad))}.</p>
   </main>
 </body></html>`;
 
-const downloadFacturaPDF = async (oficio, textoFactura) => {
+const downloadFacturaPDF = async (actividad, textoFactura) => {
   const html2pdf = await loadHtml2Pdf();
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'position:fixed;right:-9999px;top:0;width:8.5in;height:11in;border:0;';
   document.body.appendChild(iframe);
   try {
     const doc = iframe.contentDocument || iframe.contentWindow.document;
-    doc.open(); doc.write(generateFacturaHTML(oficio, textoFactura)); doc.close();
+    doc.open(); doc.write(generateFacturaHTML(actividad, textoFactura)); doc.close();
     await new Promise(resolve => setTimeout(resolve, 150));
     await html2pdf().set({
       margin: 0,
-      filename: `Modelo de factura - ${(oficio.numero_oficio || 'CAEDUC').replace(/[^a-z0-9.-]+/gi, '_')}.pdf`,
+      filename: `Modelo de factura - ${(actividad.numero_oficio || actividad.actividad_nombre || 'CAEDUC').replace(/[^a-z0-9.-]+/gi, '_')}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, logging: false, backgroundColor: '#ffffff' },
       jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
@@ -1544,6 +1552,8 @@ const downloadFacturaPDF = async (oficio, textoFactura) => {
 
 function ModeloFacturaSection() {
   const [oficios, setOficios] = useState([]);
+  const [publicaciones, setPublicaciones] = useState([]);
+  const [sourceType, setSourceType] = useState(ACTIVITY_SOURCE_OFICIO);
   const [selectedId, setSelectedId] = useState('');
   const [fechaFactura, setFechaFactura] = useState(() => new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
@@ -1553,25 +1563,40 @@ function ModeloFacturaSection() {
 
   useEffect(() => {
     let active = true;
-    supabase.from('oficios').select('id,numero_oficio,actividad_nombre,actividad_tipo,actividad_fecha,actividad_hora,actividad_descripcion,monto,estado')
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
+    Promise.all([
+      supabase.from('oficios').select('id,numero_oficio,actividad_nombre,actividad_tipo,actividad_fecha,actividad_hora,actividad_descripcion,monto,estado').order('created_at', { ascending: false }),
+      supabase.from('caeduc_publicaciones').select('id,actividad_nombre,ponente_nombre,actividad_fecha,actividad_hora,actividad_lugar,zoom_detalles,updated_at').order('updated_at', { ascending: false }),
+    ]).then(([oficiosResult, publicacionesResult]) => {
         if (!active) return;
-        if (error) { alert(`No se pudieron cargar los oficios: ${error.message}`); }
-        const conActividad = (data || []).filter(o => o.actividad_nombre);
+        const errores = [oficiosResult.error, publicacionesResult.error].filter(Boolean);
+        if (errores.length) alert(`No se pudieron cargar todas las actividades: ${errores.map(error => error.message).join(' · ')}`);
+        const conActividad = (oficiosResult.data || []).filter(o => o.actividad_nombre).map(oficioToActivity);
+        const solicitudes = (publicacionesResult.data || []).filter(item => item.actividad_nombre).map(publicationToActivity);
         setOficios(conActividad);
+        setPublicaciones(solicitudes);
         if (conActividad.length) setSelectedId(conActividad[0].id);
+        else if (solicitudes.length) {
+          setSourceType(ACTIVITY_SOURCE_PUBLICACION);
+          setSelectedId(solicitudes[0].id);
+        }
         setLoading(false);
       });
     return () => { active = false; };
   }, []);
 
-  const oficio = oficios.find(item => item.id === selectedId);
+  const actividades = sourceType === ACTIVITY_SOURCE_OFICIO ? oficios : publicaciones;
+  const actividad = actividades.find(item => item.id === selectedId);
+
+  const selectSource = (nextSource) => {
+    const nextItems = nextSource === ACTIVITY_SOURCE_OFICIO ? oficios : publicaciones;
+    setSourceType(nextSource);
+    setSelectedId(nextItems[0]?.id || '');
+  };
 
   useEffect(() => {
-    setTextoFactura(buildFacturaText(oficio, fechaFactura));
+    setTextoFactura(buildFacturaText(actividad, fechaFactura));
     setCopiado(false);
-  }, [oficio, fechaFactura]);
+  }, [actividad, fechaFactura]);
 
   const handleCopy = async () => {
     if (!textoFactura.trim()) return;
@@ -1592,9 +1617,9 @@ function ModeloFacturaSection() {
   };
 
   const handleDownload = async () => {
-    if (!oficio) return;
+    if (!actividad) return;
     setPdfLoading(true);
-    try { await downloadFacturaPDF(oficio, textoFactura); }
+    try { await downloadFacturaPDF(actividad, textoFactura); }
     catch (err) { alert(`No se pudo generar el modelo: ${err?.message || err}`); }
     setPdfLoading(false);
   };
@@ -1607,14 +1632,25 @@ function ModeloFacturaSection() {
       </div>
 
       <Card className="max-w-3xl">
-        <label className="block text-sm font-bold text-gray-700 mb-2">Actividad autorizada mediante oficio</label>
-        <select value={selectedId} onChange={e => setSelectedId(e.target.value)} disabled={loading || !oficios.length}
+        <p className="text-sm font-bold text-gray-700">Origen de la actividad</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2" role="group" aria-label="Origen de la actividad para facturación">
+          <button type="button" onClick={() => selectSource(ACTIVITY_SOURCE_OFICIO)} aria-pressed={sourceType === ACTIVITY_SOURCE_OFICIO}
+            className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-extrabold transition-colors ${sourceType === ACTIVITY_SOURCE_OFICIO ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+            Actividades de oficios ({oficios.length})
+          </button>
+          <button type="button" onClick={() => selectSource(ACTIVITY_SOURCE_PUBLICACION)} aria-pressed={sourceType === ACTIVITY_SOURCE_PUBLICACION}
+            className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-extrabold transition-colors ${sourceType === ACTIVITY_SOURCE_PUBLICACION ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+            Solicitudes de publicación ({publicaciones.length})
+          </button>
+        </div>
+        <label className="mt-5 block text-sm font-bold text-gray-700 mb-2" htmlFor="factura-actividad">Actividad</label>
+        <select id="factura-actividad" value={selectedId} onChange={e => setSelectedId(e.target.value)} disabled={loading || !actividades.length}
           className="w-full border border-gray-300 rounded-xl px-4 py-3 bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-gray-50">
-          {loading && <option>Cargando oficios...</option>}
-          {!loading && !oficios.length && <option>No hay oficios de actividades disponibles</option>}
-          {oficios.map(item => <option key={item.id} value={item.id}>{item.numero_oficio} — {item.actividad_nombre}{item.estado === 'Borrador' ? ' (Borrador)' : ''}</option>)}
+          {loading && <option>Cargando actividades...</option>}
+          {!loading && !actividades.length && <option>No hay actividades disponibles en este origen</option>}
+          {actividades.map(item => <option key={item.id} value={item.id}>{sourceType === ACTIVITY_SOURCE_OFICIO ? `${item.numero_oficio || 'Sin número'} — ` : ''}{item.actividad_nombre}{item.estado === 'Borrador' ? ' (Borrador)' : ''}</option>)}
         </select>
-        <p className="text-xs text-gray-500 mt-2">Se incluyen también los oficios en borrador que tienen una actividad registrada.</p>
+        <p className="text-xs text-gray-500 mt-2">Las solicitudes de publicación que no tengan monto dejarán ese dato pendiente para que lo completes en el texto editable.</p>
       </Card>
 
       <Card className="max-w-3xl">
@@ -1624,12 +1660,12 @@ function ModeloFacturaSection() {
         <p className="text-xs text-gray-400 mt-2">Inicia con la fecha de hoy. Puedes ajustarla antes de descargar el modelo.</p>
       </Card>
 
-      {oficio && <div className="max-w-3xl space-y-4">
+      {actividad && <div className="max-w-3xl space-y-4">
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-5">
             <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Texto plano editable</p>
             <h3 className="text-white text-xl font-black mt-1">Modelo de factura</h3>
-            <p className="text-slate-300 text-sm mt-1">{oficio.numero_oficio} · {oficio.actividad_nombre}</p>
+            <p className="text-slate-300 text-sm mt-1">{activitySourceReference(actividad)} · {actividad.actividad_nombre}</p>
           </div>
           <div className="p-5 sm:p-6">
             <label htmlFor="texto-modelo-factura" className="block text-sm font-bold text-gray-800">Contenido del mensaje</label>
@@ -1638,7 +1674,7 @@ function ModeloFacturaSection() {
               className="mt-3 min-h-56 w-full resize-y rounded-xl border border-gray-300 bg-slate-50 px-4 py-3 text-base leading-7 text-gray-800 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-200"/>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-gray-500" aria-live="polite">{copiado ? 'Texto copiado. Ya puedes pegarlo en tu mensaje.' : 'El PDF también utilizará este texto editado.'}</p>
-              <button type="button" onClick={() => setTextoFactura(buildFacturaText(oficio, fechaFactura))}
+              <button type="button" onClick={() => setTextoFactura(buildFacturaText(actividad, fechaFactura))}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">
                 <RefreshCw size={16}/> Restablecer texto
               </button>

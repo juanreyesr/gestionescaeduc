@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getOficioExpositores, setOficioExpositores } from './oficioTemplates.js';
-import { buildPublicationMessage, formatActivityTime, getGreeting, whatsappUrl } from './publicaciones.js';
+import {
+  buildPublicationMessage,
+  formatActivityTime,
+  formatZoomDetails,
+  getGreeting,
+  whatsappUrl,
+} from './publicaciones.js';
 
 test('guarda y reemplaza expositores sin duplicar la sección', () => {
   const initial = 'Justificación original.\n\n### Cronograma resumido\n15 de agosto';
@@ -44,4 +50,44 @@ test('normaliza hora y teléfono para WhatsApp Guatemala', () => {
   assert.equal(formatActivityTime('13:05'), '1:05 p. m.');
   assert.equal(whatsappUrl('3516-0990'), 'https://wa.me/50235160990');
   assert.equal(whatsappUrl('+502 3064 9707'), 'https://wa.me/50230649707');
+  assert.equal(
+    whatsappUrl('3516-0990', 'Hola Eduardo'),
+    'https://wa.me/50235160990?text=Hola%20Eduardo',
+  );
+});
+
+test('crea una solicitud manual con todos los datos de Zoom', () => {
+  const message = buildPublicationMessage({
+    activity: {
+      actividad_nombre: 'Conversatorio clínico',
+      ponente_nombre: 'Dra. Ana López',
+      actividad_fecha: '20 de agosto',
+      actividad_hora: '18:00',
+      actividad_lugar: 'Aula virtual',
+    },
+    responsible: { name: 'Lic. Charly' },
+    zoomDetails: `Enlace de Zoom:
+https://us06web.zoom.us/launch/jc/82260894830
+ID de reunión: 822 6089 4830
+Código de acceso: 976254`,
+    now: new Date('2026-08-11T20:00:00Z'),
+  });
+
+  assert.match(message, /Nombre de la Actividad: Conversatorio clínico/);
+  assert.match(message, /Nombre del ponente: Dra\. Ana López/);
+  assert.match(message, /ID de reunión: 822 6089 4830/);
+  assert.equal((message.match(/Enlace de Zoom:/g) || []).length, 1);
+});
+
+test('deja vacíos los campos aún no completados', () => {
+  const message = buildPublicationMessage({
+    activity: {},
+    responsible: { name: 'Eduardo' },
+    now: new Date('2026-08-11T20:00:00Z'),
+  });
+
+  assert.match(message, /Nombre de la Actividad: \n/);
+  assert.match(message, /Nombre del ponente: \n/);
+  assert.match(message, /en una fecha por confirmar/);
+  assert.equal(formatZoomDetails('Enlace de Zoom:\nhttps://zoom.example/1'), 'Enlace de Zoom:\nhttps://zoom.example/1');
 });

@@ -32,10 +32,11 @@ export const getGreeting = (date = new Date()) => {
   return 'Buenas noches';
 };
 
-export const whatsappUrl = (phone) => {
+export const whatsappUrl = (phone, message = '') => {
   const digits = String(phone || '').replace(/\D/g, '');
   if (!digits) return '';
-  return `https://wa.me/${digits.startsWith('502') ? digits : `502${digits}`}`;
+  const base = `https://wa.me/${digits.startsWith('502') ? digits : `502${digits}`}`;
+  return message ? `${base}?text=${encodeURIComponent(message)}` : base;
 };
 
 export const formatActivityTime = (time) => {
@@ -48,16 +49,37 @@ export const formatActivityTime = (time) => {
   return `${displayHour}:${match[2]} ${suffix}`;
 };
 
-export const buildPublicationMessage = ({ oficio, responsible, zoomUrl = '', now = new Date() }) => {
-  if (!oficio || !responsible) return '';
-  const expositor = getOficioExpositores(oficio) || 'Por confirmar';
-  return `${getGreeting(now)} estimado ${responsible.name}, quiero solicitar su ayuda para anunciar en las redes una actividad que tendremos el ${oficio.actividad_fecha || 'fecha por confirmar'}.
+export const formatZoomDetails = (details = '') => {
+  const clean = String(details || '').trim().replace(/^Enlace de Zoom:\s*/i, '');
+  return `Enlace de Zoom:\n${clean}`;
+};
 
-Nombre de la Actividad: ${oficio.actividad_nombre || 'Por confirmar'}
-Nombre del ponente: ${expositor}
-Fecha: ${oficio.actividad_fecha || 'Por confirmar'}
-Hora: ${formatActivityTime(oficio.actividad_hora)}
-Lugar: ${oficio.actividad_sede || oficio.actividad_modalidad || 'Por confirmar'}
-Enlace de Zoom:
-${zoomUrl.trim()}`;
+export const activityFromOficio = (oficio) => ({
+  actividad_nombre: oficio?.actividad_nombre || '',
+  ponente_nombre: getOficioExpositores(oficio) || '',
+  actividad_fecha: oficio?.actividad_fecha || '',
+  actividad_hora: oficio?.actividad_hora || '',
+  actividad_lugar: oficio?.actividad_sede || oficio?.actividad_modalidad || '',
+});
+
+export const buildPublicationMessage = ({
+  oficio,
+  activity,
+  responsible,
+  zoomDetails = '',
+  zoomUrl = '',
+  now = new Date(),
+}) => {
+  if ((!oficio && !activity) || !responsible) return '';
+  const data = activity || activityFromOficio(oficio);
+  const date = data.actividad_fecha || '';
+  const datePhrase = date ? `el ${date}` : 'en una fecha por confirmar';
+  return `${getGreeting(now)} estimado ${responsible.name}, quiero solicitar su ayuda para anunciar en las redes una actividad que tendremos ${datePhrase}.
+
+Nombre de la Actividad: ${data.actividad_nombre || ''}
+Nombre del ponente: ${data.ponente_nombre || ''}
+Fecha: ${date}
+Hora: ${data.actividad_hora ? formatActivityTime(data.actividad_hora) : ''}
+Lugar: ${data.actividad_lugar || ''}
+${formatZoomDetails(zoomDetails || zoomUrl)}`;
 };

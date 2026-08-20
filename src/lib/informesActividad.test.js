@@ -10,6 +10,23 @@ import {
   replaceInformePonente,
   splitPonentes,
 } from './informesActividad.js';
+import { publicationToActivity } from './activitySources.js';
+
+test('prepara un informe enlazado a una solicitud de publicación', () => {
+  const publicacion = publicationToActivity({
+    id: '8d648c5f-8e7b-4f43-b3a2-79ad5b0ddaa4',
+    actividad_nombre: 'Encuentro psicológico',
+    ponente_nombre: 'Licda. María Pérez',
+    actividad_fecha: '2026-08-30',
+    zoom_detalles: 'Enlace de Zoom: https://zoom.example',
+  });
+  const draft = buildInformeActividadDraft(publicacion, 'Licda. María Pérez', '2026-08-31');
+
+  assert.equal(draft.origen, 'publicacion');
+  assert.equal(draft.oficio_id, null);
+  assert.equal(draft.publicacion_id, publicacion.id);
+  assert.equal(draft.actividad_modalidad, 'Virtual');
+});
 
 test('usa dos horas cuando el oficio no indica duración', () => {
   assert.equal(normalizeInformeDuration(''), '2 horas');
