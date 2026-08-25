@@ -33,4 +33,5 @@ test('crea un informe visual con fotografía y un informe tabular para Junta Dir
   assert.match(board, /Junta Directiva/);
   assert.match(board, /M\. A\. Juan J\. Reyes/);
   assert.match(board, /<table/);
+  assert.match(board, /table-layout:fixed;font-size:11\.5px;line-height:1\.35/);
 });
