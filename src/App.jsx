@@ -17,6 +17,7 @@ import {
 } from './lib/constants.js';
 import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate, mergeInformeTecnico, parseJustificacionSections, getOficioExpositores, setOficioExpositores } from './lib/oficioTemplates.js';
 import { generateInformeActividadHTML, informeFileName } from './lib/informesActividad.js';
+import { generateActivityRegisterHTML, generateBoardActivitiesHTML } from './lib/registroActividadesReport.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
 // Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
 // en vez de cargar las ~6,000 líneas de todas las vistas en el bundle inicial.
@@ -505,6 +506,25 @@ const openInformeActividad = async (informe, settings = {}, mode = 'download') =
   const html = generateInformeActividadHTML(informe, { membreteUrl });
   if (mode === 'preview') previewHTML(html);
   else await downloadPDF(html, informeFileName(informe));
+};
+
+const openActivityRegisterReport = async (activities, { from, to, type } = {}, settings = {}) => {
+  const membreteUrl = settings.membrete_path
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
+    : '/fondo-oficios.jpg';
+  const html = type === 'junta'
+    ? generateBoardActivitiesHTML(activities, {
+      from,
+      to,
+      membreteUrl,
+      signerName: settings.firmante1_nombre || 'M. A. Juan J. Reyes',
+      signerRole: settings.firmante1_cargo || 'Coordinador',
+      signerInstitution: settings.firmante1_institucion || 'Comisión de Acreditación Educación Continua, Colegio de Psicólogos de Guatemala',
+      signerUrl: buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos'),
+      stampUrl: buildStorageUrl(settings.sello_path, 'firmas-sellos'),
+    })
+    : generateActivityRegisterHTML(activities, { from, to });
+  await downloadPDF(html, `${type === 'junta' ? 'Informe_Junta_Directiva' : 'Informe_Actividades'}_${from || 'inicio'}_${to || 'fin'}`);
 };
 
 // ── UI Components ──────────────────────────────────────────────────────────────
@@ -1663,7 +1683,7 @@ export default function CAEDUCApp() {
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios} abrirActividadId={actividadDesdeInicio} onClearAbrirActividad={()=>setActividadDesdeInicio(null)}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
-            {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting}/>}
+            {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting} onGenerateActivityReport={(activities, options) => openActivityRegisterReport(activities, options, appSettings)}/>}
             {currentModule==='informes_actividades' && (
               <InformesActividadesView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')}/>
             )}

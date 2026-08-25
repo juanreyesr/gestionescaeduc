@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Calendar, Check, Copy, Download, Edit3, ExternalLink, FileText,
   History, Image, Loader2, MapPin, MessageCircle, Plus,
-  RotateCcw, Save, Search, Send, Trash2, Upload, User, X,
+  Printer, RotateCcw, Save, Search, Send, Trash2, Upload, User, X,
 } from 'lucide-react';
 import { supabase } from './supabaseClient.js';
 import {
@@ -12,6 +12,7 @@ import {
   parseSettingJson,
   whatsappUrl,
 } from './lib/publicaciones.js';
+import { activitiesInDateRange, sortActivitiesByDate } from './lib/registroActividadesReport.js';
 
 const SETTINGS_KEY = 'publicacion_responsables';
 const HISTORY_TABLE = 'caeduc_publicaciones';
@@ -88,7 +89,7 @@ const Field = ({ id, label, children, helper }) => (
   </div>
 );
 
-export default function PublicacionesView({ oficios = [], appSettings = {}, onUpdateSetting }) {
+export default function PublicacionesView({ oficios = [], appSettings = {}, onUpdateSetting, onGenerateActivityReport }) {
   const [sourceMode, setSourceMode] = useState('oficio');
   const [selectedOficioId, setSelectedOficioId] = useState('');
   const [activity, setActivity] = useState(blankActivity);
@@ -110,6 +111,10 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const [editingHistoryId, setEditingHistoryId] = useState('');
   const [savingActivity, setSavingActivity] = useState(false);
   const [messageOverride, setMessageOverride] = useState(null);
+  const [reportDialog, setReportDialog] = useState(false);
+  const [reportFrom, setReportFrom] = useState('');
+  const [reportTo, setReportTo] = useState('');
+  const [reportType, setReportType] = useState('detalle');
 
   const activityOficios = useMemo(
     () => oficios.filter(item => item.actividad_nombre),
@@ -130,13 +135,13 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
 
   const filteredHistory = useMemo(() => {
     const query = historySearch.trim().toLowerCase();
-    if (!query) return history;
-    return history.filter(item => [
+    const visible = query ? history.filter(item => [
       item.actividad_nombre,
       item.ponente_nombre,
       item.actividad_fecha,
       item.responsable_nombre,
-    ].some(value => String(value || '').toLowerCase().includes(query)));
+    ].some(value => String(value || '').toLowerCase().includes(query))) : history;
+    return sortActivitiesByDate(visible);
   }, [history, historySearch]);
 
   useEffect(() => {
@@ -457,6 +462,28 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     localFile: photoFile,
   });
 
+  const generateSelectedReport = async () => {
+    if (!reportFrom || !reportTo) {
+      setFeedback('Selecciona la fecha inicial y la fecha final del informe.');
+      return;
+    }
+    if (reportFrom > reportTo) {
+      setFeedback('La fecha inicial debe ser anterior o igual a la fecha final.');
+      return;
+    }
+    const selected = activitiesInDateRange(history, reportFrom, reportTo);
+    if (!selected.length) {
+      setFeedback('No hay actividades con fecha dentro del período seleccionado.');
+      return;
+    }
+    await onGenerateActivityReport?.(selected.map(item => ({ ...item, ponente_foto_url: photoUrls[item.id] || '' })), {
+      from: reportFrom,
+      to: reportTo,
+      type: reportType,
+    });
+    setReportDialog(false);
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <header>
@@ -663,9 +690,13 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
             <h2 className="mt-1 flex items-center gap-2 text-lg font-black text-slate-800"><History size={20}/> Historial de actividades</h2>
             <p className="mt-1 text-sm text-slate-500">Cada registro permanece colapsado hasta que necesites editarlo, descargarlo o enviarlo.</p>
           </div>
-          <div className="relative w-full lg:max-w-sm">
-            <Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-slate-400"/>
-            <input aria-label="Buscar en el historial" value={historySearch} onChange={event => setHistorySearch(event.target.value)} placeholder="Buscar actividad, ponente o fecha" className="min-h-11 w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <button type="button" onClick={() => { setReportType('detalle'); setReportDialog(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-caeduc-blue px-4 py-2.5 text-sm font-extrabold text-white transition-colors hover:bg-blue-800"><Printer size={17}/> Imprimir informe</button>
+            <button type="button" onClick={() => { setReportType('junta'); setReportDialog(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-extrabold text-white transition-colors hover:bg-indigo-700"><FileText size={17}/> Informe a Junta Directiva</button>
+            <div className="relative w-full lg:w-80">
+              <Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-slate-400"/>
+              <input aria-label="Buscar en el historial" value={historySearch} onChange={event => setHistorySearch(event.target.value)} placeholder="Buscar actividad, ponente o fecha" className="min-h-11 w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+            </div>
           </div>
         </div>
 
@@ -705,6 +736,23 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
           ))}
         </div>
       </Card>
+
+      {reportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" aria-labelledby="activity-report-title">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-extrabold uppercase tracking-widest text-blue-600">Registro de actividades</p><h2 id="activity-report-title" className="mt-1 text-xl font-black text-slate-800">{reportType === 'junta' ? 'Informe para Junta Directiva' : 'Imprimir informe de actividades'}</h2><p className="mt-2 text-sm leading-5 text-slate-500">Selecciona el período que debe aparecer en el PDF.</p></div>
+              <button type="button" onClick={() => setReportDialog(false)} aria-label="Cerrar" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100"><X size={20}/></button>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <Field id="activity-report-from" label="Fecha inicial"><input id="activity-report-from" type="date" value={reportFrom} onChange={event => setReportFrom(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></Field>
+              <Field id="activity-report-to" label="Fecha final"><input id="activity-report-to" type="date" value={reportTo} onChange={event => setReportTo(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/></Field>
+            </div>
+            <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{reportType === 'junta' ? 'Se generará una hoja membretada dirigida a Junta Directiva, con tabla y la firma institucional de Coordinación.' : 'Se generará una ficha por actividad, con fotografía, actividad, ponente, fecha, lugar y hora.'}</p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReportDialog(false)} className="min-h-11 rounded-xl bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancelar</button><button type="button" onClick={generateSelectedReport} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-caeduc-pink px-5 py-2 text-sm font-extrabold text-white hover:bg-pink-700"><Download size={17}/> Generar PDF</button></div>
+          </div>
+        </div>
+      )}
 
       {editingResponsibles && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/55 p-4" role="dialog" aria-modal="true" aria-labelledby="responsibles-title">
