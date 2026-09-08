@@ -10,24 +10,65 @@ export const escapeRegistroHTML = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
-// El historial previo admite fechas ISO y texto en español; esta clave permite
-// ordenarlo sin modificar ni reinterpretar el dato que ve la persona usuaria.
+export const sinAcentos = (value = '') => String(value)
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
+
+// Nombres de mes admitidos, incluidas las abreviaturas de uso corriente.
+const MONTH_ALIASES = {
+  ene: 1, enero: 1,
+  feb: 2, febr: 2, febrero: 2,
+  mar: 3, marzo: 3,
+  abr: 4, abril: 4,
+  may: 5, mayo: 5,
+  jun: 6, junio: 6,
+  jul: 7, julio: 7,
+  ago: 8, agosto: 8,
+  sep: 9, sept: 9, set: 9, septiembre: 9, setiembre: 9,
+  oct: 10, octubre: 10,
+  nov: 11, noviembre: 11,
+  dic: 12, diciembre: 12,
+};
+
+// Número de mes a partir de su nombre escrito (con o sin tildes, punto o
+// abreviatura). Devuelve 0 cuando la palabra no es un mes.
+export const monthFromName = (value = '') => MONTH_ALIASES[
+  sinAcentos(value).toLowerCase().replace(/\.$/, '')
+] || 0;
+
+// El historial guarda la fecha como texto libre. Estas son las formas que se han
+// escrito de verdad en el sistema; cada una debe llegar a una fecha completa
+// (año, mes y día) para poder ordenar y filtrar sin reinterpretar el dato que ve
+// la persona usuaria — por eso "junio de 2026", que no tiene día, no se resuelve
+// aquí: eso lo maneja el agrupado por mes.
+const yearFrom = (value) => {
+  if (!value) return String(new Date().getFullYear());
+  // Años de dos cifras ("12/06/26") se leen como del siglo actual.
+  return value.length === 2 ? `20${value}` : value;
+};
+
 export const activityDateKey = (value = '') => {
   const raw = String(value).trim().toLowerCase();
   if (!raw) return '';
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return raw;
-  const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slash) return `${slash[3]}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`;
-  const spanish = raw.match(/(\d{1,2})\s+de\s+([a-záéíóú]+)(?:\s+de\s+(\d{4}))?/i);
+
+  // 2026-06-12 · 2026/06/12
+  const iso = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`;
+
+  // 12/06/2026 · 12-06-2026 · 12.06.26 (día primero, como se usa en Guatemala)
+  const numeric = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})$/);
+  if (numeric) return `${yearFrom(numeric[3])}-${numeric[2].padStart(2, '0')}-${numeric[1].padStart(2, '0')}`;
+
+  // 12 de junio de 2026 · 12 de junio del 2026 · 12 junio 2026 · jueves 12 de jun
+  // También resuelve rangos como "del 10 al 12 de junio" tomando la última fecha.
+  const spanish = raw.match(/(\d{1,2})\s+(?:de\s+)?([a-záéíóú.]+)(?:\s+de[l]?\s+(\d{4}|\d{2})(?!\d))?/i);
   if (!spanish) return '';
-  const month = MONTHS.indexOf(spanish[2].normalize('NFD').replace(/[\u0300-\u036f]/g, '')) + 1;
+  const month = monthFromName(spanish[2]);
   if (!month) return '';
   // Los primeros registros se guardaron sin año (por ejemplo, “25 de agosto”).
   // Para que sigan siendo útiles en el orden y en el filtro anual, se asocian al
   // año en curso sin cambiar el texto original almacenado.
-  const year = spanish[3] || String(new Date().getFullYear());
-  return `${year}-${String(month).padStart(2, '0')}-${spanish[1].padStart(2, '0')}`;
+  return `${yearFrom(spanish[3])}-${String(month).padStart(2, '0')}-${spanish[1].padStart(2, '0')}`;
 };
 
 export const sortActivitiesByDate = (activities = []) => [...activities].sort((a, b) => {
