@@ -1,11 +1,17 @@
+import { formatoQuetzales, montoPorGrado, TARIFAS_DEFAULT } from './tarifario.js';
+
 export const ACTIVITY_SOURCE_OFICIO = 'oficio';
 export const ACTIVITY_SOURCE_PUBLICACION = 'publicacion';
 
-export const publicationToActivity = (publicacion = {}) => ({
+// El grado académico se registra en la solicitud de publicación (dato interno) y
+// determina el honorario según el tarifario vigente. Si la solicitud ya trae un
+// monto escrito a mano, ese manda.
+export const publicationToActivity = (publicacion = {}, tarifas = TARIFAS_DEFAULT) => ({
   ...publicacion,
   id: publicacion.id || '',
   source_type: ACTIVITY_SOURCE_PUBLICACION,
   source_label: 'Solicitud de publicación',
+  ponente_grado: publicacion.ponente_grado || '',
   numero_oficio: '',
   actividad_nombre: publicacion.actividad_nombre || '',
   actividad_tipo: publicacion.actividad_tipo || 'actividad científico-académica',
@@ -15,7 +21,10 @@ export const publicationToActivity = (publicacion = {}) => ({
   actividad_modalidad: publicacion.actividad_modalidad || (publicacion.zoom_detalles ? 'Virtual' : 'Por confirmar'),
   actividad_duracion: publicacion.actividad_duracion || '',
   actividad_descripcion: publicacion.actividad_descripcion || '',
-  monto: publicacion.monto || '',
+  monto: publicacion.monto
+    || (montoPorGrado(publicacion.ponente_grado, tarifas) !== null
+      ? formatoQuetzales(montoPorGrado(publicacion.ponente_grado, tarifas))
+      : ''),
 });
 
 export const oficioToActivity = (oficio = {}) => ({

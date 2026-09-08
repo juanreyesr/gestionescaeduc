@@ -57,6 +57,8 @@ export const formatZoomDetails = (details = '') => {
 export const activityFromOficio = (oficio) => ({
   actividad_nombre: oficio?.actividad_nombre || '',
   ponente_nombre: getOficioExpositores(oficio) || '',
+  // Los oficios no registran grado académico: se elige aquí, en la solicitud.
+  ponente_grado: '',
   actividad_fecha: oficio?.actividad_fecha || '',
   actividad_hora: oficio?.actividad_hora || '',
   actividad_lugar: oficio?.actividad_sede || oficio?.actividad_modalidad || '',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Calendar, FileText, Users, Settings, Menu, X, CheckCircle, Clock,
@@ -16,8 +16,14 @@ import {
   computeSuggestedOficioNumero,
 } from './lib/constants.js';
 import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate, mergeInformeTecnico, parseJustificacionSections, getOficioExpositores, setOficioExpositores } from './lib/oficioTemplates.js';
+import {
+  activitiesInMonths, activityMonthKey, buildPagoLinea, buildPagoPonentesCuerpo,
+  esOficioPagoPonentes, formatHoraActividad, getOficioPagoPonentes, listActivityMonths,
+  setOficioPagoPonentes, totalPagoPonentes, totalPagoPonentesTexto,
+} from './lib/pagoPonentes.js';
+import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
 import { generateInformeActividadHTML, informeFileName } from './lib/informesActividad.js';
-import { generateActivityRegisterHTML, generateBoardActivitiesHTML } from './lib/registroActividadesReport.js';
+import { formatRegistroDate, generateActivityRegisterHTML, generateBoardActivitiesHTML } from './lib/registroActividadesReport.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
 // Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
 // en vez de cargar las ~6,000 líneas de todas las vistas en el bundle inicial.
@@ -457,10 +463,16 @@ const generateOficioHTML = (oficio, settings = {}) => {
     : '/fondo-oficios.jpg';
   const instLines = f1Inst.split(',').map(s => s.trim()).filter(Boolean);
   const isRecursos = (oficio.motivo || '').includes('recursos') || (oficio.motivo || '').includes('Aprobación');
+  // Oficio de pago de honorarios: el cuerpo enuncia la solicitud y el detalle por
+  // profesional y actividad va completo en la página siguiente.
+  const lineasPago = getOficioPagoPonentes(oficio);
+  const isPago = esOficioPagoPonentes(oficio.motivo) && lineasPago.length > 0;
   const parrafo = (txt) => `<p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 10px 0;word-wrap:break-word;">${txt}</p>`;
   let cuerpoHTML = '';
   if (oficio.cuerpo_personalizado) {
     cuerpoHTML = oficio.cuerpo_personalizado.split('\n').filter(l => l.trim()).map(p => parrafo(p)).join('');
+  } else if (isPago) {
+    cuerpoHTML = parrafo(buildPagoPonentesCuerpo(lineasPago));
   } else if (isRecursos && oficio.actividad_nombre) {
     cuerpoHTML = parrafo(`Por este medio, la Comisión de Acreditación y Educación Continua (CAEDUC) solicita respetuosamente la aprobación y asignación de recursos para realizar la ${oficio.actividad_tipo ? oficio.actividad_tipo.toLowerCase() : 'actividad'} ${oficio.actividad_modalidad ? oficio.actividad_modalidad.toLowerCase() : ''} titulada <strong>"${oficio.actividad_nombre}"</strong>.${oficio.actividad_descripcion ? ' ' + oficio.actividad_descripcion : ''}`);
   } else {
@@ -468,7 +480,7 @@ const generateOficioHTML = (oficio, settings = {}) => {
   }
   const dr = (label, val) => val ? `<tr><td style="font-weight:600;font-size:11px;padding:2px 10px 2px 0;white-space:nowrap;">${label}:</td><td style="font-size:11px;padding:2px 0;">${val}</td></tr>` : '';
   let detallesHTML = '';
-  if (oficio.actividad_nombre && (oficio.actividad_tipo || oficio.actividad_fecha)) {
+  if (!isPago && oficio.actividad_nombre && (oficio.actividad_tipo || oficio.actividad_fecha)) {
     detallesHTML = `<table style="margin:10px 0;border-collapse:collapse;">${dr('Tipo',oficio.actividad_tipo)}${dr('Modalidad',oficio.actividad_modalidad)}${dr('Duración',oficio.actividad_duracion)}${dr('Fecha',oficio.actividad_fecha)}${dr('Hora de la actividad',oficio.actividad_hora)}${dr('Sede / Plataforma',oficio.actividad_sede)}${dr('Expositor(es)',getOficioExpositores(oficio))}</table>`;
   }
   // PARTE 4: informe técnico formal — parsea secciones estructuradas dentro de `justificacion`
@@ -488,9 +500,11 @@ const generateOficioHTML = (oficio, settings = {}) => {
   const firmaBlock = `<div style="margin-top:20px;"><p style="font-size:11.5px;margin-bottom:16px;text-align:left;">Cordialmente,</p><div style="text-align:center;"><div style="display:inline-flex;align-items:flex-end;gap:20px;">${f1FirmaUrl?`<div style="text-align:center;"><img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/><div style="width:200px;border-top:1.5px solid #333;padding-top:4px;"><div style="font-size:11.5px;font-weight:700;">${f1Name}</div><div style="font-size:10.5px;color:#555;">${f1Cargo}</div>${instLines.map(l=>`<div style="font-size:10px;color:#666;">${l}</div>`).join('')}</div></div>`:'<div></div>'}${selloUrl?`<div style="margin-bottom:10px;"><img src="${selloUrl}" alt="Sello" style="height:80px;width:auto;opacity:0.88;"/></div>`:''}</div></div></div><p style="font-size:10px;color:#888;margin-top:10px;">C.C: Archivo / CAEDUC</p>`;
   const footerHTML = `<div style="border-top:2px solid #E91E63;padding-top:10px;display:flex;justify-content:space-between;font-size:8px;color:#777;gap:8px;"><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel<br>+(502) 7764-7109</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div></div><p style="text-align:center;font-size:8.5px;color:white;background:#E91E63;padding:3px 0;margin:0;">colegiodepsicologos.org.gt • @colpsicogt</p>`;
   const mainPage = `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;min-height:11in;box-sizing:border-box;display:flex;flex-direction:column;"><div style="flex:1;"><div style="text-align:right;margin-bottom:18px;"><div style="font-size:12px;font-weight:700;color:#111;">${oficio.numero_oficio||'Of. ___.CAEDUC'}</div><div style="font-size:11.5px;color:#555;margin-top:1px;">Guatemala ${formatOficioDate(oficio.fecha)}</div></div><div style="margin-bottom:15px;font-size:11.5px;line-height:1.7;">${(oficio.dirigido_a||'').split(',').map(l=>l.trim()).filter(Boolean).join('<br>')}<br>Presente</div><p style="font-size:11.5px;font-weight:700;margin-bottom:12px;">Honorables miembros de la Junta Directiva:</p>${cuerpoHTML}${detallesHTML}${parrafo('Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.')}<p style="font-size:11.5px;margin-bottom:0;">Sin otro particular, me suscribo.</p>${firmaBlock}</div></div></div>`;
-  const hasExtra = oficio.justificacion || oficio.solicitud_puntual || oficio.monto;
+  const pagoItems = lineasPago.map(linea => `<li style="margin:0 0 11px;padding:0 0 0 4px;font-size:11.5px;line-height:1.6;"><span style="font-weight:700;color:#173b63;">${linea.profesional || 'Profesional pendiente'}</span><br><span style="color:#374151;">${linea.actividad || 'Actividad sin nombre'}</span><br><span style="font-size:10.5px;color:#556579;">${linea.fecha ? `Fecha: ${formatRegistroDate(linea.fecha)} · ` : ''}Hora: ${formatHoraActividad(linea.hora) || 'Por confirmar'}${linea.grado ? ` · Grado académico: ${linea.grado}` : ''}</span><br><span style="font-weight:700;color:#1a5276;">Monto a pagar: ${formatoQuetzales(linea.monto)}</span></li>`).join('');
+  const pagoPage = isPago ? `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;box-sizing:border-box;"><h2 style="font-size:14px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 5px;">Detalle de honorarios</h2><p style="font-size:9.5px;color:#888;text-align:center;margin:0 0 16px;">Profesional, actividad, hora y monto a pagar</p><ol style="padding-left:18px;margin:0;">${pagoItems}</ol><p style="margin:16px 0 0;padding-top:10px;border-top:1.5px solid #1a5276;font-size:12px;font-weight:800;color:#1a5276;text-align:right;">Total solicitado: ${totalPagoPonentesTexto(lineasPago)}</p>${parrafo('Se solicita respetuosamente la autorización y gestión del pago de los honorarios descritos, de conformidad con el tarifario vigente de la Comisión según el grado académico acreditado de cada profesional.')}</div></div>` : '';
+  const hasExtra = oficio.justificacion || oficio.solicitud_puntual || (!isPago && oficio.monto);
   const extraPage = hasExtra ? `<div style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;box-sizing:border-box;"><h2 style="font-size:14px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 5px;">Informe Técnico</h2><p style="font-size:9.5px;color:#888;text-align:center;margin:0 0 5px;">Justificación técnica y aporte gremial</p>${oficio.actividad_nombre?`<h3 style="font-size:12px;font-weight:600;color:#374151;text-align:center;margin:0 0 16px;">${oficio.actividad_nombre}</h3>`:''}${seccionNaturaleza}${seccionJustificacion}${seccionPoblacion}${recursosHTML}${seccionCronograma}${seccionResultados}${solHTML}${parrafo('Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.')}</div></div>` : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media print{body{-webkit-print-color-adjust:exact;}}</style></head><body>${mainPage}${extraPage}</body></html>`;
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media print{body{-webkit-print-color-adjust:exact;}}</style></head><body>${mainPage}${pagoPage}${extraPage}</body></html>`;
 };
 
 const openOficioLetter = async (oficio, settings = {}, mode = 'download') => {
@@ -979,7 +993,7 @@ const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, 
 };
 
 // ── OficiosAdminView ───────────────────────────────────────────────────────────
-const OficiosAdminView = ({ oficios, informes = [], onDownloadInforme, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings, preFillData, onClearPreFill }) => {
+const OficiosAdminView = ({ oficios, publicaciones = [], informes = [], onDownloadInforme, onCreateOficio, onUpdateOficio, onDeleteOficio, appSettings, preFillData, onClearPreFill }) => {
   const [showForm,setShowForm]=useState(false);const [editingOficio,setEditingOficio]=useState(null);const [deleteModal,setDeleteModal]=useState(null);const [deleting,setDeleting]=useState(false);const [cartasTab,setCartasTab]=useState('oficios');
   useEffect(()=>{if(preFillData){setEditingOficio(null);setShowForm(true);}},[preFillData]);
   const handleNew=()=>{setEditingOficio(null);if(onClearPreFill)onClearPreFill();setShowForm(true);};
@@ -1010,7 +1024,7 @@ const OficiosAdminView = ({ oficios, informes = [], onDownloadInforme, onCreateO
         {oficios.map(o => <OficioCard key={o.id} oficio={o} appSettings={appSettings} informes={informes.filter(informe=>informe.oficio_id===o.id)} onDownloadInforme={onDownloadInforme} onEdit={()=>handleEdit(o)} onStatusChange={(s)=>handleStatusChange(o,s)} onDelete={()=>setDeleteModal(o)} onSavePunto={(pd)=>handleSavePunto(o,pd)}/>)}
         {oficios.length===0 && <div className="text-center py-16"><FileSignature size={48} className="text-gray-300 mx-auto mb-4"/><p className="text-gray-400 text-lg">No hay oficios generados aún.</p></div>}
       </div>
-      {showForm && <OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} oficios={oficios} appSettings={appSettings}/>}
+      {showForm && <OficioFormModal isOpen={showForm} onClose={handleClose} onSave={handleSave} initialData={editingOficio} preFillData={preFillData} oficios={oficios} publicaciones={publicaciones} appSettings={appSettings}/>}
       <Modal isOpen={!!deleteModal} onClose={()=>setDeleteModal(null)} title="Eliminar Oficio" size="sm">
         <div className="space-y-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4"><p className="text-red-700 font-medium">¿Eliminar "{deleteModal?.numero_oficio}"?</p></div>
@@ -1023,14 +1037,49 @@ const OficiosAdminView = ({ oficios, informes = [], onDownloadInforme, onCreateO
 };
 
 // ── OficioFormModal ────────────────────────────────────────────────────────────
-const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, oficios, appSettings }) => {
+const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, oficios, publicaciones = [], appSettings }) => {
   const today = new Date().toISOString().split('T')[0];
   const suggestedNum = computeSuggestedOficioNumero(oficios || []);
   const [currentStep,setCurrentStep]=useState(1);const [saving,setSaving]=useState(false);const [fd,setFd]=useState(null);
   const [showInforme,setShowInforme]=useState(false);
+  // ── Pago de honorarios: selección de meses y actividades del historial ──────
+  const [pagoMeses,setPagoMeses]=useState([]);
+  const [pagoSeleccion,setPagoSeleccion]=useState([]);
+  const [pagoGrados,setPagoGrados]=useState({});
+  const [pagoHuerfanas,setPagoHuerfanas]=useState([]);
+  const tarifas = useMemo(() => parseTarifas(appSettings?.honorarios_tarifario), [appSettings]);
+  const gradosTarifario = useMemo(() => gradosDeTarifario(tarifas), [tarifas]);
+  const historialActividades = useMemo(
+    () => (publicaciones || []).filter(item => item.actividad_nombre),
+    [publicaciones],
+  );
+  const mesesDisponibles = useMemo(() => listActivityMonths(historialActividades), [historialActividades]);
+  const actividadesDelPeriodo = useMemo(
+    () => activitiesInMonths(historialActividades, pagoMeses),
+    [historialActividades, pagoMeses],
+  );
+  const lineasPago = useMemo(() => [
+    ...actividadesDelPeriodo
+      .filter(item => pagoSeleccion.includes(item.id))
+      .map(item => buildPagoLinea(item, { grado: pagoGrados[item.id] ?? item.ponente_grado, tarifas })),
+    ...pagoHuerfanas.filter(linea => pagoSeleccion.includes(linea.publicacion_id)),
+  ], [actividadesDelPeriodo, pagoSeleccion, pagoGrados, pagoHuerfanas, tarifas]);
   useEffect(() => {
     if (!isOpen) return;
     setCurrentStep(1);
+    // Recupera el detalle de pago ya guardado: las actividades que siguen en el
+    // historial se vuelven a marcar y las que ya no están se conservan aparte
+    // para que editar el oficio no borre lo que ya se solicitó.
+    const guardadas = getOficioPagoPonentes(initialData);
+    const idsHistorial = new Set((publicaciones || []).map(item => item.id));
+    const huerfanas = guardadas.filter(linea => !idsHistorial.has(linea.publicacion_id));
+    const enHistorial = guardadas.filter(linea => idsHistorial.has(linea.publicacion_id));
+    setPagoHuerfanas(huerfanas);
+    setPagoSeleccion(guardadas.map(linea => linea.publicacion_id).filter(Boolean));
+    setPagoGrados(Object.fromEntries(guardadas.filter(linea => linea.grado).map(linea => [linea.publicacion_id, linea.grado])));
+    setPagoMeses([...new Set(enHistorial
+      .map(linea => activityMonthKey(linea.fecha))
+      .filter(Boolean))]);
     const isCustomMotivo = (m) => m && !MOTIVOS_OFICIO.includes(m);
     if (preFillData && !initialData) {
       setFd({ titulo:'', numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_hora:preFillData.actividad_hora||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_expositores:preFillData.actividad_expositores||getOficioExpositores(preFillData.justificacion||''), actividad_descripcion:preFillData.actividad_descripcion||'', monto:preFillData.monto||'', monto_detalle:preFillData.monto_detalle||'', justificacion:preFillData.justificacion||'', poblacion_objetivo:preFillData.poblacion_objetivo||'', resultados_esperados:preFillData.resultados_esperados||'', cronograma_resumen:preFillData.cronograma_resumen||'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
@@ -1040,11 +1089,31 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
       const parsed = parseJustificacionSections(initialData?.justificacion || '');
       setFd({ titulo:initialData?.titulo||'', numero_oficio:initialData?initialData.numero_oficio:suggestedNum, fecha:initialData?initialData.fecha:today, dirigido_a:initialData?initialData.dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:isCustomMotivo(m)?'Otro (personalizado)':m, motivo_custom:isCustomMotivo(m)?m:'', actividad_nombre:initialData?.actividad_nombre||'', actividad_tipo:initialData?.actividad_tipo||'', actividad_fecha:initialData?.actividad_fecha||'', actividad_hora:initialData?.actividad_hora||'', actividad_duracion:initialData?.actividad_duracion||'', actividad_modalidad:initialData?.actividad_modalidad||'', actividad_sede:initialData?.actividad_sede||'', actividad_expositores:getOficioExpositores(initialData)||'', actividad_descripcion:initialData?.actividad_descripcion||'', monto:initialData?.monto||'', monto_detalle:initialData?.monto_detalle||'', justificacion:initialData?parsed.intro:'', poblacion_objetivo:parsed.sections['Población objetivo y alcance esperado']||'', resultados_esperados:parsed.sections['Resultados esperados']||'', cronograma_resumen:parsed.sections['Cronograma resumido']||'', solicitud_puntual:initialData?.solicitud_puntual||'', cuerpo_personalizado:initialData?.cuerpo_personalizado||'', estado:initialData?.estado||'Borrador' });
     }
-  }, [isOpen, initialData, preFillData]);
+  }, [isOpen, initialData, preFillData, publicaciones]);
   if (!isOpen||!fd) return null;
   const isRecursos = fd.motivo.includes('recursos') || fd.motivo.includes('Aprobación');
   const isCustomMotivo = fd.motivo === 'Otro (personalizado)';
+  const isPago = esOficioPagoPonentes(isCustomMotivo ? fd.motivo_custom : fd.motivo);
   const upd = (k,v) => setFd(p => ({...p,[k]:v}));
+  const totalPago = totalPagoPonentes(lineasPago);
+  const sinGrado = lineasPago.filter(linea => !linea.grado).length;
+  const toggleMes = (key) => {
+    const next = pagoMeses.includes(key) ? pagoMeses.filter(m => m !== key) : [...pagoMeses, key];
+    // Al quitar un mes se desmarcan sus actividades, para que el total del oficio
+    // siempre corresponda a lo que se ve marcado en pantalla.
+    const visibles = new Set(activitiesInMonths(historialActividades, next).map(item => item.id));
+    setPagoMeses(next);
+    setPagoSeleccion(ids => ids.filter(id => visibles.has(id) || pagoHuerfanas.some(l => l.publicacion_id === id)));
+  };
+  const toggleActividadPago = (id) => setPagoSeleccion(prev => (
+    prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+  ));
+  const marcarTodasDelPeriodo = () => setPagoSeleccion(prev => [
+    ...new Set([...prev, ...actividadesDelPeriodo.map(item => item.id)]),
+  ]);
+  const limpiarSeleccionPago = () => setPagoSeleccion(
+    pagoHuerfanas.map(linea => linea.publicacion_id).filter(Boolean),
+  );
   const goToPreview = (e) => { e.preventDefault(); setCurrentStep(2); };
   // Consolida los campos del informe técnico dentro de `justificacion` (no se agregan columnas nuevas a oficios)
   const buildSaveData = (base) => {
@@ -1052,6 +1121,10 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
     if(isCustomMotivo&&fd.motivo_custom)sd.motivo=fd.motivo_custom;
     delete sd.motivo_custom;
     sd.justificacion = setOficioExpositores(mergeInformeTecnico(sd.justificacion, sd), sd.actividad_expositores);
+    // El detalle de pago viaja dentro de `justificacion`, igual que el resto de
+    // bloques estructurados del oficio (sin columnas nuevas en la tabla).
+    sd.justificacion = setOficioPagoPonentes(sd.justificacion, isPago ? lineasPago : []);
+    if (isPago) sd.monto = lineasPago.length ? totalPagoPonentesTexto(lineasPago) : '';
     delete sd.actividad_expositores;
     delete sd.poblacion_objetivo; delete sd.resultados_esperados; delete sd.cronograma_resumen;
     return sd;
@@ -1084,7 +1157,9 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
               <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Motivo:</span><span className="text-gray-800">{isCustomMotivo?fd.motivo_custom:fd.motivo}</span></div>
               {fd.actividad_nombre && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Actividad:</span><span className="text-gray-800">{fd.actividad_nombre}</span></div>}
               {fd.actividad_expositores && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Expositor(es):</span><span className="text-gray-800">{fd.actividad_expositores}</span></div>}
-              {fd.monto && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Monto:</span><span className="text-green-700 font-bold">{fd.monto}</span></div>}
+              {isPago && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Honorarios:</span><span className="text-gray-800">{lineasPago.length} actividad{lineasPago.length===1?'':'es'} · <strong className="text-green-700">{formatoQuetzales(totalPago)}</strong></span></div>}
+              {isPago && lineasPago.length > 0 && <ul className="pl-4 list-disc text-xs text-gray-600 space-y-0.5">{lineasPago.map(linea=><li key={linea.publicacion_id}>{linea.profesional || 'Profesional pendiente'} — {linea.actividad || 'Actividad sin nombre'} · {formatHoraActividad(linea.hora) || 'Hora por confirmar'} · {formatoQuetzales(linea.monto)}</li>)}</ul>}
+              {!isPago && fd.monto && <div className="flex gap-2"><span className="font-semibold text-gray-600 shrink-0">Monto:</span><span className="text-green-700 font-bold">{fd.monto}</span></div>}
             </div>
           </div>
           <div className="space-y-2 pt-2">
@@ -1113,6 +1188,87 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
               <select required className="w-full border p-2.5 rounded-lg font-medium" value={fd.motivo} onChange={e=>upd('motivo',e.target.value)}>{MOTIVOS_OFICIO.map(m=><option key={m} value={m}>{m}</option>)}</select>
               {isCustomMotivo && <textarea required rows={3} placeholder="Describe el motivo..." className="w-full border p-2.5 rounded-lg text-sm resize-none" value={fd.motivo_custom} onChange={e=>upd('motivo_custom',e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.stopPropagation();}}/>}
             </div>
+            {isPago && (<div className="bg-emerald-50 rounded-lg p-4 space-y-4 border border-emerald-100">
+              <div>
+                <h4 className="font-bold text-emerald-800 text-sm uppercase flex items-center gap-2"><Megaphone size={14}/> Actividades a pagar</h4>
+                <p className="text-xs text-emerald-700 mt-1">Se toman del <strong>Historial de actividades</strong> de Solicitud de publicación. Marca primero el mes o los meses y luego las actividades que entran en este oficio.</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-emerald-800 uppercase mb-2">1. Mes o meses</p>
+                {mesesDisponibles.length === 0 && <p className="text-xs text-gray-500 bg-white border rounded-lg p-3">Todavía no hay actividades con fecha en el historial de publicaciones.</p>}
+                <div className="flex flex-wrap gap-2">
+                  {mesesDisponibles.map(mes => (
+                    <label key={mes.key} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer capitalize ${pagoMeses.includes(mes.key) ? 'bg-emerald-600 text-white border-emerald-600 font-bold' : 'bg-white border-gray-200 text-gray-700 hover:bg-emerald-50'}`}>
+                      <input type="checkbox" checked={pagoMeses.includes(mes.key)} onChange={()=>toggleMes(mes.key)} className="accent-emerald-600"/>
+                      {mes.label} <span className={pagoMeses.includes(mes.key) ? 'text-emerald-100' : 'text-gray-400'}>({mes.total})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <p className="text-xs font-bold text-emerald-800 uppercase">2. Actividades del período</p>
+                  {actividadesDelPeriodo.length > 0 && <div className="flex gap-2">
+                    <button type="button" onClick={marcarTodasDelPeriodo} className="text-xs font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-3 py-1.5 rounded-lg">Marcar todas</button>
+                    <button type="button" onClick={limpiarSeleccionPago} className="text-xs font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg">Limpiar</button>
+                  </div>}
+                </div>
+                {!pagoMeses.length && <p className="text-xs text-gray-500 bg-white border rounded-lg p-3">Marca al menos un mes para ver sus actividades.</p>}
+                {pagoMeses.length > 0 && actividadesDelPeriodo.length === 0 && <p className="text-xs text-gray-500 bg-white border rounded-lg p-3">No hay actividades registradas en los meses marcados.</p>}
+                <div className="space-y-2">
+                  {actividadesDelPeriodo.map(item => {
+                    const marcada = pagoSeleccion.includes(item.id);
+                    const grado = pagoGrados[item.id] ?? item.ponente_grado ?? '';
+                    const monto = montoPorGrado(grado, tarifas);
+                    return (
+                      <div key={item.id} className={`rounded-lg border p-3 ${marcada ? 'border-emerald-400 bg-white' : 'border-gray-200 bg-white/70'}`}>
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input type="checkbox" checked={marcada} onChange={()=>toggleActividadPago(item.id)} className="mt-1 h-4 w-4 accent-emerald-600 shrink-0"/>
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-bold text-sm text-gray-800 truncate">{item.actividad_nombre}</span>
+                            <span className="block text-xs text-gray-500">{item.ponente_nombre || 'Profesional pendiente'} · {formatRegistroDate(item.actividad_fecha)} · {formatHoraActividad(item.actividad_hora) || 'Hora por confirmar'}</span>
+                          </span>
+                          <span className={`text-sm font-bold shrink-0 ${monto !== null ? 'text-emerald-700' : 'text-amber-600'}`}>{monto !== null ? formatoQuetzales(monto) : 'Sin grado'}</span>
+                        </label>
+                        {marcada && (
+                          <div className="mt-2 pl-7 flex flex-wrap items-center gap-2">
+                            <label className="text-xs font-bold text-gray-600" htmlFor={`grado-${item.id}`}>Grado académico</label>
+                            <select id={`grado-${item.id}`} value={grado} onChange={e=>setPagoGrados(prev=>({...prev,[item.id]:e.target.value}))} className="border rounded-lg px-2 py-1.5 text-sm bg-white">
+                              <option value="">Sin definir</option>
+                              {gradosTarifario.map(g=><option key={g} value={g}>{g}</option>)}
+                              {grado && !gradosTarifario.includes(grado) && <option value={grado}>{grado} (fuera del tarifario)</option>}
+                            </select>
+                            {!grado && <span className="text-xs text-amber-600">Sin grado el monto queda en Q. 0.00. También puedes registrarlo en la solicitud de publicación.</span>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {pagoHuerfanas.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-xs font-bold text-amber-800 uppercase mb-2">Actividades ya no disponibles en el historial</p>
+                  {pagoHuerfanas.map(linea => (
+                    <label key={linea.publicacion_id} className="flex items-start gap-3 text-xs text-amber-900 py-1 cursor-pointer">
+                      <input type="checkbox" checked={pagoSeleccion.includes(linea.publicacion_id)} onChange={()=>toggleActividadPago(linea.publicacion_id)} className="mt-0.5 h-4 w-4 accent-amber-600 shrink-0"/>
+                      <span className="flex-1">{linea.profesional || 'Profesional pendiente'} — {linea.actividad || 'Actividad sin nombre'} · {formatHoraActividad(linea.hora) || 'Hora por confirmar'}</span>
+                      <span className="font-bold shrink-0">{formatoQuetzales(linea.monto)}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-lg bg-white border border-emerald-200 p-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-gray-600">{lineasPago.length} actividad{lineasPago.length === 1 ? '' : 'es'} seleccionada{lineasPago.length === 1 ? '' : 's'}{sinGrado ? ` · ${sinGrado} sin grado académico` : ''}</span>
+                <span className="text-lg font-black text-emerald-700">{formatoQuetzales(totalPago)}</span>
+              </div>
+              <p className="text-xs text-emerald-700">El detalle (profesional, actividad, hora y monto) se imprime como lista en la página 2 del oficio y el total se copia al campo de monto.</p>
+            </div>)}
+
             {isRecursos && (<div className="bg-green-50 rounded-lg p-4 space-y-3 border border-green-100"><h4 className="font-bold text-green-800 text-sm uppercase">Datos de la Actividad</h4><input required placeholder="Nombre de la actividad *" className="w-full border p-2.5 rounded-lg" value={fd.actividad_nombre} onChange={e=>upd('actividad_nombre',e.target.value)}/><textarea rows={3} placeholder="Descripción" className="w-full border p-2.5 rounded-lg" value={fd.actividad_descripcion} onChange={e=>upd('actividad_descripcion',e.target.value)}/><div className="grid grid-cols-2 gap-3"><div><label className="block text-sm font-bold mb-1">Tipo</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_tipo} onChange={e=>upd('actividad_tipo',e.target.value)}><option value="">Seleccionar...</option>{ACTIVITY_TYPES.map(t=><option key={t}>{t}</option>)}</select></div><div><label className="block text-sm font-bold mb-1">Modalidad</label><select className="w-full border p-2.5 rounded-lg" value={fd.actividad_modalidad} onChange={e=>upd('actividad_modalidad',e.target.value)}><option value="">Seleccionar...</option>{MODALITIES.map(m=><option key={m}>{m}</option>)}</select></div></div><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><div><label className="block text-sm font-bold mb-1">Duración</label><input placeholder="Ej: 2-3 horas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_duracion} onChange={e=>upd('actividad_duracion',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Fecha</label><input placeholder="Ej: 29 de octubre" className="w-full border p-2.5 rounded-lg" value={fd.actividad_fecha} onChange={e=>upd('actividad_fecha',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Hora de la actividad</label><input type="time" className="w-full border p-2.5 rounded-lg" value={fd.actividad_hora} onChange={e=>upd('actividad_hora',e.target.value)}/></div></div><div><label className="block text-sm font-bold mb-1">Sede / Plataforma</label><input placeholder="Dirección, aula virtual o ambas" className="w-full border p-2.5 rounded-lg" value={fd.actividad_sede} onChange={e=>upd('actividad_sede',e.target.value)}/></div><div><label className="block text-sm font-bold mb-1">Nombre de expositor(es)</label><textarea rows={2} placeholder="Escribe uno o varios nombres" className="w-full border p-2.5 rounded-lg" value={fd.actividad_expositores} onChange={e=>upd('actividad_expositores',e.target.value)}/><p className="mt-1 text-xs text-green-700">Se incluirán en el oficio y en la solicitud de publicación.</p></div></div>)}
             {isRecursos && (<div className="bg-rose-50 rounded-lg p-4 space-y-3 border border-rose-100"><h4 className="font-bold text-rose-800 text-sm uppercase">Recursos Solicitados</h4><input placeholder="Monto (ej: Q3,000.00)" className="w-full border p-2.5 rounded-lg" value={fd.monto} onChange={e=>upd('monto',e.target.value)}/><textarea rows={2} placeholder="Detalle de recursos" className="w-full border p-2.5 rounded-lg" value={fd.monto_detalle} onChange={e=>upd('monto_detalle',e.target.value)}/></div>)}
             <div className="bg-purple-50 rounded-lg p-4 space-y-3 border border-purple-100">
@@ -1682,7 +1838,7 @@ export default function CAEDUCApp() {
             {currentModule==='inicio' && <InicioDashboardView onNavigate={setCurrentModule} userName={displayName} onOpenActividad={(id)=>{setActividadDesdeInicio(id);setCurrentModule('planificacion');}}/>}
             {(currentModule==='planificacion'||currentModule==='dashboard') && <PlanificacionCAEDUCView onNavigateOficios={handleNavigateToOficios} abrirActividadId={actividadDesdeInicio} onClearAbrirActividad={()=>setActividadDesdeInicio(null)}/>}
             {currentModule==='avales' && <AvalesAdminView avales={avales} updateAval={updateAval} deleteAval={deleteAval} appSettings={appSettings} canEdit={session?.user?.email===SUPER_ADMIN || canDo(userPermissions,'avales','edit')}/>}
-            {currentModule==='oficios' && <OficiosAdminView oficios={oficios} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
+            {currentModule==='oficios' && <OficiosAdminView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting} onGenerateActivityReport={(activities, options) => openActivityRegisterReport(activities, options, appSettings)}/>}
             {currentModule==='informes_actividades' && (
               <InformesActividadesView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')}/>

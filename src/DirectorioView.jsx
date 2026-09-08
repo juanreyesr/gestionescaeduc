@@ -10,6 +10,7 @@ import {
   Award, GraduationCap, Printer, Download, Loader, Copy, Check
 } from 'lucide-react';
 import { buildFacturaText, escapeFacturaHtml } from './lib/factura.js';
+import { formatoQuetzales, parseTarifas, TARIFAS_DEFAULT } from './lib/tarifario.js';
 import {
   ACTIVITY_SOURCE_OFICIO,
   ACTIVITY_SOURCE_PUBLICACION,
@@ -1357,25 +1358,9 @@ function ProcedimientosSection() {
 // ── TARIFARIO DE HONORARIOS ─────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
-const TARIFAS_DEFAULT = [
-  { grado: 'Licenciatura',    monto: 2000 },
-  { grado: 'Maestría',        monto: 2500 },
-  { grado: 'Doctorado',       monto: 3000 },
-  { grado: 'Post Doctorado',  monto: 3500 },
-];
-
-const parseTarifas = (value) => {
-  if (!value) return TARIFAS_DEFAULT;
-  try {
-    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-    if (!Array.isArray(parsed) || !parsed.length) return TARIFAS_DEFAULT;
-    return parsed.map(item => ({ grado: String(item.grado || ''), monto: Number(item.monto || 0) }));
-  } catch {
-    return TARIFAS_DEFAULT;
-  }
-};
-
-const fmtQ = (n) => 'Q. ' + n.toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// El tarifario (grados y montos) vive en src/lib/tarifario.js: lo comparten esta
+// carta, el modelo de factura y los oficios de pago de honorarios a ponentes.
+const fmtQ = formatoQuetzales;
 
 const fechaLarga = (iso) => {
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -1563,15 +1548,27 @@ function ModeloFacturaSection() {
 
   useEffect(() => {
     let active = true;
+    // `ponente_grado` es una columna nueva; si la base aún no la tiene, se
+    // reintenta sin ella para no dejar la sección sin actividades.
+    const cargarPublicaciones = async () => {
+      const columnas = 'id,actividad_nombre,ponente_nombre,ponente_grado,actividad_fecha,actividad_hora,actividad_lugar,zoom_detalles,updated_at';
+      const conGrado = await supabase.from('caeduc_publicaciones').select(columnas).order('updated_at', { ascending: false });
+      if (!conGrado.error) return conGrado;
+      return supabase.from('caeduc_publicaciones')
+        .select(columnas.replace(',ponente_grado', ''))
+        .order('updated_at', { ascending: false });
+    };
     Promise.all([
       supabase.from('oficios').select('id,numero_oficio,actividad_nombre,actividad_tipo,actividad_fecha,actividad_hora,actividad_descripcion,monto,estado').order('created_at', { ascending: false }),
-      supabase.from('caeduc_publicaciones').select('id,actividad_nombre,ponente_nombre,actividad_fecha,actividad_hora,actividad_lugar,zoom_detalles,updated_at').order('updated_at', { ascending: false }),
-    ]).then(([oficiosResult, publicacionesResult]) => {
+      cargarPublicaciones(),
+      supabase.from('app_settings').select('value').eq('key', 'honorarios_tarifario').maybeSingle(),
+    ]).then(([oficiosResult, publicacionesResult, tarifarioResult]) => {
         if (!active) return;
         const errores = [oficiosResult.error, publicacionesResult.error].filter(Boolean);
         if (errores.length) alert(`No se pudieron cargar todas las actividades: ${errores.map(error => error.message).join(' · ')}`);
+        const tarifas = parseTarifas(tarifarioResult?.data?.value);
         const conActividad = (oficiosResult.data || []).filter(o => o.actividad_nombre).map(oficioToActivity);
-        const solicitudes = (publicacionesResult.data || []).filter(item => item.actividad_nombre).map(publicationToActivity);
+        const solicitudes = (publicacionesResult.data || []).filter(item => item.actividad_nombre).map(item => publicationToActivity(item, tarifas));
         setOficios(conActividad);
         setPublicaciones(solicitudes);
         if (conActividad.length) setSelectedId(conActividad[0].id);
@@ -1650,7 +1647,7 @@ function ModeloFacturaSection() {
           {!loading && !actividades.length && <option>No hay actividades disponibles en este origen</option>}
           {actividades.map(item => <option key={item.id} value={item.id}>{sourceType === ACTIVITY_SOURCE_OFICIO ? `${item.numero_oficio || 'Sin número'} — ` : ''}{item.actividad_nombre}{item.estado === 'Borrador' ? ' (Borrador)' : ''}</option>)}
         </select>
-        <p className="text-xs text-gray-500 mt-2">Las solicitudes de publicación que no tengan monto dejarán ese dato pendiente para que lo completes en el texto editable.</p>
+        <p className="text-xs text-gray-500 mt-2">En las solicitudes de publicación el monto se toma del tarifario según el grado académico registrado; si la solicitud no tiene grado, ese dato queda pendiente para que lo completes en el texto editable.</p>
       </Card>
 
       <Card className="max-w-3xl">
