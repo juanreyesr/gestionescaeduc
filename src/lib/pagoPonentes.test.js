@@ -12,6 +12,7 @@ import {
   listActivityMonths,
   monthLabel,
   setOficioPagoPonentes,
+  SIN_MES,
   totalPagoPonentes,
 } from './pagoPonentes.js';
 import { montoPorGrado, parseTarifas } from './tarifario.js';
@@ -32,7 +33,51 @@ test('agrupa el historial por mes y ordena del más reciente al más antiguo', (
   assert.deepEqual(listActivityMonths(HISTORIAL), [
     { key: '2026-09', label: 'septiembre de 2026', total: 1 },
     { key: '2026-08', label: 'agosto de 2026', total: 2 },
+    { key: SIN_MES, label: 'Sin fecha reconocida', total: 1 },
   ]);
+});
+
+test('reconoce las formas en que se escribe la fecha en el historial', () => {
+  // Todas estas se escribieron alguna vez a mano y deben caer en junio de 2026.
+  [
+    '2026-06-12',
+    '2026/06/12',
+    '12/06/2026',
+    '12-06-2026',
+    '12.06.26',
+    '12 de junio de 2026',
+    '12 de junio del 2026',
+    '12 junio 2026',
+    'jueves 12 de junio de 2026',
+    'del 10 al 12 de junio de 2026',
+    '12 de jun. de 2026',
+  ].forEach(fecha => assert.equal(activityMonthKey(fecha), '2026-06', `falló con "${fecha}"`));
+
+  // Sin día: no sirve para ordenar, pero sí para agrupar por mes.
+  ['junio de 2026', 'junio 2026', '2026-06', '06/2026'].forEach(
+    fecha => assert.equal(activityMonthKey(fecha), '2026-06', `falló con "${fecha}"`),
+  );
+
+  // Un texto que no es una fecha no se inventa un mes.
+  ['', 'por confirmar', 'pendiente'].forEach(
+    fecha => assert.equal(activityMonthKey(fecha), '', `falló con "${fecha}"`),
+  );
+});
+
+test('ninguna actividad queda fuera: las de fecha ilegible caen en su propio grupo', () => {
+  const raras = [
+    { id: 'r1', actividad_nombre: 'Sin fecha', actividad_fecha: '' },
+    { id: 'r2', actividad_nombre: 'Por confirmar', actividad_fecha: 'por confirmar' },
+    { id: 'r3', actividad_nombre: 'Junio', actividad_fecha: '12 de junio de 2026' },
+  ];
+  const meses = listActivityMonths(raras);
+  assert.deepEqual(meses.map(mes => mes.key), ['2026-06', SIN_MES]);
+  assert.equal(meses.find(mes => mes.key === SIN_MES).total, 2);
+  assert.deepEqual(activitiesInMonths(raras, [SIN_MES]).map(item => item.id), ['r2', 'r1']);
+  assert.deepEqual(
+    activitiesInMonths(raras, ['2026-06', SIN_MES]).map(item => item.id),
+    ['r3', 'r2', 'r1'],
+  );
 });
 
 test('filtra las actividades de los meses marcados, en orden de fecha', () => {

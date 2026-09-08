@@ -19,7 +19,7 @@ import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResult
 import {
   activitiesInMonths, activityMonthKey, buildPagoLinea, buildPagoPonentesCuerpo,
   esOficioPagoPonentes, formatHoraActividad, getOficioPagoPonentes, listActivityMonths,
-  setOficioPagoPonentes, totalPagoPonentes, totalPagoPonentesTexto,
+  setOficioPagoPonentes, SIN_MES, totalPagoPonentes, totalPagoPonentesTexto,
 } from './lib/pagoPonentes.js';
 import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
 import { generateInformeActividadHTML, informeFileName } from './lib/informesActividad.js';
@@ -1078,8 +1078,7 @@ const OficioFormModal = ({ isOpen, onClose, onSave, initialData, preFillData, of
     setPagoSeleccion(guardadas.map(linea => linea.publicacion_id).filter(Boolean));
     setPagoGrados(Object.fromEntries(guardadas.filter(linea => linea.grado).map(linea => [linea.publicacion_id, linea.grado])));
     setPagoMeses([...new Set(enHistorial
-      .map(linea => activityMonthKey(linea.fecha))
-      .filter(Boolean))]);
+      .map(linea => activityMonthKey(linea.fecha) || SIN_MES))]);
     const isCustomMotivo = (m) => m && !MOTIVOS_OFICIO.includes(m);
     if (preFillData && !initialData) {
       setFd({ titulo:'', numero_oficio:suggestedNum, fecha:today, dirigido_a:'Miembros, Junta Directiva 2025-2027, Colegio de Psicólogos de Guatemala', motivo:MOTIVOS_OFICIO[0], motivo_custom:'', actividad_nombre:preFillData.actividad_nombre||'', actividad_tipo:preFillData.actividad_tipo||'', actividad_fecha:preFillData.actividad_fecha||'', actividad_hora:preFillData.actividad_hora||'', actividad_duracion:preFillData.actividad_duracion||'', actividad_modalidad:preFillData.actividad_modalidad||'', actividad_sede:preFillData.actividad_sede||preFillData.t3_lugar||'', actividad_expositores:preFillData.actividad_expositores||getOficioExpositores(preFillData.justificacion||''), actividad_descripcion:preFillData.actividad_descripcion||'', monto:preFillData.monto||'', monto_detalle:preFillData.monto_detalle||'', justificacion:preFillData.justificacion||'', poblacion_objetivo:preFillData.poblacion_objetivo||'', resultados_esperados:preFillData.resultados_esperados||'', cronograma_resumen:preFillData.cronograma_resumen||'', solicitud_puntual:'', cuerpo_personalizado:'', estado:'Borrador' });
