@@ -13,6 +13,7 @@ import {
   whatsappUrl,
 } from './lib/publicaciones.js';
 import { activitiesInDateRange, sortActivitiesByDate } from './lib/registroActividadesReport.js';
+import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
 
 const SETTINGS_KEY = 'publicacion_responsables';
 const HISTORY_TABLE = 'caeduc_publicaciones';
@@ -22,6 +23,7 @@ const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
 const blankActivity = () => ({
   actividad_nombre: '',
   ponente_nombre: '',
+  ponente_grado: '',
   actividad_fecha: '',
   actividad_hora: '',
   actividad_lugar: '',
@@ -120,6 +122,12 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     () => oficios.filter(item => item.actividad_nombre),
     [oficios],
   );
+
+  // Tarifario vigente: el grado académico solo se usa aquí para calcular el
+  // honorario en los oficios de pago y en el modelo de factura.
+  const tarifas = useMemo(() => parseTarifas(appSettings.honorarios_tarifario), [appSettings]);
+  const grados = useMemo(() => gradosDeTarifario(tarifas), [tarifas]);
+  const montoGrado = montoPorGrado(activity.ponente_grado || '', tarifas);
 
   const responsible = responsibles.find(item => item.id === selectedResponsibleId);
   const oficio = activityOficios.find(item => item.id === selectedOficioId);
@@ -338,6 +346,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         oficio_id: sourceMode === 'oficio' ? selectedOficioId || null : null,
         actividad_nombre: activity.actividad_nombre.trim(),
         ponente_nombre: activity.ponente_nombre.trim(),
+        ponente_grado: String(activity.ponente_grado || '').trim(),
         actividad_fecha: activity.actividad_fecha.trim(),
         actividad_hora: activity.actividad_hora.trim(),
         actividad_lugar: activity.actividad_lugar.trim(),
@@ -350,10 +359,18 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         updated_at: new Date().toISOString(),
       };
 
-      const query = editingHistoryId
-        ? supabase.from(HISTORY_TABLE).update(payload).eq('id', editingHistoryId)
-        : supabase.from(HISTORY_TABLE).insert([{ ...payload, id: recordId }]);
-      const { data, error } = await query.select().single();
+      // `ponente_grado` es una columna nueva. Si la base todavía no la tiene, se
+      // guarda el resto del registro y se avisa en vez de perder el trabajo.
+      const guardar = (body) => (editingHistoryId
+        ? supabase.from(HISTORY_TABLE).update(body).eq('id', editingHistoryId)
+        : supabase.from(HISTORY_TABLE).insert([{ ...body, id: recordId }])).select().single();
+      let { data, error } = await guardar(payload);
+      let gradoOmitido = false;
+      if (error && /ponente_grado/.test(error.message || '')) {
+        const { ponente_grado: _omitido, ...sinGrado } = payload;
+        ({ data, error } = await guardar(sinGrado));
+        gradoOmitido = !error;
+      }
       if (error) throw error;
 
       if (oldPath && oldPath !== photoPath) {
@@ -367,7 +384,9 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       setPhotoFile(null);
       setPhotoPreview('');
       await loadHistory();
-      setFeedback(editingHistoryId ? 'Actividad actualizada en el historial.' : 'Actividad guardada en el historial.');
+      setFeedback(gradoOmitido
+        ? 'Actividad guardada, pero el grado académico no pudo almacenarse: falta la columna "ponente_grado" en la tabla caeduc_publicaciones (ver supabase/2026_ponente_grado.sql).'
+        : editingHistoryId ? 'Actividad actualizada en el historial.' : 'Actividad guardada en el historial.');
     } catch (error) {
       if (uploadedPath) await supabase.storage.from(PHOTO_BUCKET).remove([uploadedPath]);
       setFeedback(`No se pudo guardar la actividad: ${error.message}`);
@@ -383,6 +402,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     setActivity({
       actividad_nombre: item.actividad_nombre || '',
       ponente_nombre: item.ponente_nombre || '',
+      ponente_grado: item.ponente_grado || '',
       actividad_fecha: item.actividad_fecha || '',
       actividad_hora: item.actividad_hora || '',
       actividad_lugar: item.actividad_lugar || '',
@@ -565,6 +585,33 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                   <input id="publication-speaker" value={activity.ponente_nombre} onChange={event => updateActivity('ponente_nombre', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
                 </Field>
               </div>
+              <div className="sm:col-span-2">
+                <Field
+                  id="publication-degree"
+                  label="Grado académico del profesional"
+                  helper="Uso interno: define el honorario según el tarifario para los oficios de pago y el modelo de factura. No se publica ni se envía a nadie."
+                >
+                  <select
+                    id="publication-degree"
+                    value={activity.ponente_grado}
+                    onChange={event => updateActivity('ponente_grado', event.target.value)}
+                    className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  >
+                    <option value="">Sin definir</option>
+                    {grados.map(grado => <option key={grado} value={grado}>{grado}</option>)}
+                    {activity.ponente_grado && !grados.includes(activity.ponente_grado) && (
+                      <option value={activity.ponente_grado}>{activity.ponente_grado} (fuera del tarifario)</option>
+                    )}
+                  </select>
+                  {activity.ponente_grado && (
+                    <p className="mt-1.5 text-xs font-bold text-emerald-700">
+                      {montoGrado !== null
+                        ? `Honorario según tarifario: ${formatoQuetzales(montoGrado)}`
+                        : 'Este grado ya no está en el tarifario; actualízalo en Directorio → Tarifario de Honorarios.'}
+                    </p>
+                  )}
+                </Field>
+              </div>
               <Field id="publication-date" label="Fecha">
                 <input id="publication-date" type="text" value={activity.actividad_fecha} onChange={event => updateActivity('actividad_fecha', event.target.value)} placeholder="Ej. 20 de agosto de 2026" className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
               </Field>
@@ -721,6 +768,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
               <div className="border-t border-slate-100 px-4 py-4">
                 <div className="grid gap-3 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Ponente</span>{item.ponente_nombre || 'Pendiente'}</p>
+                  <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Grado académico</span>{item.ponente_grado ? `${item.ponente_grado}${montoPorGrado(item.ponente_grado, tarifas) !== null ? ` · ${formatoQuetzales(montoPorGrado(item.ponente_grado, tarifas))}` : ''}` : 'Sin definir'}</p>
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Hora</span>{item.actividad_hora || 'Pendiente'}</p>
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Lugar</span>{item.actividad_lugar || 'Pendiente'}</p>
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Actualizado</span>{new Date(item.updated_at).toLocaleDateString('es-GT')}</p>

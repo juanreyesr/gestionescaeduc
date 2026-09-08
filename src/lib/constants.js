@@ -98,6 +98,7 @@ export const MOTIVOS_OFICIO = [
   'Solicitud de salón y equipo audiovisual',
   'Solicitud de materiales e insumos',
   'Informe de actividad realizada',
+  'Solicitud de pago de honorarios a ponentes',
   'Solicitud de difusión institucional',
   'Otro (personalizado)'
 ];
