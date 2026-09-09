@@ -1,0 +1,113 @@
+// src/lib/expedientePonentes.js — Expediente de documentos del ponente
+//
+// Cada expediente corresponde a una actividad del "Historial de actividades" de
+// Solicitud de publicación y reúne los papeles que Tesorería pide para pagarle al
+// profesional. Los documentos se cargan de a poco: el expediente existe desde que
+// se crea, aunque todavía no tenga ningún archivo.
+
+// Orden en que Tesorería espera los documentos. Es también el orden del ZIP.
+export const DOCUMENTOS_PONENTE = [
+  { tipo: 'cv',      label: 'Curriculum Vitae',            corto: 'CV' },
+  { tipo: 'rtu',     label: 'RTU',                         corto: 'RTU' },
+  { tipo: 'dpi',     label: 'DPI',                         corto: 'DPI' },
+  { tipo: 'titulo',  label: 'Último título profesional',   corto: 'Titulo' },
+  { tipo: 'factura', label: 'Factura',                     corto: 'Factura' },
+  { tipo: 'informe', label: 'Informe de actividad firmado por el ponente', corto: 'Informe' },
+];
+
+export const TIPOS_PONENTE = DOCUMENTOS_PONENTE.map(item => item.tipo);
+
+export const documentoLabel = (tipo) => DOCUMENTOS_PONENTE.find(item => item.tipo === tipo)?.label || tipo;
+
+const ordenTipo = (tipo) => {
+  const index = TIPOS_PONENTE.indexOf(tipo);
+  return index === -1 ? TIPOS_PONENTE.length : index;
+};
+
+// Nombre seguro para archivos y carpetas: sin tildes ni caracteres que rompan
+// una descarga en Windows, macOS o Android.
+export const nombreSeguro = (value, fallback = 'documento') => {
+  const limpio = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return limpio || fallback;
+};
+
+export const extensionArchivo = (nombre = '', porDefecto = 'pdf') => {
+  const match = String(nombre).match(/\.([a-z0-9]{1,8})$/i);
+  return match ? match[1].toLowerCase() : porDefecto;
+};
+
+// Copia los datos de la actividad al crear el expediente, para que conserve lo
+// que se solicitó aunque después se edite la solicitud de publicación.
+export const expedienteDesdePublicacion = (publicacion = {}) => ({
+  publicacion_id: publicacion.id || null,
+  ponente_nombre: String(publicacion.ponente_nombre || '').trim(),
+  ponente_grado: String(publicacion.ponente_grado || '').trim(),
+  actividad_nombre: String(publicacion.actividad_nombre || '').trim(),
+  actividad_fecha: String(publicacion.actividad_fecha || '').trim(),
+  actividad_hora: String(publicacion.actividad_hora || '').trim(),
+  actividad_lugar: String(publicacion.actividad_lugar || '').trim(),
+});
+
+// Agrupa los documentos por tipo, en el orden del checklist.
+export const agruparDocumentos = (documentos = []) => DOCUMENTOS_PONENTE.map(item => ({
+  ...item,
+  documentos: documentos
+    .filter(doc => doc.tipo === item.tipo)
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))),
+}));
+
+// Cuántos de los seis documentos ya tienen al menos un archivo.
+export const progresoExpediente = (documentos = []) => {
+  const cargados = TIPOS_PONENTE.filter(tipo => documentos.some(doc => doc.tipo === tipo));
+  const faltantes = TIPOS_PONENTE.filter(tipo => !cargados.includes(tipo));
+  return {
+    cargados: cargados.length,
+    total: TIPOS_PONENTE.length,
+    faltantes,
+    faltantesTexto: faltantes.map(documentoLabel).join(', '),
+    completo: faltantes.length === 0,
+  };
+};
+
+// Carpeta que agrupa todo dentro del ZIP.
+export const carpetaExpediente = (expediente = {}) => nombreSeguro(
+  [
+    'Expediente',
+    expediente.ponente_nombre,
+    expediente.actividad_nombre && `- ${expediente.actividad_nombre}`,
+  ].filter(Boolean).join(' '),
+  'Expediente ponente',
+);
+
+// Nombre de cada archivo dentro del ZIP: numerado en el orden del checklist para
+// que Tesorería los reciba siempre en la misma secuencia. Cuando un tipo trae
+// varios archivos (por ejemplo los dos lados del DPI) se numeran entre sí.
+export const nombreArchivoEnZip = (documento = {}, { expediente = {}, indiceEnTipo = 0, totalDelTipo = 1 } = {}) => {
+  const posicion = String(ordenTipo(documento.tipo) + 1).padStart(2, '0');
+  const etiqueta = DOCUMENTOS_PONENTE.find(item => item.tipo === documento.tipo)?.corto || documento.tipo;
+  const sufijo = totalDelTipo > 1 ? ` (${indiceEnTipo + 1})` : '';
+  const persona = nombreSeguro(expediente.ponente_nombre, 'Ponente');
+  const extension = extensionArchivo(documento.archivo_nombre);
+  return `${posicion} ${etiqueta}${sufijo} - ${persona}.${extension}`;
+};
+
+// Plan de descarga: qué archivo del bucket va a qué ruta dentro del ZIP.
+// Se calcula aparte de la descarga para poder probarlo sin tocar la red.
+export const planDescargaExpediente = (expediente = {}, documentos = []) => {
+  const carpeta = carpetaExpediente(expediente);
+  return agruparDocumentos(documentos).flatMap(grupo => grupo.documentos.map((documento, indice) => ({
+    archivo_path: documento.archivo_path,
+    ruta: `${carpeta}/${nombreArchivoEnZip(documento, {
+      expediente,
+      indiceEnTipo: indice,
+      totalDelTipo: grupo.documentos.length,
+    })}`,
+  })));
+};
+
+export const nombreZipExpediente = (expediente = {}) => `${carpetaExpediente(expediente)}.zip`;
