@@ -6,7 +6,7 @@ import {
   FileSignature, Upload, Save, AlertTriangle, FileSpreadsheet,
   UserPlus, Link2, File, Trash2, Eye, EyeOff, Play, RefreshCw,
   Search, Edit3, Hash, ClipboardCheck, ArrowLeft, Shield, BookOpen,
-  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift,
+  Printer, FileDown, Send, Archive, FilePlus, Copy, ChevronDown, Mail, Gift, Gavel, FolderDown,
   Loader, Home, ChevronRight, Sparkles, Megaphone, FileCheck2
 } from 'lucide-react';
 import {
@@ -36,6 +36,8 @@ const AdminPasswordManager    = lazy(() => import('./AdminPasswordManager'));
 const InicioDashboardView     = lazy(() => import('./InicioDashboardView'));
 const PublicacionesView       = lazy(() => import('./PublicacionesView'));
 const InformesActividadesView = lazy(() => import('./InformesActividadesView'));
+const PuntosResolutivosView   = lazy(() => import('./PuntosResolutivosView'));
+const ExpedientePonentesView  = lazy(() => import('./ExpedientePonentesView'));
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -1005,11 +1007,15 @@ const OficiosAdminView = ({ oficios, publicaciones = [], informes = [], onDownlo
   const handleSavePunto=async(oficio,puntoData)=>{await onUpdateOficio(oficio.id,{...oficio,...puntoData});};
   return (
     <div className="space-y-6">
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl inline-flex">
+      <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded-xl">
         <button onClick={() => setCartasTab('oficios')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='oficios' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><FileSignature size={15}/> Oficios</button>
         <button onClick={() => setCartasTab('cartas')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='cartas' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><Mail size={15}/> Cartas</button>
+        <button onClick={() => setCartasTab('puntos')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='puntos' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><Gavel size={15}/> Puntos resolutivos</button>
+        <button onClick={() => setCartasTab('expedientes')} className={"flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all " + (cartasTab==='expedientes' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700')}><FolderDown size={15}/> Expediente ponentes</button>
       </div>
-      {cartasTab === 'cartas' ? <Suspense fallback={<ViewLoader/>}><CartasSection appSettings={appSettings}/></Suspense> : (<>
+      {cartasTab === 'cartas' ? <Suspense fallback={<ViewLoader/>}><CartasSection appSettings={appSettings}/></Suspense>
+       : cartasTab === 'puntos' ? <Suspense fallback={<ViewLoader/>}><PuntosResolutivosView/></Suspense>
+       : cartasTab === 'expedientes' ? <Suspense fallback={<ViewLoader/>}><ExpedientePonentesView publicaciones={publicaciones}/></Suspense> : (<>
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-gray-800">Oficios y Solicitudes</h2><p className="text-sm text-gray-500">Genera, edita y gestiona oficios internos de CAEDUC</p></div>
         <button onClick={handleNew} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 font-medium"><FilePlus size={20}/> Nuevo Oficio</button>
