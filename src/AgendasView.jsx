@@ -1,5 +1,6 @@
 // src/AgendasView.jsx — Control de Agendas CAEDUC (Parte 5: memoria entre sesiones)
 import React, { useState, useEffect, useCallback } from 'react';
+import { crearColaSerial } from './lib/colaSerial.js';
 import { createClient } from '@supabase/supabase-js';
 import {
   Plus, Save, CheckCircle, FileText, Clock, User, Edit3, Trash2,
@@ -213,6 +214,11 @@ export default function AgendasView() {
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const autoSaveRef = React.useRef(null);
+  // Los puntos se guardan borrando y volviendo a insertar. Si el autoguardado y
+  // el guardado manual se solapan, el orden real puede quedar borrar-borrar-
+  // insertar-insertar y cada punto termina duplicado. La cola los pone en fila.
+  const colaGuardadoRef = React.useRef(null);
+  if (!colaGuardadoRef.current) colaGuardadoRef.current = crearColaSerial();
 
   // PARTE 5: memoria entre sesiones
   const [resumenAnterior, setResumenAnterior] = useState(null); // {agenda, puntos}
@@ -226,7 +232,7 @@ export default function AgendasView() {
   useEffect(() => {
     if (view !== 'editor' || !activeAgenda || activeAgenda.estado === 'Aprobada') return;
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    autoSaveRef.current = setTimeout(async () => {
+    autoSaveRef.current = setTimeout(() => colaGuardadoRef.current(async () => {
       setAutoSaving(true);
       try {
         let agendaId = activeAgenda.id;
@@ -265,7 +271,7 @@ export default function AgendasView() {
         setLastAutoSave(new Date());
       } catch (_) { /* silencioso */ }
       setAutoSaving(false);
-    }, 3000);
+    }), 3000);
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
   }, [activeAgenda, puntos, view]);
 
@@ -441,7 +447,11 @@ export default function AgendasView() {
   };
 
   // Guardar agenda completa (borrador o aprobada)
-  const handleSave = async (estadoDestino) => {
+  // Pasa por la misma cola que el autoguardado: si uno ya está escribiendo, este
+  // espera su turno en vez de intercalarse con el borrado de puntos.
+  const handleSave = (estadoDestino) => colaGuardadoRef.current(() => guardarAgenda(estadoDestino));
+
+  const guardarAgenda = async (estadoDestino) => {
     if (!activeAgenda) return;
 
     let agendaId = activeAgenda.id;
