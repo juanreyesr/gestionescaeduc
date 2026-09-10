@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   agruparDocumentos,
   carpetaExpediente,
+  DOCUMENTOS_EXTRA,
   documentoLabel,
   expedienteDesdePublicacion,
   extensionArchivo,
@@ -13,7 +14,9 @@ import {
   normalizarIncluidosEnCv,
   progresoExpediente,
   puedeIrEnCv,
+  esTipoExtra,
   TIPOS_EN_CV,
+  TIPOS_EXTRA,
   TIPOS_PONENTE,
 } from './expedientePonentes.js';
 
@@ -184,4 +187,54 @@ test('avisa cuando hay marcas pero el CV todavía no está cargado', () => {
 
   assert.equal(progresoExpediente([doc('cv', 'hoja.pdf')], ['dpi']).faltaElCv, false);
   assert.equal(progresoExpediente([doc('cv', 'hoja.pdf')], []).faltaElCv, false);
+});
+
+test('la publicación para redes no cuenta en el avance del checklist', () => {
+  assert.deepEqual(TIPOS_EXTRA, ['redes']);
+  assert.equal(esTipoExtra('redes'), true);
+  assert.equal(esTipoExtra('cv'), false);
+  assert.equal(documentoLabel('redes'), 'Publicación para redes');
+
+  // Es material de respaldo, no un requisito: el resumen no se mueve.
+  const soloRedes = progresoExpediente([doc('redes', 'arte.jpg')]);
+  assert.equal(soloRedes.cargados, 0);
+  assert.equal(soloRedes.total, 7);
+  assert.deepEqual(soloRedes.faltantes, TIPOS_PONENTE);
+
+  const conCv = progresoExpediente([doc('cv', 'hoja.pdf'), doc('redes', 'arte.jpg')]);
+  assert.equal(conCv.cargados, 1);
+  assert.equal(conCv.total, 7);
+});
+
+test('la publicación para redes sí viaja en el paquete, al final', () => {
+  assert.equal(
+    nombreArchivoEnZip(doc('redes', 'arte.jpg'), { expediente: EXPEDIENTE }),
+    '08 Redes - Ana Lopez Gomez.jpg',
+  );
+  // Varias piezas publicadas se numeran entre sí sin perder su posición.
+  assert.equal(
+    nombreArchivoEnZip(doc('redes', 'historia.png'), { expediente: EXPEDIENTE, indiceEnTipo: 1, totalDelTipo: 2 }),
+    '08 Redes (2) - Ana Lopez Gomez.png',
+  );
+
+  const plan = planDescargaExpediente(EXPEDIENTE, [
+    doc('redes', 'arte.jpg', '2026-03-05'),
+    doc('cv', 'hoja.pdf', '2026-03-01'),
+  ]);
+  assert.deepEqual(plan.map(item => item.ruta.split('/')[1]), [
+    '01 CV - Ana Lopez Gomez.pdf',
+    '08 Redes - Ana Lopez Gomez.jpg',
+  ]);
+});
+
+test('el material extra se agrupa aparte del checklist', () => {
+  const documentos = [doc('cv', 'hoja.pdf'), doc('redes', 'arte.jpg')];
+  // El checklist no muestra la publicación de redes entre sus renglones.
+  const checklist = agruparDocumentos(documentos);
+  assert.deepEqual(checklist.map(grupo => grupo.tipo), TIPOS_PONENTE);
+  assert.equal(checklist.reduce((total, grupo) => total + grupo.documentos.length, 0), 1);
+
+  const extras = agruparDocumentos(documentos, DOCUMENTOS_EXTRA);
+  assert.deepEqual(extras.map(grupo => grupo.tipo), ['redes']);
+  assert.equal(extras[0].documentos.length, 1);
 });

@@ -11,12 +11,13 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, CheckCircle, Download, Eye, FileText, FolderDown, Loader,
+  AlertCircle, CheckCircle, Download, Eye, FileText, FolderDown, Image, Loader,
   Plus, Search, Trash2, Upload, User, X,
 } from 'lucide-react';
 import { supabase } from './supabaseClient.js';
 import {
   agruparDocumentos,
+  DOCUMENTOS_EXTRA,
   DOCUMENTOS_PONENTE,
   documentoLabel,
   expedienteDesdePublicacion,
@@ -35,6 +36,8 @@ const TABLA_DOCUMENTOS = 'caeduc_expediente_documentos';
 const BUCKET = 'caeduc-expedientes';
 const MAX_ARCHIVO = 20 * 1024 * 1024;
 const TIPOS_ACEPTADOS = 'application/pdf,image/jpeg,image/png,image/webp';
+const TIPOS_IMAGEN = 'image/jpeg,image/png,image/webp,image/avif';
+const TIPO_REDES = 'redes';
 
 // JSZip se carga desde CDN solo cuando se pide la descarga, igual que html2pdf
 // en las cartas: no entra en el paquete inicial de la app.
@@ -80,6 +83,8 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
   const [ocupado, setOcupado] = useState('');
   const [zip, setZip] = useState('');
   const [porBorrar, setPorBorrar] = useState(null);
+  // Miniatura de la publicación de redes por expediente (enlace firmado).
+  const [portadas, setPortadas] = useState({});
 
   const cargar = async () => {
     setCargando(true);
@@ -93,8 +98,28 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
       setError('');
       setExpedientes(resExpedientes.data || []);
       setDocumentos(resDocumentos.data || []);
+      await cargarPortadas(resDocumentos.data || []);
     }
     setCargando(false);
+  };
+
+  // El bucket es privado, así que la miniatura necesita un enlace firmado. Se
+  // pide una sola vez por lote y se usa la publicación más reciente de cada
+  // expediente.
+  const cargarPortadas = async (todos) => {
+    const ultimaPorExpediente = new Map();
+    todos.filter(item => item.tipo === TIPO_REDES)
+      .forEach(item => ultimaPorExpediente.set(item.expediente_id, item.archivo_path));
+    const rutas = [...ultimaPorExpediente.values()];
+    if (!rutas.length) {
+      setPortadas({});
+      return;
+    }
+    const { data } = await supabase.storage.from(BUCKET).createSignedUrls(rutas, 3600);
+    const porRuta = Object.fromEntries((data || []).map(item => [item.path, item.signedUrl || '']));
+    setPortadas(Object.fromEntries(
+      [...ultimaPorExpediente.entries()].map(([id, ruta]) => [id, porRuta[ruta] || '']),
+    ));
   };
 
   useEffect(() => { cargar(); }, []);
@@ -169,8 +194,11 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
       await supabase.storage.from(BUCKET).remove([ruta]);
       // El tipo de documento está limitado por un CHECK en la base. Si es uno
       // agregado después, hay que correr su migración antes de poder usarlo.
+      const migracion = tipo === TIPO_REDES
+        ? 'supabase/2026_expediente_publicacion_redes.sql'
+        : 'supabase/2026_expediente_colegiado_activo.sql';
       setAviso(/tipo_check|violates check constraint/i.test(fallo.message || '')
-        ? `La base todavía no admite el documento "${documentoLabel(tipo)}": falta ejecutar supabase/2026_expediente_colegiado_activo.sql en el SQL Editor de Supabase.`
+        ? `La base todavía no admite "${documentoLabel(tipo)}": falta ejecutar ${migracion} en el SQL Editor de Supabase.`
         : `No se pudo cargar el documento: ${fallo.message}`);
     } finally {
       setSubiendo('');
@@ -329,10 +357,24 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
           const desplegado = abierto === expediente.id;
           return (
             <div key={expediente.id} className={`rounded-xl border bg-white shadow-sm ${desplegado ? 'border-emerald-300' : 'border-slate-200'}`}>
-              <button type="button" onClick={() => setAbierto(desplegado ? '' : expediente.id)} aria-expanded={desplegado} className="flex w-full items-center gap-3 p-4 text-left">
-                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${avance.completo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                  {avance.completo ? <CheckCircle size={20}/> : <User size={20}/>}
-                </span>
+              <div className="flex items-center gap-3 p-4">
+                {/* El avatar es también el punto de carga de la publicación de
+                    redes: si ya hay una, la muestra. Va fuera del botón que
+                    despliega la tarjeta, porque un control no puede vivir
+                    dentro de otro. */}
+                <label
+                  title={portadas[expediente.id] ? 'Cambiar la publicación para redes' : 'Cargar la publicación para redes'}
+                  className={`group relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl ${portadas[expediente.id] ? 'bg-slate-200' : avance.completo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}
+                >
+                  {portadas[expediente.id]
+                    ? <img src={portadas[expediente.id]} alt={`Publicación en redes de ${expediente.actividad_nombre || 'la actividad'}`} className="h-full w-full object-cover"/>
+                    : avance.completo ? <CheckCircle size={20}/> : <User size={20}/>}
+                  <span className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                    {subiendo === `${expediente.id}-${TIPO_REDES}` ? <Loader size={16} className="animate-spin"/> : <Image size={16}/>}
+                  </span>
+                  <input type="file" accept={TIPOS_IMAGEN} disabled={subiendo === `${expediente.id}-${TIPO_REDES}`} onChange={evento => subirDocumento(expediente, TIPO_REDES, evento)} className="sr-only"/>
+                </label>
+                <button type="button" onClick={() => setAbierto(desplegado ? '' : expediente.id)} aria-expanded={desplegado} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-bold text-slate-800">{expediente.ponente_nombre || 'Profesional pendiente'}</span>
                   <span className="mt-0.5 block truncate text-xs text-slate-500">
@@ -345,7 +387,8 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
                   {avance.cargados}/{avance.total}
                 </span>
                 <Plus size={18} className={`shrink-0 text-slate-400 transition-transform ${desplegado ? 'rotate-45' : ''}`} aria-hidden="true"/>
-              </button>
+                </button>
+              </div>
 
               {desplegado && (
                 <div className="border-t border-slate-100 p-4">
@@ -396,6 +439,35 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
                     })}
                   </div>
 
+                  {/* Registro de lo publicado: material de respaldo, no un
+                      requisito, por eso va aparte del checklist y no mueve el
+                      contador. Sí entra en el paquete de la factura. */}
+                  {agruparDocumentos(suyos, DOCUMENTOS_EXTRA).map(grupo => (
+                    <div key={grupo.tipo} className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="flex items-center gap-1.5 text-sm font-bold text-indigo-900"><Image size={15}/> {grupo.label}{grupo.documentos.length > 1 ? ` (${grupo.documentos.length})` : ''}</p>
+                        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-indigo-700 ring-1 ring-indigo-200 hover:bg-indigo-50">
+                          {subiendo === `${expediente.id}-${grupo.tipo}` ? <Loader size={15} className="animate-spin"/> : <Upload size={15}/>}
+                          {grupo.documentos.length ? 'Agregar otra' : 'Cargar'}
+                          <input type="file" accept={TIPOS_IMAGEN} disabled={subiendo === `${expediente.id}-${grupo.tipo}`} onChange={evento => subirDocumento(expediente, grupo.tipo, evento)} className="sr-only"/>
+                        </label>
+                      </div>
+                      <p className="mt-1 text-xs text-indigo-700">No cuenta como documento requerido, pero se incluye al descargar el paquete para factura.</p>
+                      {grupo.documentos.map(documento => (
+                        <div key={documento.id} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-white p-2 ring-1 ring-slate-200">
+                          <Image size={15} className="shrink-0 text-slate-400"/>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm text-slate-700">{documento.archivo_nombre}</span>
+                            <span className="block text-xs text-slate-400">Publicada: {fechaHora(documento.created_at)}</span>
+                          </span>
+                          <button type="button" disabled={ocupado === documento.id} onClick={() => verDocumento(documento)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50"><Eye size={14}/> Ver</button>
+                          <button type="button" disabled={ocupado === documento.id} onClick={() => descargarDocumento(documento)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"><Download size={14}/></button>
+                          <button type="button" disabled={ocupado === documento.id} onClick={() => eliminarDocumento(documento)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"><Trash2 size={14}/></button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
                   {!avance.completo && <p className="mt-3 text-xs text-amber-700">Falta cargar: {avance.faltantesTexto}.</p>}
                   {avance.faltaElCv && <p className="mt-1 text-xs font-bold text-amber-700">Hay documentos marcados como incluidos en el CV, pero el CV todavía no está cargado.</p>}
 
@@ -406,7 +478,7 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
                     </button>
                     <button type="button" onClick={() => setPorBorrar(expediente)} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600 hover:bg-red-100"><Trash2 size={16}/> Eliminar expediente</button>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">Se descarga un ZIP con una carpeta que contiene todos los documentos cargados, numerados en el orden en que los pide Tesorería.</p>
+                  <p className="mt-2 text-xs text-slate-500">Se descarga un ZIP con una carpeta que contiene todos los documentos cargados, numerados en el orden en que los pide Tesorería, y al final la publicación que salió en redes.</p>
                 </div>
               )}
             </div>

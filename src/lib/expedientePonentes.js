@@ -18,7 +18,21 @@ export const DOCUMENTOS_PONENTE = [
 
 export const TIPOS_PONENTE = DOCUMENTOS_PONENTE.map(item => item.tipo);
 
-export const documentoLabel = (tipo) => DOCUMENTOS_PONENTE.find(item => item.tipo === tipo)?.label || tipo;
+// Material que NO forma parte de lo que exige Tesorería y por eso no cuenta en
+// el avance, pero que sí conviene guardar y mandar junto con el paquete: la
+// pieza que se publicó en redes para anunciar la actividad.
+export const DOCUMENTOS_EXTRA = [
+  { tipo: 'redes', label: 'Publicación para redes', corto: 'Redes' },
+];
+
+export const TIPOS_EXTRA = DOCUMENTOS_EXTRA.map(item => item.tipo);
+
+export const esTipoExtra = (tipo) => TIPOS_EXTRA.includes(tipo);
+
+// El checklist más el material extra: lo que se numera y viaja en el ZIP.
+export const TODOS_LOS_DOCUMENTOS = [...DOCUMENTOS_PONENTE, ...DOCUMENTOS_EXTRA];
+
+export const documentoLabel = (tipo) => TODOS_LOS_DOCUMENTOS.find(item => item.tipo === tipo)?.label || tipo;
 
 // Documentos que un CV completo suele traer adentro: del RTU a la constancia de
 // colegiado activo. Cuando el ponente entrega todo dentro del CV, estos se
@@ -35,8 +49,8 @@ export const normalizarIncluidosEnCv = (valor) => (Array.isArray(valor) ? valor 
   .filter(puedeIrEnCv);
 
 const ordenTipo = (tipo) => {
-  const index = TIPOS_PONENTE.indexOf(tipo);
-  return index === -1 ? TIPOS_PONENTE.length : index;
+  const index = TODOS_LOS_DOCUMENTOS.findIndex(item => item.tipo === tipo);
+  return index === -1 ? TODOS_LOS_DOCUMENTOS.length : index;
 };
 
 // Nombre seguro para archivos y carpetas: sin tildes ni caracteres que rompan
@@ -68,8 +82,9 @@ export const expedienteDesdePublicacion = (publicacion = {}) => ({
   actividad_lugar: String(publicacion.actividad_lugar || '').trim(),
 });
 
-// Agrupa los documentos por tipo, en el orden del checklist.
-export const agruparDocumentos = (documentos = []) => DOCUMENTOS_PONENTE.map(item => ({
+// Agrupa los documentos por tipo, en el orden del catálogo que se le pase.
+// Por defecto agrupa el checklist; para el material extra se pasa DOCUMENTOS_EXTRA.
+export const agruparDocumentos = (documentos = [], catalogo = DOCUMENTOS_PONENTE) => catalogo.map(item => ({
   ...item,
   documentos: documentos
     .filter(doc => doc.tipo === item.tipo)
@@ -112,7 +127,7 @@ export const carpetaExpediente = (expediente = {}) => nombreSeguro(
 // varios archivos (por ejemplo los dos lados del DPI) se numeran entre sí.
 export const nombreArchivoEnZip = (documento = {}, { expediente = {}, indiceEnTipo = 0, totalDelTipo = 1 } = {}) => {
   const posicion = String(ordenTipo(documento.tipo) + 1).padStart(2, '0');
-  const etiqueta = DOCUMENTOS_PONENTE.find(item => item.tipo === documento.tipo)?.corto || documento.tipo;
+  const etiqueta = TODOS_LOS_DOCUMENTOS.find(item => item.tipo === documento.tipo)?.corto || documento.tipo;
   const sufijo = totalDelTipo > 1 ? ` (${indiceEnTipo + 1})` : '';
   const persona = nombreSeguro(expediente.ponente_nombre, 'Ponente');
   const extension = extensionArchivo(documento.archivo_nombre);
@@ -123,7 +138,9 @@ export const nombreArchivoEnZip = (documento = {}, { expediente = {}, indiceEnTi
 // Se calcula aparte de la descarga para poder probarlo sin tocar la red.
 export const planDescargaExpediente = (expediente = {}, documentos = []) => {
   const carpeta = carpetaExpediente(expediente);
-  return agruparDocumentos(documentos).flatMap(grupo => grupo.documentos.map((documento, indice) => ({
+  // Incluye el material extra: el paquete que se manda para facturar lleva
+  // también la publicación que salió en redes.
+  return agruparDocumentos(documentos, TODOS_LOS_DOCUMENTOS).flatMap(grupo => grupo.documentos.map((documento, indice) => ({
     archivo_path: documento.archivo_path,
     ruta: `${carpeta}/${nombreArchivoEnZip(documento, {
       expediente,
