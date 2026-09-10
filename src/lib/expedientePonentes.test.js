@@ -10,7 +10,10 @@ import {
   nombreSeguro,
   nombreZipExpediente,
   planDescargaExpediente,
+  normalizarIncluidosEnCv,
   progresoExpediente,
+  puedeIrEnCv,
+  TIPOS_EN_CV,
   TIPOS_PONENTE,
 } from './expedientePonentes.js';
 
@@ -56,6 +59,8 @@ test('el avance dice cuántos faltan mientras se carga de a poco', () => {
     faltantes: TIPOS_PONENTE,
     faltantesTexto: TIPOS_PONENTE.map(documentoLabel).join(', '),
     completo: false,
+    enCv: [],
+    faltaElCv: false,
   });
 
   const parcial = progresoExpediente([doc('cv', 'hoja.pdf'), doc('dpi', 'frente.jpg'), doc('dpi', 'reverso.jpg')]);
@@ -132,4 +137,51 @@ test('el plan de descarga arma una sola carpeta con todo lo cargado', () => {
 
   // Un expediente todavía vacío no produce descarga.
   assert.deepEqual(planDescargaExpediente(EXPEDIENTE, []), []);
+});
+
+test('solo del RTU a la constancia se puede marcar "dentro del CV"', () => {
+  assert.deepEqual(TIPOS_EN_CV, ['rtu', 'dpi', 'titulo', 'colegiado']);
+  // El CV no cabe dentro de sí mismo; factura e informe son documentos aparte.
+  ['cv', 'factura', 'informe'].forEach(tipo => assert.equal(puedeIrEnCv(tipo), false, tipo));
+  TIPOS_EN_CV.forEach(tipo => assert.equal(puedeIrEnCv(tipo), true, tipo));
+
+  // Un valor guardado que ya no corresponde no debe inflar el conteo.
+  assert.deepEqual(normalizarIncluidosEnCv(['rtu', 'factura', 'inventado', 'dpi']), ['rtu', 'dpi']);
+  assert.deepEqual(normalizarIncluidosEnCv(null), []);
+  assert.deepEqual(normalizarIncluidosEnCv('rtu'), []);
+});
+
+test('lo marcado como incluido en el CV cuenta como entregado', () => {
+  // El caso real: el ponente entrega todo dentro del CV y sube un solo archivo.
+  const avance = progresoExpediente([doc('cv', 'hoja.pdf')], ['rtu', 'dpi', 'titulo', 'colegiado']);
+
+  assert.equal(avance.cargados, 5);
+  assert.equal(avance.total, 7);
+  assert.deepEqual(avance.faltantes, ['factura', 'informe']);
+  assert.deepEqual(avance.enCv, ['rtu', 'dpi', 'titulo', 'colegiado']);
+  assert.equal(avance.completo, false);
+  assert.equal(avance.faltaElCv, false);
+
+  // Con la factura y el informe, el expediente queda completo con dos archivos.
+  const completo = progresoExpediente(
+    [doc('cv', 'hoja.pdf'), doc('factura', 'f.pdf'), doc('informe', 'i.pdf')],
+    TIPOS_EN_CV,
+  );
+  assert.equal(completo.cargados, 7);
+  assert.equal(completo.completo, true);
+});
+
+test('un documento no se cuenta dos veces por estar cargado y marcado', () => {
+  const avance = progresoExpediente([doc('cv', 'hoja.pdf'), doc('rtu', 'rtu.pdf')], ['rtu']);
+  assert.equal(avance.cargados, 2);
+  assert.deepEqual(avance.faltantes, ['dpi', 'titulo', 'colegiado', 'factura', 'informe']);
+});
+
+test('avisa cuando hay marcas pero el CV todavía no está cargado', () => {
+  const avance = progresoExpediente([doc('rtu', 'rtu.pdf')], ['dpi']);
+  assert.equal(avance.faltaElCv, true);
+  assert.equal(avance.cargados, 2);
+
+  assert.equal(progresoExpediente([doc('cv', 'hoja.pdf')], ['dpi']).faltaElCv, false);
+  assert.equal(progresoExpediente([doc('cv', 'hoja.pdf')], []).faltaElCv, false);
 });

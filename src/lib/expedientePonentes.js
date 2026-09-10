@@ -20,6 +20,20 @@ export const TIPOS_PONENTE = DOCUMENTOS_PONENTE.map(item => item.tipo);
 
 export const documentoLabel = (tipo) => DOCUMENTOS_PONENTE.find(item => item.tipo === tipo)?.label || tipo;
 
+// Documentos que un CV completo suele traer adentro: del RTU a la constancia de
+// colegiado activo. Cuando el ponente entrega todo dentro del CV, estos se
+// marcan como incluidos y cuentan como entregados sin subir un archivo aparte.
+// El CV no puede estar dentro de sí mismo, y la factura y el informe son
+// documentos independientes, así que ninguno de los tres admite la marca.
+export const TIPOS_EN_CV = ['rtu', 'dpi', 'titulo', 'colegiado'];
+
+export const puedeIrEnCv = (tipo) => TIPOS_EN_CV.includes(tipo);
+
+// Descarta cualquier valor que no corresponda, para que un dato viejo o
+// manipulado no infle el conteo.
+export const normalizarIncluidosEnCv = (valor) => (Array.isArray(valor) ? valor : [])
+  .filter(puedeIrEnCv);
+
 const ordenTipo = (tipo) => {
   const index = TIPOS_PONENTE.indexOf(tipo);
   return index === -1 ? TIPOS_PONENTE.length : index;
@@ -62,16 +76,24 @@ export const agruparDocumentos = (documentos = []) => DOCUMENTOS_PONENTE.map(ite
     .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))),
 }));
 
-// Cuántos documentos del checklist ya tienen al menos un archivo.
-export const progresoExpediente = (documentos = []) => {
-  const cargados = TIPOS_PONENTE.filter(tipo => documentos.some(doc => doc.tipo === tipo));
-  const faltantes = TIPOS_PONENTE.filter(tipo => !cargados.includes(tipo));
+// Cuántos documentos del checklist ya están resueltos: los que tienen archivo
+// propio más los que se marcaron como incluidos dentro del CV.
+export const progresoExpediente = (documentos = [], incluidosEnCv = []) => {
+  const enCv = new Set(normalizarIncluidosEnCv(incluidosEnCv));
+  const resueltos = TIPOS_PONENTE.filter(
+    tipo => documentos.some(doc => doc.tipo === tipo) || enCv.has(tipo),
+  );
+  const faltantes = TIPOS_PONENTE.filter(tipo => !resueltos.includes(tipo));
   return {
-    cargados: cargados.length,
+    cargados: resueltos.length,
     total: TIPOS_PONENTE.length,
     faltantes,
     faltantesTexto: faltantes.map(documentoLabel).join(', '),
     completo: faltantes.length === 0,
+    enCv: TIPOS_EN_CV.filter(tipo => enCv.has(tipo)),
+    // Marcar documentos como incluidos en el CV sin haber cargado el CV dejaría
+    // el conteo diciendo algo que no se puede respaldar con ningún archivo.
+    faltaElCv: enCv.size > 0 && !documentos.some(doc => doc.tipo === 'cv'),
   };
 };
 
