@@ -18,6 +18,7 @@ import { supabase } from './supabaseClient.js';
 import {
   agruparDocumentos,
   DOCUMENTOS_PONENTE,
+  documentoLabel,
   expedienteDesdePublicacion,
   extensionArchivo,
   nombreZipExpediente,
@@ -164,7 +165,11 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
       await cargar();
     } catch (fallo) {
       await supabase.storage.from(BUCKET).remove([ruta]);
-      setAviso(`No se pudo cargar el documento: ${fallo.message}`);
+      // El tipo de documento está limitado por un CHECK en la base. Si es uno
+      // agregado después, hay que correr su migración antes de poder usarlo.
+      setAviso(/tipo_check|violates check constraint/i.test(fallo.message || '')
+        ? `La base todavía no admite el documento "${documentoLabel(tipo)}": falta ejecutar supabase/2026_expediente_colegiado_activo.sql en el SQL Editor de Supabase.`
+        : `No se pudo cargar el documento: ${fallo.message}`);
     } finally {
       setSubiendo('');
     }

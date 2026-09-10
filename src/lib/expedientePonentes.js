@@ -11,6 +11,7 @@ export const DOCUMENTOS_PONENTE = [
   { tipo: 'rtu',     label: 'RTU',                         corto: 'RTU' },
   { tipo: 'dpi',     label: 'DPI',                         corto: 'DPI' },
   { tipo: 'titulo',  label: 'Último título profesional',   corto: 'Titulo' },
+  { tipo: 'colegiado', label: 'Constancia de colegiado activo', corto: 'Colegiado' },
   { tipo: 'factura', label: 'Factura',                     corto: 'Factura' },
   { tipo: 'informe', label: 'Informe de actividad firmado por el ponente', corto: 'Informe' },
 ];
@@ -61,7 +62,7 @@ export const agruparDocumentos = (documentos = []) => DOCUMENTOS_PONENTE.map(ite
     .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || ''))),
 }));
 
-// Cuántos de los seis documentos ya tienen al menos un archivo.
+// Cuántos documentos del checklist ya tienen al menos un archivo.
 export const progresoExpediente = (documentos = []) => {
   const cargados = TIPOS_PONENTE.filter(tipo => documentos.some(doc => doc.tipo === tipo));
   const faltantes = TIPOS_PONENTE.filter(tipo => !cargados.includes(tipo));

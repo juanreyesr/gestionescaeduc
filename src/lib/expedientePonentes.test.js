@@ -40,16 +40,19 @@ test('el expediente copia los datos de la solicitud de publicación', () => {
   assert.equal(expediente.actividad_hora, '18:00');
 });
 
-test('el checklist lleva los seis documentos en el orden que pide Tesorería', () => {
-  assert.deepEqual(TIPOS_PONENTE, ['cv', 'rtu', 'dpi', 'titulo', 'factura', 'informe']);
+test('el checklist lleva los documentos en el orden que pide Tesorería', () => {
+  // La constancia de colegiado activo va después del título y antes de la
+  // factura y el informe.
+  assert.deepEqual(TIPOS_PONENTE, ['cv', 'rtu', 'dpi', 'titulo', 'colegiado', 'factura', 'informe']);
   assert.equal(documentoLabel('titulo'), 'Último título profesional');
+  assert.equal(documentoLabel('colegiado'), 'Constancia de colegiado activo');
   assert.equal(documentoLabel('informe'), 'Informe de actividad firmado por el ponente');
 });
 
 test('el avance dice cuántos faltan mientras se carga de a poco', () => {
   assert.deepEqual(progresoExpediente([]), {
     cargados: 0,
-    total: 6,
+    total: 7,
     faltantes: TIPOS_PONENTE,
     faltantesTexto: TIPOS_PONENTE.map(documentoLabel).join(', '),
     completo: false,
@@ -58,7 +61,7 @@ test('el avance dice cuántos faltan mientras se carga de a poco', () => {
   const parcial = progresoExpediente([doc('cv', 'hoja.pdf'), doc('dpi', 'frente.jpg'), doc('dpi', 'reverso.jpg')]);
   assert.equal(parcial.cargados, 2);
   assert.equal(parcial.completo, false);
-  assert.deepEqual(parcial.faltantes, ['rtu', 'titulo', 'factura', 'informe']);
+  assert.deepEqual(parcial.faltantes, ['rtu', 'titulo', 'colegiado', 'factura', 'informe']);
 
   const todos = progresoExpediente(TIPOS_PONENTE.map(tipo => doc(tipo, `${tipo}.pdf`)));
   assert.equal(todos.completo, true);
@@ -98,8 +101,12 @@ test('numera los archivos del ZIP en el orden del checklist', () => {
     '01 CV - Ana Lopez Gomez.pdf',
   );
   assert.equal(
+    nombreArchivoEnZip(doc('colegiado', 'constancia.pdf'), { expediente: EXPEDIENTE }),
+    '05 Colegiado - Ana Lopez Gomez.pdf',
+  );
+  assert.equal(
     nombreArchivoEnZip(doc('informe', 'informe.pdf'), { expediente: EXPEDIENTE }),
-    '06 Informe - Ana Lopez Gomez.pdf',
+    '07 Informe - Ana Lopez Gomez.pdf',
   );
   // Dos lados del DPI: se distinguen entre sí sin perder su posición.
   assert.equal(
@@ -120,7 +127,7 @@ test('el plan de descarga arma una sola carpeta con todo lo cargado', () => {
     { archivo_path: 'cv/hoja.pdf', ruta: 'Expediente Ana Lopez Gomez - Ansiedad una vision integral/01 CV - Ana Lopez Gomez.pdf' },
     { archivo_path: 'dpi/frente.jpg', ruta: 'Expediente Ana Lopez Gomez - Ansiedad una vision integral/03 DPI (1) - Ana Lopez Gomez.jpg' },
     { archivo_path: 'dpi/reverso.jpg', ruta: 'Expediente Ana Lopez Gomez - Ansiedad una vision integral/03 DPI (2) - Ana Lopez Gomez.jpg' },
-    { archivo_path: 'factura/factura.pdf', ruta: 'Expediente Ana Lopez Gomez - Ansiedad una vision integral/05 Factura - Ana Lopez Gomez.pdf' },
+    { archivo_path: 'factura/factura.pdf', ruta: 'Expediente Ana Lopez Gomez - Ansiedad una vision integral/06 Factura - Ana Lopez Gomez.pdf' },
   ]);
 
   // Un expediente todavía vacío no produce descarga.
