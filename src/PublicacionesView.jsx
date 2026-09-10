@@ -111,7 +111,13 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const [existingPhotoName, setExistingPhotoName] = useState('');
   const [removeExistingPhoto, setRemoveExistingPhoto] = useState(false);
   const [editingHistoryId, setEditingHistoryId] = useState('');
+  // Identificador del borrador en curso. Se mantiene entre intentos para que, si
+  // un guardado falla y se vuelve a intentar, el segundo intento sobrescriba la
+  // misma fila en vez de crear otra. Solo cambia al empezar una actividad nueva.
+  const [draftId, setDraftId] = useState(() => crypto.randomUUID());
   const [savingActivity, setSavingActivity] = useState(false);
+  const [porBorrar, setPorBorrar] = useState(null);
+  const [borrando, setBorrando] = useState(false);
   const [messageOverride, setMessageOverride] = useState(null);
   const [reportDialog, setReportDialog] = useState(false);
   const [reportFrom, setReportFrom] = useState('');
@@ -214,6 +220,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const startNew = (mode) => {
     setSourceMode(mode);
     setEditingHistoryId('');
+    setDraftId(crypto.randomUUID());
     setMessageOverride(null);
     clearPhotoDraft();
     if (mode === 'oficio' && activityOficios.length) {
@@ -233,6 +240,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     setActivity(next ? { ...activityFromOficio(next), zoom_detalles: '' } : blankActivity());
     setMessageOverride(null);
     setEditingHistoryId('');
+    setDraftId(crypto.randomUUID());
     clearPhotoDraft();
   };
 
@@ -311,6 +319,8 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   };
 
   const saveActivity = async () => {
+    // Dos clics seguidos no deben producir dos registros.
+    if (savingActivity) return;
     if (!activity.actividad_nombre.trim()) {
       setFeedback('Escribe el nombre de la actividad antes de guardarla.');
       return;
@@ -321,7 +331,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     }
     setSavingActivity(true);
     setFeedback('');
-    const recordId = editingHistoryId || crypto.randomUUID();
+    const recordId = editingHistoryId || draftId;
     const oldPath = existingPhotoPath;
     let photoPath = removeExistingPhoto ? null : oldPath || null;
     let photoName = removeExistingPhoto ? null : existingPhotoName || null;
@@ -361,9 +371,11 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
 
       // `ponente_grado` es una columna nueva. Si la base todavía no la tiene, se
       // guarda el resto del registro y se avisa en vez de perder el trabajo.
+      // `upsert` sobre la llave primaria: guardar dos veces el mismo borrador
+      // actualiza esa fila, nunca agrega otra.
       const guardar = (body) => (editingHistoryId
         ? supabase.from(HISTORY_TABLE).update(body).eq('id', editingHistoryId)
-        : supabase.from(HISTORY_TABLE).insert([{ ...body, id: recordId }])).select().single();
+        : supabase.from(HISTORY_TABLE).upsert([{ ...body, id: recordId }])).select().single();
       let { data, error } = await guardar(payload);
       let gradoOmitido = false;
       if (error && /ponente_grado/.test(error.message || '')) {
@@ -393,6 +405,30 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     } finally {
       setSavingActivity(false);
     }
+  };
+
+  const deleteHistoryItem = async () => {
+    if (!porBorrar) return;
+    setBorrando(true);
+    const { error } = await supabase.from(HISTORY_TABLE).delete().eq('id', porBorrar.id);
+    if (error) {
+      setFeedback(`No se pudo eliminar: ${error.message}`);
+    } else {
+      if (porBorrar.ponente_foto_path) {
+        await supabase.storage.from(PHOTO_BUCKET).remove([porBorrar.ponente_foto_path]);
+      }
+      // Si se estaba editando justo esa, el formulario vuelve a ser un borrador
+      // nuevo para no intentar actualizar una fila que ya no existe.
+      if (editingHistoryId === porBorrar.id) {
+        setEditingHistoryId('');
+        setDraftId(crypto.randomUUID());
+        clearPhotoDraft();
+      }
+      await loadHistory();
+      setFeedback('Actividad eliminada del historial.');
+    }
+    setPorBorrar(null);
+    setBorrando(false);
   };
 
   const editHistoryItem = (item) => {
@@ -778,6 +814,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                   <button type="button" onClick={() => downloadMessage(item)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"><FileText size={16}/> Descargar mensaje</button>
                   {item.ponente_foto_path && <button type="button" onClick={() => downloadStoredPhoto(item)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"><Image size={16}/> Descargar foto</button>}
                   <button type="button" onClick={() => sharePublication({ text: item.mensaje_publicacion, phone: item.responsable_telefono, photoPath: item.ponente_foto_path, photoName: item.ponente_foto_nombre })} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"><MessageCircle size={16}/> WhatsApp <ExternalLink size={13}/></button>
+                  <button type="button" onClick={() => setPorBorrar(item)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-600 hover:bg-red-100"><Trash2 size={16}/> Eliminar</button>
                 </div>
               </div>
             </details>
@@ -798,6 +835,23 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
             </div>
             <p className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">{reportType === 'junta' ? 'Se generará una hoja membretada dirigida a Junta Directiva, con tabla y la firma institucional de Coordinación.' : 'Se generará una ficha por actividad, con fotografía, actividad, ponente, fecha, lugar y hora.'}</p>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setReportDialog(false)} className="min-h-11 rounded-xl bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancelar</button><button type="button" onClick={generateSelectedReport} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-caeduc-pink px-5 py-2 text-sm font-extrabold text-white hover:bg-pink-700"><Download size={17}/> Generar PDF</button></div>
+          </div>
+        </div>
+      )}
+
+      {porBorrar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" aria-labelledby="borrar-actividad-title">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
+            <h2 id="borrar-actividad-title" className="text-xl font-black text-slate-800">Eliminar del historial</h2>
+            <p className="mt-3 rounded-xl bg-red-50 p-4 text-sm leading-6 text-red-700">
+              Se eliminará <strong>{porBorrar.actividad_nombre || 'esta actividad'}</strong>{porBorrar.actividad_fecha ? ` (${porBorrar.actividad_fecha})` : ''}{porBorrar.ponente_foto_path ? ', junto con la fotografía del ponente' : ''}. No se puede deshacer.
+            </p>
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setPorBorrar(null)} className="min-h-11 rounded-xl bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancelar</button>
+              <button type="button" onClick={deleteHistoryItem} disabled={borrando} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                {borrando ? <Loader2 size={16} className="animate-spin"/> : <Trash2 size={16}/>} {borrando ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
           </div>
         </div>
       )}
