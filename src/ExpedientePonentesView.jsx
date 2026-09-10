@@ -22,8 +22,10 @@ import {
   expedienteDesdePublicacion,
   extensionArchivo,
   nombreZipExpediente,
+  normalizarIncluidosEnCv,
   planDescargaExpediente,
   progresoExpediente,
+  puedeIrEnCv,
 } from './lib/expedientePonentes.js';
 import { formatRegistroDate } from './lib/registroActividadesReport.js';
 import { formatHoraActividad } from './lib/pagoPonentes.js';
@@ -175,6 +177,31 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
     }
   };
 
+  // Marca (o desmarca) un documento como incluido dentro del CV. Se actualiza en
+  // pantalla de inmediato y se revierte si la base rechaza el cambio.
+  const alternarEnCv = async (expediente, tipo) => {
+    if (!puedeIrEnCv(tipo)) return;
+    const actuales = normalizarIncluidosEnCv(expediente.incluidos_en_cv);
+    const siguiente = actuales.includes(tipo)
+      ? actuales.filter(item => item !== tipo)
+      : [...actuales, tipo];
+    const aplicar = (valor) => setExpedientes(prev => prev.map(
+      item => (item.id === expediente.id ? { ...item, incluidos_en_cv: valor } : item),
+    ));
+    aplicar(siguiente);
+    setAviso('');
+    const { error: fallo } = await supabase
+      .from(TABLA_EXPEDIENTES)
+      .update({ incluidos_en_cv: siguiente })
+      .eq('id', expediente.id);
+    if (fallo) {
+      aplicar(actuales);
+      setAviso(/incluidos_en_cv/.test(fallo.message || '')
+        ? 'Falta ejecutar supabase/2026_expediente_incluidos_en_cv.sql en el SQL Editor de Supabase para poder marcar documentos como incluidos en el CV.'
+        : `No se pudo guardar la marca: ${fallo.message}`);
+    }
+  };
+
   const verDocumento = async (documento) => {
     setOcupado(documento.id);
     const { data, error: fallo } = await supabase.storage.from(BUCKET).createSignedUrl(documento.archivo_path, 300);
@@ -297,7 +324,8 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
       <div className="space-y-3">
         {visibles.map(expediente => {
           const suyos = documentosDe(expediente.id);
-          const avance = progresoExpediente(suyos);
+          const enCv = normalizarIncluidosEnCv(expediente.incluidos_en_cv);
+          const avance = progresoExpediente(suyos, enCv);
           const desplegado = abierto === expediente.id;
           return (
             <div key={expediente.id} className={`rounded-xl border bg-white shadow-sm ${desplegado ? 'border-emerald-300' : 'border-slate-200'}`}>
@@ -326,17 +354,31 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
                   <div className="space-y-2">
                     {agruparDocumentos(suyos).map(grupo => {
                       const clave = `${expediente.id}-${grupo.tipo}`;
+                      const marcadoEnCv = enCv.includes(grupo.tipo);
+                      const resuelto = grupo.documentos.length > 0 || marcadoEnCv;
                       return (
-                        <div key={grupo.tipo} className={`rounded-lg border p-3 ${grupo.documentos.length ? 'border-emerald-200 bg-emerald-50/40' : 'border-dashed border-slate-300 bg-slate-50'}`}>
+                        <div key={grupo.tipo} className={`rounded-lg border p-3 ${resuelto ? 'border-emerald-200 bg-emerald-50/40' : 'border-dashed border-slate-300 bg-slate-50'}`}>
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-bold text-slate-700">{grupo.label}{grupo.documentos.length > 1 ? ` (${grupo.documentos.length})` : ''}</p>
-                            <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50">
-                              {subiendo === clave ? <Loader size={15} className="animate-spin"/> : <Upload size={15}/>}
-                              {grupo.documentos.length ? 'Agregar otro' : 'Cargar'}
-                              <input type="file" accept={TIPOS_ACEPTADOS} disabled={subiendo === clave} onChange={evento => subirDocumento(expediente, grupo.tipo, evento)} className="sr-only"/>
-                            </label>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {puedeIrEnCv(grupo.tipo) && (
+                                <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">
+                                  <input type="checkbox" checked={marcadoEnCv} onChange={() => alternarEnCv(expediente, grupo.tipo)} className="h-4 w-4 accent-emerald-600"/>
+                                  Va dentro del CV
+                                </label>
+                              )}
+                              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-bold text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50">
+                                {subiendo === clave ? <Loader size={15} className="animate-spin"/> : <Upload size={15}/>}
+                                {grupo.documentos.length ? 'Agregar otro' : 'Cargar'}
+                                <input type="file" accept={TIPOS_ACEPTADOS} disabled={subiendo === clave} onChange={evento => subirDocumento(expediente, grupo.tipo, evento)} className="sr-only"/>
+                              </label>
+                            </div>
                           </div>
-                          {!grupo.documentos.length && <p className="mt-1 text-xs text-slate-500">Pendiente.</p>}
+                          {!grupo.documentos.length && (
+                            <p className={`mt-1 text-xs ${marcadoEnCv ? 'font-bold text-emerald-700' : 'text-slate-500'}`}>
+                              {marcadoEnCv ? 'Incluido dentro del Curriculum Vitae.' : 'Pendiente.'}
+                            </p>
+                          )}
                           {grupo.documentos.map(documento => (
                             <div key={documento.id} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-white p-2 ring-1 ring-slate-200">
                               <FileText size={15} className="shrink-0 text-slate-400"/>
@@ -355,6 +397,7 @@ export default function ExpedientePonentesView({ publicaciones = [] }) {
                   </div>
 
                   {!avance.completo && <p className="mt-3 text-xs text-amber-700">Falta cargar: {avance.faltantesTexto}.</p>}
+                  {avance.faltaElCv && <p className="mt-1 text-xs font-bold text-amber-700">Hay documentos marcados como incluidos en el CV, pero el CV todavía no está cargado.</p>}
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button type="button" onClick={() => descargarTodo(expediente)} disabled={zip === expediente.id || !suyos.length} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-extrabold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
