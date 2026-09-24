@@ -7,7 +7,7 @@
 -- Ejecutar una vez en el SQL Editor de Supabase.
 create table if not exists public.caeduc_miembros_comision (
   id uuid primary key default gen_random_uuid(),
-  puesto text not null,
+  cargo text not null,
   nombre text,
   rol_designado text,
   -- Solo importan el día y el mes; el año de nacimiento no se imprime.
@@ -19,8 +19,8 @@ create table if not exists public.caeduc_miembros_comision (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists caeduc_miembros_comision_puesto_idx
-  on public.caeduc_miembros_comision (puesto);
+create index if not exists caeduc_miembros_comision_cargo_idx
+  on public.caeduc_miembros_comision (cargo);
 
 -- Reutiliza el disparador de updated_at creado con los expedientes; si esta
 -- migración se corre sola, la función se crea aquí.

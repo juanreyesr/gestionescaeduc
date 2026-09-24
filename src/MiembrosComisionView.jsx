@@ -1,7 +1,7 @@
 // src/MiembrosComisionView.jsx — Miembros de la Comisión
 //
-// Quién ocupa cada puesto, con su rol designado, cumpleaños, número de colegiado
-// y teléfono. Los puestos del reglamento vienen precargados: se puede sembrar la
+// Quién ocupa cada cargo, con su rol designado, cumpleaños, número de colegiado
+// y teléfono. Los cargos del reglamento vienen precargados: se puede sembrar la
 // lista completa de una vez y luego ir anotando el nombre de cada uno.
 //
 // El directorio se imprime eligiendo con casillas qué datos salen, porque no
@@ -20,7 +20,7 @@ import {
   formatCumpleanos,
   generateDirectorioMiembrosHTML,
   ordenarMiembros,
-  PUESTOS_COMISION,
+  CARGOS_COMISION,
   textoCuentaRegresiva,
 } from './lib/miembrosComision.js';
 
@@ -69,7 +69,7 @@ const imprimirHTML = async (html, filename) => {
 
 const vacio = () => ({
   id: null,
-  puesto: PUESTOS_COMISION[0],
+  cargo: CARGOS_COMISION[0],
   nombre: '',
   rol_designado: '',
   cumpleanos: '',
@@ -126,43 +126,43 @@ export default function MiembrosComisionView() {
   const visibles = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
     if (!texto) return ordenados;
-    return ordenados.filter(item => [item.nombre, item.puesto, item.rol_designado, item.numero_colegiado, item.telefono]
+    return ordenados.filter(item => [item.nombre, item.cargo, item.rol_designado, item.numero_colegiado, item.telefono]
       .some(valor => String(valor || '').toLowerCase().includes(texto)));
   }, [ordenados, busqueda]);
 
   const proximosCumples = useMemo(() => cumpleanosProximos(miembros), [miembros]);
 
-  const puestosLibres = useMemo(() => {
-    const ocupados = new Set(miembros.map(item => item.puesto));
-    return PUESTOS_COMISION.filter(puesto => !ocupados.has(puesto));
+  const cargosLibres = useMemo(() => {
+    const ocupados = new Set(miembros.map(item => item.cargo));
+    return CARGOS_COMISION.filter(cargo => !ocupados.has(cargo));
   }, [miembros]);
 
-  // Crea de una vez un espacio por cada puesto del reglamento, para solo anotar
+  // Crea de una vez un espacio por cada cargo del reglamento, para solo anotar
   // el nombre en cada uno en vez de darlos de alta a mano.
-  const sembrarPuestos = async () => {
-    if (!puestosLibres.length) return;
+  const sembrarCargos = async () => {
+    if (!cargosLibres.length) return;
     setSembrando(true);
     setAviso('');
     const { error: fallo } = await supabase.from(TABLA).insert(
-      puestosLibres.map(puesto => ({ puesto, nombre: '' })),
+      cargosLibres.map(cargo => ({ cargo, nombre: '' })),
     );
-    if (fallo) setAviso(`No se pudieron crear los puestos: ${fallo.message}`);
+    if (fallo) setAviso(`No se pudieron crear los cargos: ${fallo.message}`);
     else {
       await cargar();
-      setAviso(`Se crearon ${puestosLibres.length} puesto(s). Ya puedes anotar el nombre de cada uno.`);
+      setAviso(`Se crearon ${cargosLibres.length} cargo(s). Ya puedes anotar el nombre de cada uno.`);
     }
     setSembrando(false);
   };
 
   const guardar = async () => {
-    if (!formulario.puesto.trim()) {
-      setAviso('Indica el puesto.');
+    if (!formulario.cargo.trim()) {
+      setAviso('Indica el cargo.');
       return;
     }
     setGuardando(true);
     setAviso('');
     const datos = {
-      puesto: formulario.puesto.trim(),
+      cargo: formulario.cargo.trim(),
       nombre: formulario.nombre.trim(),
       rol_designado: formulario.rol_designado.trim(),
       cumpleanos: formulario.cumpleanos || null,
@@ -215,7 +215,7 @@ export default function MiembrosComisionView() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800"><Users size={20} className="text-blue-600"/> Miembros de la Comisión</h2>
-          <p className="text-sm text-gray-500">Quién ocupa cada puesto, con su rol designado, cumpleaños, colegiado y teléfono.</p>
+          <p className="text-sm text-gray-500">Quién ocupa cada cargo, con su rol designado, cumpleaños, colegiado y teléfono.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => { setCampos(CAMPOS_POR_DEFECTO); setDialogoImpresion(true); setAviso(''); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200"><Printer size={17}/> Imprimir directorio</button>
@@ -229,7 +229,7 @@ export default function MiembrosComisionView() {
           <div>
             <p className="font-bold">No se pudo cargar el listado.</p>
             <p className="mt-1">{error}</p>
-            <p className="mt-2 text-xs">Si dice que la tabla no existe, falta ejecutar <code className="rounded bg-red-100 px-1">supabase/2026_miembros_comision.sql</code> en el SQL Editor de Supabase.</p>
+            <p className="mt-2 text-xs">Si dice que la tabla no existe, falta ejecutar <code className="rounded bg-red-100 px-1">supabase/2026_miembros_comision.sql</code> en el SQL Editor de Supabase. Si menciona la columna <code className="rounded bg-red-100 px-1">cargo</code>, falta <code className="rounded bg-red-100 px-1">supabase/2026_miembros_cargo.sql</code>.</p>
           </div>
         </div>
       )}
@@ -242,7 +242,7 @@ export default function MiembrosComisionView() {
           <ul className="mt-2 space-y-1">
             {proximosCumples.map(item => (
               <li key={item.id} className="text-sm text-pink-900">
-                <strong>{item.nombre || item.puesto}</strong> · {formatCumpleanos(item.cumpleanos)} — {textoCuentaRegresiva(item.diasParaCumpleanos)}
+                <strong>{item.nombre || item.cargo}</strong> · {formatCumpleanos(item.cumpleanos)} — {textoCuentaRegresiva(item.diasParaCumpleanos)}
               </li>
             ))}
           </ul>
@@ -252,11 +252,11 @@ export default function MiembrosComisionView() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative w-full sm:max-w-md">
           <Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-slate-400"/>
-          <input aria-label="Buscar miembro" value={busqueda} onChange={evento => setBusqueda(evento.target.value)} placeholder="Buscar por nombre, puesto o teléfono" className="min-h-11 w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+          <input aria-label="Buscar miembro" value={busqueda} onChange={evento => setBusqueda(evento.target.value)} placeholder="Buscar por nombre, cargo o teléfono" className="min-h-11 w-full rounded-xl border border-slate-300 py-2.5 pl-10 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
         </div>
-        {puestosLibres.length > 0 && !cargando && !error && (
-          <button type="button" onClick={sembrarPuestos} disabled={sembrando} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
-            {sembrando ? <Loader size={16} className="animate-spin"/> : <UserPlus size={16}/>} Crear los {puestosLibres.length} puestos que faltan
+        {cargosLibres.length > 0 && !cargando && !error && (
+          <button type="button" onClick={sembrarCargos} disabled={sembrando} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-blue-300 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:opacity-50">
+            {sembrando ? <Loader size={16} className="animate-spin"/> : <UserPlus size={16}/>} Crear los {cargosLibres.length} cargos que faltan
           </button>
         )}
       </div>
@@ -267,7 +267,7 @@ export default function MiembrosComisionView() {
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
           <Users size={40} className="mx-auto text-slate-300"/>
           <p className="mt-3 font-bold text-slate-600">{miembros.length ? 'Ningún miembro coincide con la búsqueda.' : 'Todavía no hay miembros registrados.'}</p>
-          {!miembros.length && <p className="mt-1 text-sm text-slate-500">Usa “Crear los puestos que faltan” para tener un espacio por cada puesto del reglamento.</p>}
+          {!miembros.length && <p className="mt-1 text-sm text-slate-500">Usa “Crear los cargos que faltan” para tener un espacio por cada cargo del reglamento.</p>}
         </div>
       )}
 
@@ -276,7 +276,7 @@ export default function MiembrosComisionView() {
           <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-wide text-blue-700">{item.puesto || 'Sin puesto'}</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-blue-700">{item.cargo || 'Sin cargo'}</p>
                 <p className="mt-0.5 font-bold text-slate-800">{item.nombre || <span className="font-normal text-slate-400">Sin asignar</span>}</p>
                 {item.rol_designado && <p className="mt-1 text-sm text-slate-600">{item.rol_designado}</p>}
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -286,8 +286,8 @@ export default function MiembrosComisionView() {
                 </div>
               </div>
               <div className="flex shrink-0 gap-1">
-                <button type="button" onClick={() => { setFormulario({ ...vacio(), ...item, cumpleanos: item.cumpleanos || '', nombre: item.nombre || '', rol_designado: item.rol_designado || '', numero_colegiado: item.numero_colegiado || '', telefono: item.telefono || '' }); setAviso(''); }} aria-label={`Editar ${item.puesto}`} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-700 hover:bg-blue-50"><Edit3 size={16}/></button>
-                <button type="button" onClick={() => setPorBorrar(item)} aria-label={`Eliminar ${item.puesto}`} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={16}/></button>
+                <button type="button" onClick={() => { setFormulario({ ...vacio(), ...item, cumpleanos: item.cumpleanos || '', nombre: item.nombre || '', rol_designado: item.rol_designado || '', numero_colegiado: item.numero_colegiado || '', telefono: item.telefono || '' }); setAviso(''); }} aria-label={`Editar ${item.cargo}`} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-700 hover:bg-blue-50"><Edit3 size={16}/></button>
+                <button type="button" onClick={() => setPorBorrar(item)} aria-label={`Eliminar ${item.cargo}`} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-red-600 hover:bg-red-50"><Trash2 size={16}/></button>
               </div>
             </div>
           </div>
@@ -302,10 +302,10 @@ export default function MiembrosComisionView() {
               <button type="button" onClick={() => setFormulario(null)} aria-label="Cerrar" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100"><X size={20}/></button>
             </div>
             <div className="space-y-4 p-5">
-              <Campo id="miembro-puesto" label="Puesto *" ayuda="Los del reglamento vienen precargados; también puedes escribir uno nuevo.">
-                <input id="miembro-puesto" list="puestos-comision" value={formulario.puesto} onChange={evento => setFormulario(actual => ({ ...actual, puesto: evento.target.value }))} className={inputCls}/>
-                <datalist id="puestos-comision">
-                  {PUESTOS_COMISION.map(puesto => <option key={puesto} value={puesto}/>)}
+              <Campo id="miembro-cargo" label="Cargo *" ayuda="Los del reglamento vienen precargados; también puedes escribir uno nuevo.">
+                <input id="miembro-cargo" list="cargos-comision" value={formulario.cargo} onChange={evento => setFormulario(actual => ({ ...actual, cargo: evento.target.value }))} className={inputCls}/>
+                <datalist id="cargos-comision">
+                  {CARGOS_COMISION.map(cargo => <option key={cargo} value={cargo}/>)}
                 </datalist>
               </Campo>
               <Campo id="miembro-nombre" label="Nombre">
@@ -356,7 +356,7 @@ export default function MiembrosComisionView() {
               <p className="pt-1 text-xs text-slate-500">
                 {campos.length
                   ? `Saldrán ${campos.length} columna(s) para ${miembros.length} miembro(s).`
-                  : 'Sin nada marcado se imprimen puesto, nombre, rol y teléfono.'}
+                  : 'Sin nada marcado se imprimen cargo, nombre, rol y teléfono.'}
               </p>
             </div>
             <div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-5 sm:flex-row sm:justify-end">
@@ -373,7 +373,7 @@ export default function MiembrosComisionView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
             <h3 className="text-lg font-black text-slate-800">Eliminar miembro</h3>
-            <p className="mt-3 rounded-xl bg-red-50 p-4 text-sm text-red-700">Se eliminará <strong>{porBorrar.nombre || porBorrar.puesto}</strong> del directorio. No se puede deshacer.</p>
+            <p className="mt-3 rounded-xl bg-red-50 p-4 text-sm text-red-700">Se eliminará <strong>{porBorrar.nombre || porBorrar.cargo}</strong> del directorio. No se puede deshacer.</p>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setPorBorrar(null)} className="min-h-11 rounded-xl bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancelar</button>
               <button type="button" onClick={eliminar} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white hover:bg-red-700"><Trash2 size={16}/> Eliminar</button>

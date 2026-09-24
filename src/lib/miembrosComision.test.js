@@ -8,22 +8,23 @@ import {
   filasParaImprimir,
   formatCumpleanos,
   generateDirectorioMiembrosHTML,
+  normalizarMiembro,
   ordenarMiembros,
-  PUESTOS_COMISION,
+  CARGOS_COMISION,
   textoCuentaRegresiva,
 } from './miembrosComision.js';
 
 // Fecha fija para que las pruebas no dependan del día en que se corran.
 const HOY = new Date(2026, 5, 10); // 10 de junio de 2026
 
-const miembro = (nombre, puesto, cumpleanos, extra = {}) => ({
-  nombre, puesto, cumpleanos, ...extra,
+const miembro = (nombre, cargo, cumpleanos, extra = {}) => ({
+  nombre, cargo, cumpleanos, ...extra,
 });
 
-test('los puestos vienen precargados del reglamento', () => {
-  assert.equal(PUESTOS_COMISION[0], 'Coordinador(a)');
-  assert.ok(PUESTOS_COMISION.includes('Gestor(a) del Conocimiento'));
-  assert.ok(PUESTOS_COMISION.length >= 8);
+test('los cargos vienen precargados del reglamento', () => {
+  assert.equal(CARGOS_COMISION[0], 'Coordinador(a)');
+  assert.ok(CARGOS_COMISION.includes('Gestor(a) del Conocimiento'));
+  assert.ok(CARGOS_COMISION.length >= 8);
 });
 
 test('el cumpleaños se muestra sin el año de nacimiento', () => {
@@ -86,15 +87,15 @@ test('el texto de la cuenta regresiva se lee natural', () => {
   assert.equal(textoCuentaRegresiva(5), 'En 5 días');
 });
 
-test('el directorio se ordena por el puesto del reglamento', () => {
+test('el directorio se ordena por el cargo del reglamento', () => {
   const miembros = [
     miembro('Zoe', 'Vocal II', ''),
     miembro('Ana', 'Coordinador(a)', ''),
-    miembro('Beto', 'Puesto inventado', ''),
+    miembro('Beto', 'Cargo inventado', ''),
     miembro('Carla', 'Secretario(a)', ''),
     miembro('Ada', 'Vocal II', ''),
   ];
-  // Los puestos fuera del reglamento van al final, alfabéticos.
+  // Los cargos fuera del reglamento van al final, alfabéticos.
   assert.deepEqual(
     ordenarMiembros(miembros).map(item => item.nombre),
     ['Ana', 'Carla', 'Ada', 'Zoe', 'Beto'],
@@ -111,14 +112,14 @@ test('el informe solo lleva los campos marcados, en el orden de la tabla', () =>
   assert.deepEqual(filasParaImprimir(miembros, ['telefono', 'nombre']), [['Ana López', '55551111']]);
 
   assert.deepEqual(
-    filasParaImprimir(miembros, ['puesto', 'nombre', 'cumpleanos', 'numero_colegiado']),
+    filasParaImprimir(miembros, ['cargo', 'nombre', 'cumpleanos', 'numero_colegiado']),
     [['Coordinador(a)', 'Ana López', '12 de junio', '1234']],
   );
 
   // Un campo que no existe se descarta.
   assert.deepEqual(camposParaImprimir(['nombre', 'inventado']), ['nombre']);
   // Sin nada marcado no se imprime una hoja en blanco.
-  assert.deepEqual(camposParaImprimir([]), ['puesto', 'nombre', 'rol_designado', 'telefono']);
+  assert.deepEqual(camposParaImprimir([]), ['cargo', 'nombre', 'rol_designado', 'telefono']);
 });
 
 test('el informe impreso muestra los encabezados marcados y escapa el texto', () => {
@@ -133,7 +134,7 @@ test('el informe impreso muestra los encabezados marcados y escapa el texto', ()
   assert.match(html, />Nombre</);
   assert.match(html, />Teléfono</);
   // Los campos no marcados no aparecen como columna.
-  assert.equal(/>Puesto</.test(html), false);
+  assert.equal(/>Cargo</.test(html), false);
   assert.match(html, /Ana &lt;script&gt;/);
   assert.equal(html.includes('<script>'), false);
 
@@ -145,4 +146,20 @@ test('todos los campos de la tabla tienen etiqueta', () => {
   CAMPOS_MIEMBRO.forEach(item => {
     assert.ok(item.campo && item.label, `campo sin etiqueta: ${JSON.stringify(item)}`);
   });
+});
+
+test('los registros guardados como "puesto" se siguen leyendo como cargo', () => {
+  // La columna se renombró; entre el despliegue y la migración conviene que el
+  // listado se vea igual en vez de aparecer vacío.
+  const viejo = { id: '1', puesto: 'Coordinador(a)', nombre: 'Ana', cumpleanos: '1985-06-12' };
+  assert.equal(normalizarMiembro(viejo).cargo, 'Coordinador(a)');
+  // Si ya trae el nombre nuevo no se toca.
+  assert.equal(normalizarMiembro({ cargo: 'Vocal I', puesto: 'viejo' }).cargo, 'Vocal I');
+  assert.deepEqual(normalizarMiembro({}), {});
+
+  assert.deepEqual(
+    ordenarMiembros([{ nombre: 'Zoe', puesto: 'Vocal II' }, viejo]).map(item => item.nombre),
+    ['Ana', 'Zoe'],
+  );
+  assert.deepEqual(cumpleanosProximos([viejo], { hoy: HOY }).map(item => item.cargo), ['Coordinador(a)']);
 });

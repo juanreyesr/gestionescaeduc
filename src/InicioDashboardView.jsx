@@ -57,7 +57,7 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
         supabase.from('oficios').select('*').order('created_at', { ascending: false }).limit(5),
         // Si la tabla de miembros aún no existe, el panel se muestra igual y
         // simplemente no aparece el aviso de cumpleaños.
-        supabase.from('caeduc_miembros_comision').select('id,nombre,puesto,cumpleanos'),
+        supabase.from('caeduc_miembros_comision').select('id,nombre,cargo,cumpleanos'),
       ]);
       if (!active) return;
 
@@ -115,8 +115,8 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
           <ul className="mt-2 grid gap-1 sm:grid-cols-2">
             {data.cumples.map(item => (
               <li key={item.id} className="text-sm text-pink-900">
-                <strong>{item.nombre || item.puesto || 'Miembro'}</strong>
-                {item.puesto && item.nombre ? <span className="text-pink-700"> · {item.puesto}</span> : null}
+                <strong>{item.nombre || item.cargo || 'Miembro'}</strong>
+                {item.cargo && item.nombre ? <span className="text-pink-700"> · {item.cargo}</span> : null}
                 <span className="text-pink-700"> · {formatCumpleanos(item.cumpleanos)} — {textoCuentaRegresiva(item.diasParaCumpleanos)}</span>
               </li>
             ))}

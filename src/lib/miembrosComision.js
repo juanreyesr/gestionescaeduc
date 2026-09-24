@@ -1,14 +1,14 @@
 // src/lib/miembrosComision.js — Miembros de la Comisión
 //
-// El directorio interno de la comisión: quién ocupa cada puesto, con qué rol
+// El directorio interno de la comisión: quién ocupa cada cargo, con qué rol
 // designado, su cumpleaños, su número de colegiado y su teléfono.
 //
-// Los puestos vienen precargados del reglamento (ROLES) para que no haya que
+// Los cargos vienen precargados del reglamento (ROLES) para que no haya que
 // escribirlos, pero se admite cualquier otro si la comisión crea uno nuevo.
 
 import { ROLES } from './constants.js';
 
-export const PUESTOS_COMISION = ROLES;
+export const CARGOS_COMISION = ROLES;
 
 const MESES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -17,7 +17,7 @@ const MESES = [
 
 // Campos que pueden salir en el directorio impreso. El orden es el de la tabla.
 export const CAMPOS_MIEMBRO = [
-  { campo: 'puesto',           label: 'Puesto' },
+  { campo: 'cargo',           label: 'Cargo' },
   { campo: 'nombre',           label: 'Nombre' },
   { campo: 'rol_designado',    label: 'Rol designado' },
   { campo: 'cumpleanos',       label: 'Cumpleaños' },
@@ -25,7 +25,7 @@ export const CAMPOS_MIEMBRO = [
   { campo: 'telefono',         label: 'Teléfono' },
 ];
 
-export const CAMPOS_POR_DEFECTO = ['puesto', 'nombre', 'rol_designado', 'telefono'];
+export const CAMPOS_POR_DEFECTO = ['cargo', 'nombre', 'rol_designado', 'telefono'];
 
 export const campoLabel = (campo) => CAMPOS_MIEMBRO.find(item => item.campo === campo)?.label || campo;
 
@@ -66,9 +66,19 @@ export const diasParaCumpleanos = (valor, hoy = new Date()) => {
   return Math.round((proximo - referencia) / 86400000);
 };
 
+// La columna se llamó `puesto` antes de renombrarse a `cargo`. Esto deja que el
+// listado siga viéndose entre el despliegue y la migración, en vez de aparecer
+// vacío.
+export const normalizarMiembro = (miembro = {}) => (
+  miembro.cargo === undefined && miembro.puesto !== undefined
+    ? { ...miembro, cargo: miembro.puesto }
+    : miembro
+);
+
 // Quiénes cumplen años dentro de los próximos `dentroDe` días, hoy incluido.
 // Ordenados por cercanía; a igual día, por nombre.
 export const cumpleanosProximos = (miembros = [], { hoy = new Date(), dentroDe = 7 } = {}) => miembros
+  .map(normalizarMiembro)
   .map(miembro => ({ ...miembro, diasParaCumpleanos: diasParaCumpleanos(miembro.cumpleanos, hoy) }))
   .filter(miembro => miembro.diasParaCumpleanos !== null && miembro.diasParaCumpleanos <= dentroDe)
   .sort((a, b) => a.diasParaCumpleanos - b.diasParaCumpleanos
@@ -80,15 +90,15 @@ export const textoCuentaRegresiva = (dias) => {
   return `En ${dias} días`;
 };
 
-// Orden del directorio: por el puesto según el reglamento y, dentro del mismo
-// puesto (o para puestos nuevos), alfabético.
-export const ordenarMiembros = (miembros = []) => [...miembros].sort((a, b) => {
-  const posA = PUESTOS_COMISION.indexOf(a.puesto);
-  const posB = PUESTOS_COMISION.indexOf(b.puesto);
-  const normA = posA === -1 ? PUESTOS_COMISION.length : posA;
-  const normB = posB === -1 ? PUESTOS_COMISION.length : posB;
+// Orden del directorio: por el cargo según el reglamento y, dentro del mismo
+// cargo (o para cargos nuevos), alfabético.
+export const ordenarMiembros = (miembros = []) => [...miembros].map(normalizarMiembro).sort((a, b) => {
+  const posA = CARGOS_COMISION.indexOf(a.cargo);
+  const posB = CARGOS_COMISION.indexOf(b.cargo);
+  const normA = posA === -1 ? CARGOS_COMISION.length : posA;
+  const normB = posB === -1 ? CARGOS_COMISION.length : posB;
   return normA - normB
-    || String(a.puesto || '').localeCompare(String(b.puesto || ''), 'es')
+    || String(a.cargo || '').localeCompare(String(b.cargo || ''), 'es')
     || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es');
 });
 
