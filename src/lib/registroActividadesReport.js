@@ -80,6 +80,20 @@ export const sortActivitiesByDate = (activities = []) => [...activities].sort((a
   return String(a.actividad_nombre || '').localeCompare(String(b.actividad_nombre || ''), 'es');
 });
 
+// Igual que el anterior pero de la más reciente a la más antigua, para el
+// historial en pantalla. Las que no tienen fecha legible siguen al final: al
+// invertir la lista sin cuidado se irían al principio, que es justo donde menos
+// sirven.
+export const sortActivitiesByDateDesc = (activities = []) => {
+  const conFecha = [];
+  const sinFecha = [];
+  activities.forEach(activity => (activityDateKey(activity.actividad_fecha) ? conFecha : sinFecha).push(activity));
+  conFecha.sort((a, b) => activityDateKey(b.actividad_fecha).localeCompare(activityDateKey(a.actividad_fecha))
+    || String(a.actividad_nombre || '').localeCompare(String(b.actividad_nombre || ''), 'es'));
+  sinFecha.sort((a, b) => String(a.actividad_nombre || '').localeCompare(String(b.actividad_nombre || ''), 'es'));
+  return [...conFecha, ...sinFecha];
+};
+
 export const activitiesInDateRange = (activities = [], from = '', to = '') => sortActivitiesByDate(activities)
   .filter((activity) => {
     const date = activityDateKey(activity.actividad_fecha);

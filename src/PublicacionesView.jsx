@@ -12,7 +12,7 @@ import {
   parseSettingJson,
   whatsappUrl,
 } from './lib/publicaciones.js';
-import { activitiesInDateRange, sortActivitiesByDate } from './lib/registroActividadesReport.js';
+import { activitiesInDateRange, sortActivitiesByDateDesc } from './lib/registroActividadesReport.js';
 import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
 
 const SETTINGS_KEY = 'publicacion_responsables';
@@ -92,7 +92,9 @@ const Field = ({ id, label, children, helper }) => (
 );
 
 export default function PublicacionesView({ oficios = [], appSettings = {}, onUpdateSetting, onGenerateActivityReport }) {
-  const [sourceMode, setSourceMode] = useState('oficio');
+  // Vacío hasta que se elija crear, buscar o editar: el formulario arranca
+  // cerrado y limpio en vez de mostrar los datos de la última actividad.
+  const [sourceMode, setSourceMode] = useState('');
   const [selectedOficioId, setSelectedOficioId] = useState('');
   const [activity, setActivity] = useState(blankActivity);
   const [selectedResponsibleId, setSelectedResponsibleId] = useState('');
@@ -135,6 +137,9 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const grados = useMemo(() => gradosDeTarifario(tarifas), [tarifas]);
   const montoGrado = montoPorGrado(activity.ponente_grado || '', tarifas);
 
+  // El formulario solo se muestra cuando hay algo que editar: al crear, al
+  // buscar desde un oficio o al abrir un registro del historial.
+  const editorAbierto = Boolean(sourceMode);
   const responsible = responsibles.find(item => item.id === selectedResponsibleId);
   const oficio = activityOficios.find(item => item.id === selectedOficioId);
   const generatedMessage = buildPublicationMessage({
@@ -155,7 +160,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       item.actividad_fecha,
       item.responsable_nombre,
     ].some(value => String(value || '').toLowerCase().includes(query))) : history;
-    return sortActivitiesByDate(visible);
+    return sortActivitiesByDateDesc(visible);
   }, [history, historySearch]);
 
   useEffect(() => {
@@ -169,14 +174,6 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       setSelectedResponsibleId(responsibles[0]?.id || '');
     }
   }, [responsibles, selectedResponsibleId]);
-
-  useEffect(() => {
-    if (sourceMode === 'oficio' && !selectedOficioId && activityOficios.length) {
-      const first = activityOficios[0];
-      setSelectedOficioId(first.id);
-      setActivity({ ...activityFromOficio(first), zoom_detalles: '' });
-    }
-  }, [activityOficios, selectedOficioId, sourceMode]);
 
   useEffect(() => () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -231,6 +228,18 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       setSelectedOficioId('');
       setActivity(blankActivity());
     }
+    setFeedback('');
+  };
+
+  // Vuelve a dejar la pantalla como al entrar.
+  const cerrarEditor = () => {
+    setSourceMode('');
+    setSelectedOficioId('');
+    setActivity(blankActivity());
+    setEditingHistoryId('');
+    setDraftId(crypto.randomUUID());
+    setMessageOverride(null);
+    clearPhotoDraft();
     setFeedback('');
   };
 
@@ -550,7 +559,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         <p className="mt-1 text-sm text-slate-500">Crea una actividad desde cero o recupera sus datos desde un oficio y conserva el material en el historial.</p>
       </header>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.75fr)]">
+      <div className={`grid gap-6 ${editorAbierto ? 'xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.75fr)]' : ''}`}>
         <div className="space-y-5">
           <Card>
             <h2 className="text-base font-extrabold text-slate-800">1. Origen de la actividad</h2>
@@ -599,8 +608,21 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                 Los espacios empiezan vacíos para que prepares una solicitud nueva dirigida al responsable de publicaciones.
               </div>
             )}
+
+            {!editorAbierto && (
+              <p className="mt-4 text-sm leading-6 text-slate-500">
+                Elige una opción para abrir el formulario, o toca “Editar” en una actividad del historial.
+              </p>
+            )}
+
+            {editorAbierto && (
+              <button type="button" onClick={cerrarEditor} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100">
+                <X size={16}/> Cerrar y limpiar
+              </button>
+            )}
           </Card>
 
+          {editorAbierto && (<>
           <Card>
             <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -726,8 +748,10 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
               })}
             </div>
           </Card>
+          </>)}
         </div>
 
+        {editorAbierto && (
         <Card className="h-fit xl:sticky xl:top-6">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -759,7 +783,16 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
           <p className="mt-3 text-xs leading-5 text-slate-500">En celulares compatibles, el botón comparte el texto y la foto juntos. En WhatsApp Web abre el chat, copia el texto y descarga la foto para adjuntarla.</p>
           {feedback && <p role="status" aria-live="polite" className="mt-3 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600"><Check size={16} className="mt-0.5 shrink-0 text-emerald-600"/>{feedback}</p>}
         </Card>
+        )}
       </div>
+
+      {/* Con el formulario cerrado el aviso no tiene dónde salir, y aquí llegan
+          los de eliminar o descargar desde el historial. */}
+      {!editorAbierto && feedback && (
+        <p role="status" aria-live="polite" className="flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+          <Check size={16} className="mt-0.5 shrink-0 text-emerald-600"/>{feedback}
+        </p>
+      )}
 
       <Card className="border-indigo-200 bg-indigo-50/60">
         <h2 className="flex items-center gap-2 font-extrabold text-indigo-900"><User size={18}/> Responsabilidad según el reglamento</h2>
