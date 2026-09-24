@@ -3,9 +3,10 @@ import React, { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Users, Calendar, DollarSign, ListChecks, FileSignature,
-  ArrowRight, RefreshCw, Clock, MapPin
+  ArrowRight, RefreshCw, Clock, MapPin, Cake
 } from 'lucide-react';
 import { PageHeader, SectionCard, StatTile, EmptyState, Pill } from './components/ui.jsx';
+import { cumpleanosProximos, formatCumpleanos, textoCuentaRegresiva } from './lib/miembrosComision.js';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -28,6 +29,7 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
     totalGastado: 0,
     pendientesAgenda: 0,
     ultimosOficios: [],
+    cumples: [],
   });
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
         { data: gastosRubro },
         { data: pendientes },
         { data: oficios },
+        { data: miembros },
       ] = await Promise.all([
         supabase.from('avales').select('id,status,is_deleted'),
         supabase.from('planificacion_actividades').select('id,actividad,fecha,fecha_iso,sede_modalidad,estado_general,monto,monto_gastado'),
@@ -52,6 +55,9 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
         supabase.from('planificacion_gastos_rubro').select('monto'),
         supabase.from('caeduc_agenda_pendientes').select('id').eq('completado', false),
         supabase.from('oficios').select('*').order('created_at', { ascending: false }).limit(5),
+        // Si la tabla de miembros aún no existe, el panel se muestra igual y
+        // simplemente no aparece el aviso de cumpleaños.
+        supabase.from('caeduc_miembros_comision').select('id,nombre,puesto,cumpleanos'),
       ]);
       if (!active) return;
 
@@ -77,6 +83,7 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
         saldo, presBase, totalFondos, totalGastado,
         pendientesAgenda: (pendientes || []).length,
         ultimosOficios: oficios || [],
+        cumples: cumpleanosProximos(miembros || []),
       });
       setLoading(false);
     })();
@@ -98,6 +105,27 @@ export default function InicioDashboardView({ onNavigate, userName, onOpenActivi
         title={`Hola${userName ? ', ' + userName : ''} 👋`}
         subtitle="Resumen general de la Comisión de Acreditación y Educación Continua"
       />
+
+      {/* Aviso de cumpleaños: aparece la semana antes y el mismo día. */}
+      {data.cumples.length > 0 && (
+        <div className="rounded-2xl border border-pink-200 bg-pink-50 p-4">
+          <p className="flex items-center gap-2 text-sm font-extrabold text-pink-900">
+            <Cake size={18}/> {data.cumples.length === 1 ? 'Cumpleaños esta semana' : 'Cumpleaños de esta semana'}
+          </p>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+            {data.cumples.map(item => (
+              <li key={item.id} className="text-sm text-pink-900">
+                <strong>{item.nombre || item.puesto || 'Miembro'}</strong>
+                {item.puesto && item.nombre ? <span className="text-pink-700"> · {item.puesto}</span> : null}
+                <span className="text-pink-700"> · {formatCumpleanos(item.cumpleanos)} — {textoCuentaRegresiva(item.diasParaCumpleanos)}</span>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={() => onNavigate('directorio')} className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-bold text-pink-800 ring-1 ring-pink-200 hover:bg-pink-100">
+            Ver miembros de la comisión <ArrowRight size={14}/>
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatTile

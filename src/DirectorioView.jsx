@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { buildFacturaText, escapeFacturaHtml } from './lib/factura.js';
 import { formatoQuetzales, parseTarifas, TARIFAS_DEFAULT } from './lib/tarifario.js';
+import MiembrosComisionView from './MiembrosComisionView.jsx';
 import {
   ACTIVITY_SOURCE_OFICIO,
   ACTIVITY_SOURCE_PUBLICACION,
@@ -1918,56 +1919,38 @@ function TarifarioSection() {
 // ── COMPONENTE PRINCIPAL ───────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
+const PESTANAS = [
+  { id: 'directorio',     label: 'Directorio',        icono: Users,         color: 'text-blue-700' },
+  { id: 'miembros',       label: 'Miembros',          icono: GraduationCap, color: 'text-blue-700' },
+  { id: 'proveedores',    label: 'Proveedores',       icono: ShoppingBag,   color: 'text-emerald-700' },
+  { id: 'procedimientos', label: 'Procedimientos',    icono: ClipboardList, color: 'text-purple-700' },
+  { id: 'tarifario',      label: 'Tarifario',         icono: Award,         color: 'text-amber-600' },
+  { id: 'factura',        label: 'Modelo de factura', icono: FileText,      color: 'text-emerald-700' },
+];
+
 export default function DirectorioView() {
   const [activeTab, setActiveTab] = useState('directorio');
 
   return (
     <div className="space-y-6">
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-full sm:w-auto sm:inline-flex">
-        <button
-          onClick={() => setActiveTab('directorio')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
-            activeTab === 'directorio' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Users size={15}/> Directorio
-        </button>
-        <button
-          onClick={() => setActiveTab('proveedores')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
-            activeTab === 'proveedores' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <ShoppingBag size={15}/> Proveedores
-        </button>
-        <button
-          onClick={() => setActiveTab('procedimientos')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
-            activeTab === 'procedimientos' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <ClipboardList size={15}/> Procedimientos
-        </button>
-        <button
-          onClick={() => setActiveTab('tarifario')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
-            activeTab === 'tarifario' ? 'bg-white text-amber-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <Award size={15}/> Tarifario
-        </button>
-        <button
-          onClick={() => setActiveTab('factura')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex-1 sm:flex-none justify-center ${
-            activeTab === 'factura' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <FileText size={15}/> Modelo de factura
-        </button>
+      {/* Tabs: se envuelven en varias filas en vez de salirse de la pantalla
+          cuando no caben (antes cada botón se estiraba y el texto desbordaba). */}
+      <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1">
+        {PESTANAS.map(pestana => (
+          <button
+            key={pestana.id}
+            onClick={() => setActiveTab(pestana.id)}
+            className={`flex min-h-11 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold transition-all ${
+              activeTab === pestana.id ? `bg-white ${pestana.color} shadow-sm` : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <pestana.icono size={15}/> {pestana.label}
+          </button>
+        ))}
       </div>
 
       {activeTab === 'directorio'     && <DirectorioSection/>}
+      {activeTab === 'miembros'       && <MiembrosComisionView/>}
       {activeTab === 'proveedores'    && <ProveedoresSection/>}
       {activeTab === 'procedimientos' && <ProcedimientosSection/>}
       {activeTab === 'tarifario'      && <TarifarioSection/>}
