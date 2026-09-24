@@ -7,6 +7,7 @@ import {
   generateActivityRegisterHTML,
   generateBoardActivitiesHTML,
   sortActivitiesByDate,
+  sortActivitiesByDateDesc,
 } from './registroActividadesReport.js';
 
 const activities = [
@@ -34,4 +35,29 @@ test('crea un informe visual con fotografía y un informe tabular para Junta Dir
   assert.match(board, /M\. A\. Juan J\. Reyes/);
   assert.match(board, /<table/);
   assert.match(board, /table-layout:fixed;font-size:11\.5px;line-height:1\.35/);
+});
+
+test('el historial en pantalla va de la más reciente a la más antigua', () => {
+  assert.deepEqual(
+    sortActivitiesByDateDesc(activities).map(item => item.actividad_nombre),
+    ['Septiembre', 'Agosto', 'Sin fecha'],
+  );
+
+  // Las que no tienen fecha legible se quedan al final, no saltan al principio
+  // como pasaría si solo se invirtiera la lista.
+  const mezcladas = [
+    { actividad_nombre: 'Por confirmar', actividad_fecha: 'por confirmar' },
+    { actividad_nombre: 'Junio', actividad_fecha: '2026-06-01' },
+    { actividad_nombre: 'Julio', actividad_fecha: '2026-07-01' },
+    { actividad_nombre: 'Vacía', actividad_fecha: '' },
+  ];
+  assert.deepEqual(
+    sortActivitiesByDateDesc(mezcladas).map(item => item.actividad_nombre),
+    ['Julio', 'Junio', 'Por confirmar', 'Vacía'],
+  );
+
+  // No muta la lista que recibe.
+  const original = [...mezcladas];
+  sortActivitiesByDateDesc(mezcladas);
+  assert.deepEqual(mezcladas, original);
 });
