@@ -4,10 +4,12 @@ import assert from 'node:assert/strict';
 import {
   articuloDeCargo,
   atribucionesDeCargo,
+  atribucionesSeleccionadas,
   buildInformeViaticosDraft,
   cargoTieneAtribuciones,
   defaultLiteralParaMotivo,
   escapeViaticosHTML,
+  fraseAtribuciones,
   generateInformeViaticosHTML,
   informeViaticosFileName,
   motivoLabel,
@@ -54,6 +56,33 @@ test('motivoLabel y motivoRequiereDetalle reflejan la lista precargada', () => {
   assert.equal(motivoRequiereDetalle('otra'), true);
 });
 
+test('atribucionesSeleccionadas devuelve solo las marcadas, en el orden del reglamento', () => {
+  const seleccion = atribucionesSeleccionadas('Coordinador(a)', ['g', 'a', 'b']);
+  assert.deepEqual(seleccion.map(item => item.literal), ['a', 'b', 'g']);
+});
+
+test('fraseAtribuciones integra una sola atribución en la oración, sin comillas', () => {
+  const frase = fraseAtribuciones('Coordinador(a)', ['a']);
+  assert.match(frase, /Artículo 6, literal a\) representar a la Comisión$/);
+  assert.doesNotMatch(frase, /"/);
+});
+
+test('fraseAtribuciones une varias atribuciones con comas y un "y" final', () => {
+  const frase = fraseAtribuciones('Coordinador(a)', ['a', 'b']);
+  assert.match(frase, /literales a\) representar a la Comisión y b\) convocar y presidir/);
+
+  // "y" se vuelve "e" antes de "i)" (el literal empieza con la letra i), como
+  // manda la gramática española.
+  const tres = fraseAtribuciones('Coordinador(a)', ['a', 'b', 'i']);
+  assert.match(tres, /literales a\) representar a la Comisión, b\) convocar y presidir las sesiones ordinarias y extraordinarias e i\) asistir puntualmente/);
+});
+
+test('fraseAtribuciones ignora literales que no pertenecen al cargo y devuelve vacío sin selección', () => {
+  assert.equal(fraseAtribuciones('Coordinador(a)', []), '');
+  assert.equal(fraseAtribuciones('Coordinador(a)', ['z']), '');
+  assert.equal(fraseAtribuciones('Junta Directiva', ['a']), '');
+});
+
 test('arma el borrador citando el artículo y literal del cargo elegido', () => {
   const draft = buildInformeViaticosDraft({
     miembro: { nombre: 'M. A. Juan J. Reyes', cargo: 'Coordinador(a)' },
@@ -62,30 +91,33 @@ test('arma el borrador citando el artículo y literal del cargo elegido', () => 
   });
   assert.equal(draft.miembro_nombre, 'M. A. Juan J. Reyes');
   assert.equal(draft.miembro_cargo, 'Coordinador(a)');
-  assert.equal(draft.literal, 'b');
+  assert.deepEqual(draft.literales, ['b']);
   assert.equal(draft.fecha, '2026-03-12');
 });
 
-test('el HTML cita el artículo y literal elegido, e incluye el detalle libre cuando se da', () => {
+test('el HTML integra varias atribuciones elegidas, e incluye el detalle libre cuando se da', () => {
   const draft = buildInformeViaticosDraft({
     miembro: { nombre: 'Mgtr. Luisa Mazariegos', cargo: 'Secretario(a)' },
     motivoId: 'otra',
     detalle: 'reunión de coordinación con la Junta Directiva',
-    literal: 'b',
+    literales: ['b', 'c'],
     fecha: '2026-04-02',
   });
   const html = generateInformeViaticosHTML(draft, { firmaUrl: '' });
   assert.match(html, /Mgtr\. Luisa Mazariegos/);
   assert.match(html, /Secretario\(a\)/);
-  assert.match(html, /Artículo 8, literal b/);
+  assert.match(html, /Artículo 8, literales b\) tener a su cargo.*y c\) llevar el archivo/);
   assert.match(html, /reunión de coordinación con la Junta Directiva/);
+  // Ya no se pegan citas textuales entre comillas: la atribución se integra en la oración.
+  assert.doesNotMatch(html, /que establece/);
+  assert.doesNotMatch(html, /&quot;/);
   // Sin imagen de firma: debe quedar la línea en blanco para firma física.
   assert.doesNotMatch(html, /alt="Firma"/);
 });
 
 test('sin una atribución "otras actividades" en su artículo, el Secretario cae en la frase genérica', () => {
   // El Secretario (art. 8) no tiene un literal de cajón como sí lo tienen
-  // Prosecretario, Gestor del Conocimiento o los Vocales: si no se elige un
+  // Prosecretario, Gestor del Conocimiento o los Vocales: si no se elige ningún
   // literal a mano, el informe usa una frase genérica en vez de citar mal.
   assert.equal(defaultLiteralParaMotivo('Secretario(a)', 'otra'), '');
   const draft = buildInformeViaticosDraft({ miembro: { nombre: 'Mgtr. Luisa Mazariegos', cargo: 'Secretario(a)' }, motivoId: 'otra', detalle: 'entrega de constancias', fecha: '2026-04-02' });
