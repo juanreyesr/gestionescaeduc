@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, CheckCircle2, Download, FileCheck2, FileText,
+  AlertCircle, Banknote, CheckCircle2, Download, FileCheck2, FileText,
   History, RotateCcw, Save, User,
 } from 'lucide-react';
 import {
@@ -15,6 +15,7 @@ import {
   oficioToActivity,
   publicationToActivity,
 } from './lib/activitySources.js';
+import InformesViaticosView from './InformesViaticosView.jsx';
 
 const inputClass = 'mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200';
 
@@ -46,12 +47,15 @@ const PaperPreview = ({ draft }) => (
 );
 
 export default function InformesActividadesView({
+  appSettings = {},
   oficios = [],
   publicaciones = [],
   informes = [],
   onSaveInforme,
   onDownloadInforme,
+  onDownloadInformeViaticos,
 }) {
+  const [tab, setTab] = useState('actividad');
   const activityOficios = useMemo(() => oficios.filter(item => item.actividad_nombre).map(oficioToActivity), [oficios]);
   const activityPublicaciones = useMemo(() => publicaciones.filter(item => item.actividad_nombre).map(publicationToActivity), [publicaciones]);
   const [sourceType, setSourceType] = useState(ACTIVITY_SOURCE_OFICIO);
@@ -186,6 +190,19 @@ export default function InformesActividadesView({
 
   return (
     <div className="mx-auto max-w-7xl space-y-7" ref={editorRef}>
+      <div className="grid gap-2 sm:inline-grid sm:grid-flow-col" role="tablist" aria-label="Tipo de informe">
+        <button type="button" role="tab" aria-selected={tab === 'actividad'} onClick={() => setTab('actividad')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-extrabold transition-colors ${tab === 'actividad' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+          <FileCheck2 className="mr-1.5 inline" size={16}/> Informes de actividad
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'viaticos'} onClick={() => setTab('viaticos')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-extrabold transition-colors ${tab === 'viaticos' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+          <Banknote className="mr-1.5 inline" size={16}/> Informes de viáticos
+        </button>
+      </div>
+
+      {tab === 'viaticos' ? (
+        <InformesViaticosView appSettings={appSettings} onDownload={onDownloadInformeViaticos} />
+      ) : (
+      <>
       <header>
         <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-caeduc-pink">Rendición de actividades</p>
         <h1 className="mt-1 flex items-center gap-2 text-2xl font-black text-slate-800"><FileCheck2 className="text-caeduc-blue" size={25}/> Informes de actividades para Junta Directiva</h1>
@@ -272,6 +289,8 @@ export default function InformesActividadesView({
         <h2 className="font-extrabold text-indigo-900">Responsabilidades según el reglamento</h2>
         <p className="mt-2 text-sm leading-6 text-indigo-800">Coordinación representa a la Comisión y firma su correspondencia; Secretaría lleva el archivo de la correspondencia; el Gestor del Conocimiento administra el conocimiento científico-académico y promueve el aprovechamiento del Aula Virtual. La Comisión debe informar a Junta Directiva y velar por el cumplimiento del plan de capacitación.</p>
       </section>
+      </>
+      )}
     </div>
   );
 }
