@@ -23,6 +23,7 @@ import {
 } from './lib/pagoPonentes.js';
 import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
 import { generateInformeActividadHTML, informeFileName } from './lib/informesActividad.js';
+import { generateInformeViaticosHTML, informeViaticosFileName } from './lib/informesViaticos.js';
 import { formatRegistroDate, generateActivityRegisterHTML, generateBoardActivitiesHTML } from './lib/registroActividadesReport.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
 // Carga diferida: cada vista se descarga en su propio chunk solo al abrirse,
@@ -522,6 +523,17 @@ const openInformeActividad = async (informe, settings = {}, mode = 'download') =
   const html = generateInformeActividadHTML(informe, { membreteUrl });
   if (mode === 'preview') previewHTML(html);
   else await downloadPDF(html, informeFileName(informe));
+};
+
+// Informe de respaldo de viáticos: no se guarda, se genera y descarga en el
+// momento. `firmaUrl` ya viene resuelto desde la vista (solo tiene valor para
+// el Coordinador, única firma disponible en el sistema).
+const openInformeViaticos = async (informe, { firmaUrl = '' } = {}, settings = {}) => {
+  const membreteUrl = settings.membrete_path
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
+    : '/fondo-oficios.jpg';
+  const html = generateInformeViaticosHTML(informe, { membreteUrl, firmaUrl });
+  await downloadPDF(html, informeViaticosFileName(informe));
 };
 
 const openActivityRegisterReport = async (activities, { from, to, type } = {}, settings = {}) => {
@@ -1846,7 +1858,7 @@ export default function CAEDUCApp() {
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting} onGenerateActivityReport={(activities, options) => openActivityRegisterReport(activities, options, appSettings)}/>}
             {currentModule==='informes_actividades' && (
-              <InformesActividadesView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')}/>
+              <InformesActividadesView appSettings={appSettings} oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onDownloadInformeViaticos={(informe,opts)=>openInformeViaticos(informe,opts,appSettings)}/>
             )}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
