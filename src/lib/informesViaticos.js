@@ -97,6 +97,44 @@ export const articuloDeCargo = (cargo) => ATRIBUCIONES_POR_CARGO[cargo]?.articul
 export const textoAtribucion = (cargo, literal) =>
   atribucionesDeCargo(cargo).find(item => item.literal === literal)?.texto || '';
 
+// Devuelve, en el orden del reglamento, las atribuciones del cargo cuyo
+// literal está entre los elegidos. Permite marcar varias a la vez cuando una
+// misma sesión respalda más de una acción del cargo.
+export const atribucionesSeleccionadas = (cargo, literales = []) => {
+  const elegidos = new Set(literales);
+  return atribucionesDeCargo(cargo).filter(item => elegidos.has(item.literal));
+};
+
+// Une una lista de frases con comas y un "y"/"e" final, como se escribe en
+// español ("a, b y c"; "a e incisos").
+const unirConY = (frases = []) => {
+  if (!frases.length) return '';
+  if (frases.length === 1) return frases[0];
+  const ultima = frases[frases.length - 1];
+  const conector = /^[iI](?!i)/.test(ultima) ? 'e' : 'y';
+  return `${frases.slice(0, -1).join(', ')} ${conector} ${ultima}`;
+};
+
+// Convierte una atribución en una cláusula que se integra en la oración
+// ("a) representar a la Comisión") en vez de pegarse como cita textual entre
+// comillas, que se vuelve inmanejable con varios literales a la vez.
+const clausulaAtribucion = (item) => {
+  const texto = String(item.texto || '').trim().replace(/\.\s*$/, '');
+  const primeraMinuscula = texto ? texto.charAt(0).toLowerCase() + texto.slice(1) : '';
+  return `${item.literal}) ${primeraMinuscula}`;
+};
+
+// Arma la frase de fundamento con una o varias atribuciones del cargo, ya
+// integrada en la oración en vez de citas textuales sueltas.
+export const fraseAtribuciones = (cargo, literales = []) => {
+  const articulo = articuloDeCargo(cargo);
+  const seleccionadas = atribucionesSeleccionadas(cargo, literales);
+  if (!articulo || !seleccionadas.length) return '';
+  const plural = seleccionadas.length > 1;
+  const listado = unirConY(seleccionadas.map(clausulaAtribucion));
+  return `en cumplimiento a las atribuciones que se le otorgan según el Reglamento de la Comisión de Acreditación y Educación Continua (CAEDUC), en su ${articulo}, literal${plural ? 'es' : ''} ${listado}`;
+};
+
 // ── Motivos de viático precargados ─────────────────────────────────────────
 export const MOTIVOS_VIATICOS = [
   {
@@ -173,22 +211,25 @@ export const escapeViaticosHTML = (value = '') => String(value)
 // Arma el borrador del informe a partir del miembro elegido, el motivo y la
 // fecha. `detalle` es el texto libre que describe la sesión/actividad y es
 // obligatorio solo cuando el motivo lo pide (por ahora, "Otra actividad").
+// `literales` acepta varias atribuciones a la vez, para sesiones donde el
+// cargo cumplió más de una función (ej. convocó la sesión y además representó
+// a la Comisión en ella).
 export const buildInformeViaticosDraft = ({
   miembro = null,
   motivoId = MOTIVOS_VIATICOS[0].id,
   detalle = '',
-  literal = '',
+  literales = [],
   fecha = '',
 } = {}) => {
   const cargo = miembro?.cargo || '';
   const nombre = miembro?.nombre || '';
-  const literalElegido = literal || defaultLiteralParaMotivo(cargo, motivoId);
+  const elegidos = literales.length ? literales : [defaultLiteralParaMotivo(cargo, motivoId)].filter(Boolean);
   return {
     miembro_nombre: nombre,
     miembro_cargo: cargo,
     motivo_id: motivoId,
     detalle: detalle.trim(),
-    literal: literalElegido,
+    literales: elegidos,
     fecha: fecha || todayGuatemalaISO(),
   };
 };
@@ -199,14 +240,12 @@ const parrafosInforme = (informe = {}) => {
   const cargo = informe.miembro_cargo || '[Cargo]';
   const fechaTexto = formatInformeDate(informe.fecha) || '[Fecha pendiente]';
   const detalle = String(informe.detalle || '').trim();
-  const articulo = articuloDeCargo(cargo);
-  const literal = informe.literal || '';
-  const texto = textoAtribucion(cargo, literal);
+  const frase = fraseAtribuciones(cargo, informe.literales || []);
 
   const p1 = `Por medio del presente informe, se deja constancia de que ${nombre}, ${cargo} de la Comisión de Acreditación y Educación Continua (CAEDUC), participó en ${motivo.frase}${detalle ? `, consistente en ${detalle}` : ''}, celebrada/realizada el ${fechaTexto}.`;
 
-  const p2 = articulo && literal && texto
-    ? `Dicha participación se realiza en cumplimiento a las atribuciones que se le otorgan según el Reglamento de la Comisión de Acreditación y Educación Continua (CAEDUC), en su ${articulo}, literal ${literal}), que establece: "${texto}"`
+  const p2 = frase
+    ? `Dicha participación se realiza ${frase}.`
     : `Dicha participación se realiza en cumplimiento a las atribuciones propias de su cargo, según el Reglamento de la Comisión de Acreditación y Educación Continua (CAEDUC).`;
 
   const p3 = 'El presente informe se extiende para los efectos administrativos y de fiscalización correspondientes, como respaldo de los viáticos otorgados en virtud de la participación antes descrita.';

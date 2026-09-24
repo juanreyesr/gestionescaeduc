@@ -2,7 +2,8 @@
 //
 // Auditoría pide un informe individual por cada sesión o actividad en la que
 // se entreguen viáticos a un miembro de la Comisión. Aquí se elige quién es
-// (su cargo determina qué atribuciones del Reglamento de CAEDUC puede citar),
+// (su cargo determina qué atribuciones del Reglamento de CAEDUC puede citar,
+// y se pueden marcar varias a la vez si la sesión cubrió más de una función),
 // la razón del viático y la fecha; el sistema arma el informe con el mismo
 // membrete que el resto de oficios. No se guarda nada: se genera y se
 // descarga en el momento, con vista previa en tiempo real antes de imprimir.
@@ -17,6 +18,7 @@ import {
   buildInformeViaticosDraft,
   cargoTieneAtribuciones,
   defaultLiteralParaMotivo,
+  fraseAtribuciones,
   MOTIVOS_VIATICOS,
   motivoRequiereDetalle,
 } from './lib/informesViaticos.js';
@@ -41,15 +43,16 @@ const Field = ({ id, label, hint, children }) => (
   </div>
 );
 
-const PaperPreview = ({ draft, articulo, literalTexto, firmaUrl }) => {
+const PaperPreview = ({ draft, firmaUrl }) => {
   const nombre = draft.miembro_nombre || '[Nombre del miembro]';
   const cargo = draft.miembro_cargo || '[Cargo]';
   const motivo = MOTIVOS_VIATICOS.find(item => item.id === draft.motivo_id) || MOTIVOS_VIATICOS[0];
   const detalle = String(draft.detalle || '').trim();
   const fechaTexto = formatFecha(draft.fecha) || 'fecha pendiente';
+  const frase = fraseAtribuciones(cargo, draft.literales || []);
   const p1 = `Por medio del presente informe, se deja constancia de que ${nombre}, ${cargo} de la Comisión de Acreditación y Educación Continua (CAEDUC), participó en ${motivo.frase}${detalle ? `, consistente en ${detalle}` : ''}, celebrada/realizada el ${fechaTexto}.`;
-  const p2 = articulo && draft.literal && literalTexto
-    ? `Dicha participación se realiza en cumplimiento a las atribuciones que se le otorgan según el Reglamento de la Comisión de Acreditación y Educación Continua (CAEDUC), en su ${articulo}, literal ${draft.literal}), que establece: "${literalTexto}"`
+  const p2 = frase
+    ? `Dicha participación se realiza ${frase}.`
     : 'Dicha participación se realiza en cumplimiento a las atribuciones propias de su cargo, según el Reglamento de la Comisión de Acreditación y Educación Continua (CAEDUC).';
   const p3 = 'El presente informe se extiende para los efectos administrativos y de fiscalización correspondientes, como respaldo de los viáticos otorgados en virtud de la participación antes descrita.';
 
@@ -88,8 +91,8 @@ export default function InformesViaticosView({ appSettings = {}, onDownload }) {
   const [miembroId, setMiembroId] = useState('');
   const [motivoId, setMotivoId] = useState(MOTIVOS_VIATICOS[0].id);
   const [detalle, setDetalle] = useState('');
-  const [literal, setLiteral] = useState('');
-  const [literalTocado, setLiteralTocado] = useState(false);
+  const [literales, setLiterales] = useState([]);
+  const [literalesTocado, setLiteralesTocado] = useState(false);
   const [fecha, setFecha] = useState(todayGuatemalaISO());
   const [descargando, setDescargando] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -112,33 +115,28 @@ export default function InformesViaticosView({ appSettings = {}, onDownload }) {
   const cargo = miembro?.cargo || '';
   const atribuciones = useMemo(() => atribucionesDeCargo(cargo), [cargo]);
   const tieneAtribuciones = cargoTieneAtribuciones(cargo);
+  const articulo = articuloDeCargo(cargo);
 
   useEffect(() => {
     if (!miembros.length || miembroId) return;
     setMiembroId(miembros[0].id);
   }, [miembros, miembroId]);
 
-  // Sugiere el literal al cambiar de miembro o de motivo, salvo que la
-  // persona ya lo haya elegido manualmente para esta combinación.
+  // Sugiere un literal al cambiar de miembro o de motivo, salvo que la
+  // persona ya haya marcado las casillas a mano para esta combinación.
   useEffect(() => {
-    setLiteralTocado(false);
+    setLiteralesTocado(false);
   }, [miembroId, motivoId]);
 
   useEffect(() => {
-    if (literalTocado) return;
-    setLiteral(defaultLiteralParaMotivo(cargo, motivoId));
-  }, [cargo, motivoId, literalTocado]);
+    if (literalesTocado) return;
+    setLiterales([defaultLiteralParaMotivo(cargo, motivoId)].filter(Boolean));
+  }, [cargo, motivoId, literalesTocado]);
 
-  const draft = useMemo(() => buildInformeViaticosDraft({
-    miembro,
-    motivoId,
-    detalle,
-    literal,
-    fecha,
-  }), [miembro, motivoId, detalle, literal, fecha]);
-
-  const literalTexto = atribuciones.find(item => item.literal === literal)?.texto || '';
-  const articulo = articuloDeCargo(cargo);
+  const toggleLiteral = (literal) => {
+    setLiterales(prev => (prev.includes(literal) ? prev.filter(item => item !== literal) : [...prev, literal]));
+    setLiteralesTocado(true);
+  };
 
   const esCoordinador = cargo === 'Coordinador(a)';
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -151,14 +149,18 @@ export default function InformesViaticosView({ appSettings = {}, onDownload }) {
     ? (buildStorageUrl(appSettings.firmante1_firma_path, 'firmas-sellos') || '/firma-coordinador.png')
     : '';
 
+  const draft = useMemo(() => buildInformeViaticosDraft({
+    miembro, motivoId, detalle, literales, fecha,
+  }), [miembro, motivoId, detalle, literales, fecha]);
+
   const requiereDetalle = motivoRequiereDetalle(motivoId);
   const faltaDetalle = requiereDetalle && !detalle.trim();
-  const faltaLiteral = tieneAtribuciones && !literal;
-  const puedeDescargar = Boolean(miembro) && Boolean(fecha) && !faltaDetalle && !faltaLiteral;
+  const faltaAtribuciones = tieneAtribuciones && !literales.length;
+  const puedeDescargar = Boolean(miembro) && Boolean(fecha) && !faltaDetalle && !faltaAtribuciones;
 
   const handleDescargar = async () => {
     if (!puedeDescargar) {
-      setFeedback({ type: 'error', text: 'Completa el miembro, la fecha y, si aplica, el detalle o la atribución antes de descargar.' });
+      setFeedback({ type: 'error', text: 'Completa el miembro, la fecha y, si aplica, el detalle o al menos una atribución antes de descargar.' });
       return;
     }
     setDescargando(true);
@@ -178,7 +180,7 @@ export default function InformesViaticosView({ appSettings = {}, onDownload }) {
       <header>
         <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-caeduc-pink">Respaldo ante auditoría</p>
         <h1 className="mt-1 flex items-center gap-2 text-2xl font-black text-slate-800"><Banknote className="text-caeduc-blue" size={25}/> Informes de respaldo de viáticos</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Un informe por cada sesión o actividad en la que se entreguen viáticos a un miembro de la Comisión. Elige el miembro y la razón: el informe cita automáticamente el artículo del Reglamento de CAEDUC que ampara su participación. No se guarda: se genera y descarga en el momento.</p>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Un informe por cada sesión o actividad en la que se entreguen viáticos a un miembro de la Comisión. Elige el miembro y la razón: el informe integra en el texto el o los artículos del Reglamento de CAEDUC que amparan su participación. No se guarda: se genera y descarga en el momento.</p>
       </header>
 
       {error ? <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm leading-5 text-rose-700"><AlertCircle className="mt-0.5 shrink-0" size={17}/>{error}</p> : null}
@@ -212,12 +214,18 @@ export default function InformesViaticosView({ appSettings = {}, onDownload }) {
           </Field>
 
           {tieneAtribuciones ? (
-            <Field id="viaticos-literal" label={`Atribución del cargo que respalda el informe (Reglamento de CAEDUC) *`} hint="Se sugiere una por el motivo elegido; puedes cambiarla si otra se ajusta mejor.">
-              <select id="viaticos-literal" value={literal} onChange={event => { setLiteral(event.target.value); setLiteralTocado(true); }} className={`${inputClass} ${faltaLiteral ? 'border-amber-400 bg-amber-50' : ''}`}>
-                <option value="">Selecciona una atribución</option>
-                {atribuciones.map(item => <option key={item.literal} value={item.literal}>{item.literal}) {item.texto}</option>)}
-              </select>
-            </Field>
+            <fieldset className={`rounded-xl border p-3 ${faltaAtribuciones ? 'border-amber-400 bg-amber-50' : 'border-slate-300'}`}>
+              <legend className="px-1 text-sm font-extrabold text-slate-700">Atribuciones del cargo que respaldan el informe ({articulo}) *</legend>
+              <p className="mb-2 text-xs leading-5 text-slate-500">Marca todas las que apliquen a esta sesión; se sugiere una según el motivo elegido, pero puedes marcar varias si el cargo cumplió más de una función.</p>
+              <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
+                {atribuciones.map(item => (
+                  <label key={item.literal} className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
+                    <input type="checkbox" className="mt-0.5" checked={literales.includes(item.literal)} onChange={() => toggleLiteral(item.literal)} />
+                    <span><span className="font-bold">{item.literal})</span> {item.texto}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           ) : miembro ? (
             <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800"><AlertCircle className="mt-0.5 shrink-0" size={15}/>El cargo "{cargo}" no tiene atribuciones definidas en el Reglamento de CAEDUC (arts. 6 a 11). El informe se redactará sin citar un literal específico.</p>
           ) : null}
@@ -243,7 +251,7 @@ export default function InformesViaticosView({ appSettings = {}, onDownload }) {
             <FileText className="text-slate-400" size={24}/>
           </div>
           {!miembro ? <p role="status" className="mb-4 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm font-semibold leading-5 text-amber-800"><AlertCircle className="mt-0.5 shrink-0" size={17}/>Elige un miembro de la Comisión para ver el informe.</p> : null}
-          <PaperPreview draft={draft} articulo={articulo} literalTexto={literalTexto} firmaUrl={firmaUrl} />
+          <PaperPreview draft={draft} firmaUrl={firmaUrl} />
         </div>
       </section>
     </div>
