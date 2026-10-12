@@ -38,6 +38,7 @@ const InicioDashboardView     = lazy(() => import('./InicioDashboardView'));
 const PublicacionesView       = lazy(() => import('./PublicacionesView'));
 const InformesActividadesView = lazy(() => import('./InformesActividadesView'));
 const PuntosResolutivosView   = lazy(() => import('./PuntosResolutivosView'));
+const OficioDocumentos        = lazy(() => import('./OficioDocumentos'));
 const ExpedientePonentesView  = lazy(() => import('./ExpedientePonentesView'));
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -988,7 +989,8 @@ const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, 
                     if (puntoFile) {
                       const safeName = puntoFile.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9._-]/g,'');
                       const fp = `puntos-resolutivos/${Date.now()}_${safeName}`;
-                      const { data: up } = await supabase.storage.from('avales-files').upload(fp, puntoFile, { upsert: false, cacheControl: '3600' });
+                      const { data: up, error: upError } = await supabase.storage.from('avales-files').upload(fp, puntoFile, { upsert: false, cacheControl: '3600' });
+                      if (upError) { alert('No se pudo subir el documento: ' + upError.message); setSavingPunto(false); return; }
                       if (up) docUrl = up.path || fp;
                     }
                     await onSavePunto({ numero_punto_resolutivo: puntoNumber || null, documento_resolutivo_url: docUrl });
@@ -1000,6 +1002,7 @@ const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, 
               </div>
             )}
           </div>
+          <Suspense fallback={<ViewLoader/>}><OficioDocumentos oficioId={o.id}/></Suspense>
         </div>
       )}
     </div>
