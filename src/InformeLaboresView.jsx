@@ -35,7 +35,10 @@ const hoyISO = () => new Intl.DateTimeFormat('en-CA', {
 
 const inputClass = 'mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200';
 
-const faltaSQL = (mensaje = '') => /does not exist|schema cache|Could not find|function/i.test(mensaje);
+// Solo se culpa al SQL pendiente cuando el error nombra la función o la tabla
+// de este informe; cualquier otro error se muestra tal cual para diagnosticarlo.
+const faltaSQL = (mensaje = '') => /caeduc_informe_labores/i.test(mensaje)
+  && /does not exist|schema cache|Could not find/i.test(mensaje);
 
 // Mide cada bloque con el mismo ancho y tipografía del área útil de la página
 // y lo reparte en páginas carta.
@@ -96,7 +99,7 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
       setAviso({
         tipo: 'error',
         texto: faltaSQL(error.message)
-          ? `No se pudieron leer los datos del Aula Virtual: falta ejecutar ${SQL} en el SQL Editor de Supabase. Por ahora solo se muestran las solicitudes de publicación.`
+          ? `No se pudieron leer los datos del Aula Virtual: falta ejecutar ${SQL} en el SQL Editor de Supabase (${error.message}). Por ahora solo se muestran las solicitudes de publicación.`
           : `No se pudieron leer los datos del Aula Virtual: ${error.message}. Por ahora solo se muestran las solicitudes de publicación.`,
       });
     } else {
