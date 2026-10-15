@@ -39,19 +39,19 @@ begin
     select coalesce(jsonb_agg(jsonb_build_object('mes', mes, 'total', total, 'unicos', unicos) order by mes), '[]'::jsonb)
       into v_certificados
     from (
-      select to_char(issued_at at time zone 'America/Guatemala', 'YYYY-MM') as mes,
+      select to_char(issued_at::timestamptz at time zone 'America/Guatemala', 'YYYY-MM') as mes,
              count(*)::int as total,
              count(distinct collegiate_number)::int as unicos
       from aulacaeduc.cpg_certificates
       where coalesce(cert_type, '') <> 'volunteer'
-        and (issued_at at time zone 'America/Guatemala')::date between p_desde and p_hasta
+        and (issued_at::timestamptz at time zone 'America/Guatemala')::date between p_desde and p_hasta
       group by 1
     ) t;
 
     select count(distinct collegiate_number)::int into v_unicos
     from aulacaeduc.cpg_certificates
     where coalesce(cert_type, '') <> 'volunteer'
-      and (issued_at at time zone 'America/Guatemala')::date between p_desde and p_hasta;
+      and (issued_at::timestamptz at time zone 'America/Guatemala')::date between p_desde and p_hasta;
   end if;
 
   return jsonb_build_object(
