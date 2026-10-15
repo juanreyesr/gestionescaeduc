@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle, Banknote, CheckCircle2, Download, FileCheck2, FileText,
+  AlertCircle, Banknote, CalendarRange, CheckCircle2, Download, FileCheck2, FileText,
   History, RotateCcw, Save, User,
 } from 'lucide-react';
 import {
@@ -16,6 +16,7 @@ import {
   publicationToActivity,
 } from './lib/activitySources.js';
 import InformesViaticosView from './InformesViaticosView.jsx';
+import InformeLaboresView from './InformeLaboresView.jsx';
 
 const inputClass = 'mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200';
 
@@ -54,6 +55,7 @@ export default function InformesActividadesView({
   onSaveInforme,
   onDownloadInforme,
   onDownloadInformeViaticos,
+  informeLabores = {},
 }) {
   const [tab, setTab] = useState('actividad');
   const activityOficios = useMemo(() => oficios.filter(item => item.actividad_nombre).map(oficioToActivity), [oficios]);
@@ -197,9 +199,14 @@ export default function InformesActividadesView({
         <button type="button" role="tab" aria-selected={tab === 'viaticos'} onClick={() => setTab('viaticos')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-extrabold transition-colors ${tab === 'viaticos' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
           <Banknote className="mr-1.5 inline" size={16}/> Informes de viáticos
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'labores'} onClick={() => setTab('labores')} className={`min-h-11 rounded-xl border px-4 py-2 text-sm font-extrabold transition-colors ${tab === 'labores' ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+          <CalendarRange className="mr-1.5 inline" size={16}/> Informe de labores
+        </button>
       </div>
 
-      {tab === 'viaticos' ? (
+      {tab === 'labores' ? (
+        <InformeLaboresView publicaciones={publicaciones} {...informeLabores} />
+      ) : tab === 'viaticos' ? (
         <InformesViaticosView appSettings={appSettings} onDownload={onDownloadInformeViaticos} />
       ) : (
       <>

@@ -556,6 +556,23 @@ const openActivityRegisterReport = async (activities, { from, to, type } = {}, s
   await downloadPDF(html, `${type === 'junta' ? 'Informe_Junta_Directiva' : 'Informe_Actividades'}_${from || 'inicio'}_${to || 'fin'}`);
 };
 
+// Informe de labores: la vista arma y pagina el documento; aquí se resuelven
+// el membrete, la firma y el sello configurados, y la salida a PDF.
+const informeLaboresProps = (settings = {}) => ({
+  membreteUrl: settings.membrete_path
+    ? buildStorageUrl(settings.membrete_path, 'firmas-sellos')
+    : '/fondo-oficios.jpg',
+  firmante: {
+    nombre: settings.firmante1_nombre || 'M. A. Juan José Reyes',
+    cargo: settings.firmante1_cargo || 'Coordinador',
+    institucion: settings.firmante1_institucion || 'Comisión de Acreditación y Educación Continua, Colegio de Psicólogos de Guatemala',
+    firmaUrl: buildStorageUrl(settings.firmante1_firma_path, 'firmas-sellos') || '/firma-coordinador.png',
+    selloUrl: buildStorageUrl(settings.sello_path, 'firmas-sellos') || '/sello-caeduc.png',
+  },
+  onPreview: previewHTML,
+  onDownload: downloadPDF,
+});
+
 // ── UI Components ──────────────────────────────────────────────────────────────
 // Parte 7 (rediseño): Modal, Card, Badge y BackButton viven ahora en components/ui.jsx
 // con la paleta institucional CAEDUC. Se re-exportan aquí con los mismos nombres
@@ -1861,7 +1878,7 @@ export default function CAEDUCApp() {
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting} onGenerateActivityReport={(activities, options) => openActivityRegisterReport(activities, options, appSettings)}/>}
             {currentModule==='informes_actividades' && (
-              <InformesActividadesView appSettings={appSettings} oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onDownloadInformeViaticos={(informe,opts)=>openInformeViaticos(informe,opts,appSettings)}/>
+              <InformesActividadesView appSettings={appSettings} oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onDownloadInformeViaticos={(informe,opts)=>openInformeViaticos(informe,opts,appSettings)} informeLabores={informeLaboresProps(appSettings)}/>
             )}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
