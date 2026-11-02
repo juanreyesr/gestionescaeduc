@@ -820,8 +820,8 @@ const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, 
                 <span className="bg-amber-50 border border-amber-200 text-amber-800 text-xs px-2 py-1 rounded font-medium">#{o.numero_punto_resolutivo}</span>
                 {o.documento_resolutivo_url && (
                   <>
-                    <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${o.documento_resolutivo_url}`} target="_blank" rel="noopener noreferrer" className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Eye size={11}/> Ver</a>
-                    <a href={`${supabaseUrl}/storage/v1/object/public/avales-files/${o.documento_resolutivo_url}`} download className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded text-xs hover:bg-indigo-100 flex items-center gap-1"><Download size={11}/> Descargar</a>
+                    <button onClick={()=>abrirDocumentoPunto(o.documento_resolutivo_url, false)} className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded text-xs hover:bg-blue-100 flex items-center gap-1"><Eye size={11}/> Ver</button>
+                    <button onClick={()=>abrirDocumentoPunto(o.documento_resolutivo_url, true)} className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded text-xs hover:bg-indigo-100 flex items-center gap-1"><Download size={11}/> Descargar</button>
                   </>
                 )}
               </div>
@@ -840,8 +840,8 @@ const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, 
                     let docUrl = o.documento_resolutivo_url || null;
                     if (puntoFile) {
                       const safeName = puntoFile.name.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9._-]/g,'');
-                      const fp = `puntos-resolutivos/${Date.now()}_${safeName}`;
-                      const { data: up, error: upError } = await supabase.storage.from('avales-files').upload(fp, puntoFile, { upsert: false, cacheControl: '3600' });
+                      const fp = `oficios/${o.id}/punto_resolutivo/${Date.now()}_${safeName}`;
+                      const { data: up, error: upError } = await supabase.storage.from(PUNTO_DOC_BUCKET).upload(fp, puntoFile, { upsert: false, contentType: puntoFile.type });
                       if (upError) { alert('No se pudo subir el documento: ' + upError.message); setSavingPunto(false); return; }
                       if (up) docUrl = up.path || fp;
                     }
@@ -859,6 +859,27 @@ const OficioCard = ({ oficio: o, appSettings, informes = [], onDownloadInforme, 
       )}
     </div>
   );
+};
+
+// ── Documento del punto resolutivo de un oficio ─────────────────────────────────
+// Los nuevos se guardan en el bucket privado caeduc-puntos-resolutivos (el mismo
+// de los documentos adjuntos, con política para usuarios autenticados) bajo
+// oficios/<id>/punto_resolutivo/. Los anteriores quedaron en el bucket público
+// avales-files (rutas puntos-resolutivos/...) y se siguen abriendo desde ahí.
+const PUNTO_DOC_BUCKET = 'caeduc-puntos-resolutivos';
+const abrirDocumentoPunto = async (ruta, descargar) => {
+  if (!ruta) return;
+  if (!ruta.startsWith('oficios/')) {
+    const url = `${supabaseUrl}/storage/v1/object/public/avales-files/${ruta}`;
+    if (descargar) { const a = document.createElement('a'); a.href = url; a.download = ruta.split('/').pop(); a.target = '_blank'; a.rel = 'noopener noreferrer'; a.click(); }
+    else window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const nombre = ruta.split('/').pop().replace(/^\d+_/, '');
+  const { data, error } = await supabase.storage.from(PUNTO_DOC_BUCKET).createSignedUrl(ruta, 300, descargar ? { download: nombre } : undefined);
+  if (error || !data?.signedUrl) { alert('No se pudo abrir el documento: ' + (error?.message || 'enlace no disponible')); return; }
+  if (descargar) { const a = document.createElement('a'); a.href = data.signedUrl; a.rel = 'noopener noreferrer'; a.click(); }
+  else window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
 };
 
 // ── OficiosAdminView ───────────────────────────────────────────────────────────
