@@ -8,6 +8,7 @@
 // datos: se genera y se descarga en el momento.
 
 import { formatInformeDate } from './informesActividad.js';
+import { flowPageHTML } from './flowPagination.js';
 
 // ── Atribuciones del Reglamento de CAEDUC, por cargo (arts. 6 a 11) ───────────
 // Texto transcrito literalmente del reglamento para que la cita sea exacta.
@@ -270,9 +271,11 @@ export const generateInformeViaticosHTML = (informe = {}, { membreteUrl = '/fond
     .map(value => `<p style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 12px;">${escapeViaticosHTML(value)}</p>`)
     .join('');
 
-  const firmaBlock = `<div style="margin-top:30px;"><p style="font-size:11.5px;margin:0 0 34px;">Atentamente,</p><div style="text-align:center;"><div style="display:inline-flex;flex-direction:column;align-items:center;">${
+  const firmaBlock = `<div data-keep style="padding-top:30px;"><p style="font-size:11.5px;margin:0 0 34px;">Atentamente,</p><div style="text-align:center;"><div style="display:inline-flex;flex-direction:column;align-items:center;">${
     firmaUrl ? `<img src="${escapeViaticosHTML(firmaUrl)}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;">` : ''
   }<div style="width:240px;border-top:1.5px solid #26364b;padding-top:5px;margin-top:${firmaUrl ? '0' : '46px'};"><div style="font-size:11.5px;font-weight:700;">${escapeViaticosHTML(nombre)}</div><div style="font-size:10.5px;color:#556579;">${escapeViaticosHTML(cargo)}</div></div></div></div></div>`;
 
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escapeViaticosHTML(subject)}</title><style>@page{size:letter;margin:0}*{box-sizing:border-box}body{margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body><div class="page" style="position:relative;width:8.5in;min-height:11in;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;overflow:hidden;"><img src="${escapeViaticosHTML(membreteUrl)}" alt="" style="position:absolute;inset:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"><div style="position:relative;z-index:1;padding:1.35in .78in 1.7in .9in;min-height:11in;display:flex;flex-direction:column;"><div style="flex:1;"><div style="text-align:right;margin-bottom:22px;"><div style="font-size:11.5px;color:#444;">Guatemala, ${escapeViaticosHTML(formatInformeDate(informe.fecha))}</div></div><div style="font-size:11.5px;line-height:1.65;margin-bottom:18px;"><strong>Señores</strong><br><strong>Junta Directiva</strong><br>Colegio de Psicólogos de Guatemala<br>Presente</div><p style="font-size:11.5px;font-weight:700;margin:0 0 14px;">Honorables miembros de la Junta Directiva:</p><p style="font-size:11px;font-weight:700;color:#1a5276;text-transform:uppercase;margin:0 0 14px;">Asunto: ${escapeViaticosHTML(subject)}</p>${paragraphs}${firmaBlock}</div></div></div></body></html>`;
+  // Hoja carta paginable: si el texto no cabe continúa en otra hoja con membrete.
+  const inner = `<div style="text-align:right;margin-bottom:22px;"><div style="font-size:11.5px;color:#444;">Guatemala, ${escapeViaticosHTML(formatInformeDate(informe.fecha))}</div></div><div style="font-size:11.5px;line-height:1.65;margin-bottom:18px;"><strong>Señores</strong><br><strong>Junta Directiva</strong><br>Colegio de Psicólogos de Guatemala<br>Presente</div><div data-keep-next style="font-size:11.5px;font-weight:700;margin:0 0 14px;">Honorables miembros de la Junta Directiva:</div><div data-keep-next style="font-size:11px;font-weight:700;color:#1a5276;text-transform:uppercase;margin:0 0 14px;">Asunto: ${escapeViaticosHTML(subject)}</div>${paragraphs}${firmaBlock}`;
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${escapeViaticosHTML(subject)}</title><style>@page{size:letter;margin:0}*{box-sizing:border-box}body{margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>${flowPageHTML({ inner, membreteUrl: escapeViaticosHTML(membreteUrl), padding: '1.35in .78in 1.9in .9in' })}</body></html>`;
 };

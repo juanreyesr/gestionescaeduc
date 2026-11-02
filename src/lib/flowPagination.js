@@ -1,4 +1,5 @@
-// Paginación de documentos con membrete (oficios, informe técnico, honorarios).
+// Paginación de documentos con membrete (oficios, informe técnico, honorarios,
+// carta de aval, informes de actividad, viáticos y Junta Directiva).
 //
 // Cada hoja se marca como `.flow-page` (alto fijo de carta) y su contenido
 // como `.flow-content` (con el padding que respeta el membrete). Los bloques
@@ -9,6 +10,7 @@
 // membrete y continúa allí el texto:
 //   - Los párrafos <p> se parten por palabras (la parte superior queda justificada).
 //   - Las listas con data-split="items" se parten por elementos.
+//   - Las tablas con data-split="rows" se parten por filas y repiten el encabezado.
 //   - data-keep: bloque indivisible (p. ej. "Sin otro particular" + firma).
 //   - data-keep-next: título que debe ir en la misma hoja que el bloque siguiente.
 //   - data-continue-top (en .flow-content): margen superior de las hojas nuevas.
@@ -70,6 +72,25 @@ export function paginateFlowPages(root) {
     return rest;
   };
 
+  const splitTable = (table, fits) => {
+    const body = table.tBodies[0];
+    if (!body) return null;
+    const rows = [...body.rows];
+    let keep = 0;
+    for (let i = 0; i < rows.length; i++) {
+      if (fits(rows[i])) keep = i + 1; else break;
+    }
+    if (!keep || keep === rows.length) return null;
+    const rest = table.cloneNode(false);
+    [...table.children].forEach((child) => {
+      if (child.tagName === 'COLGROUP' || child.tagName === 'THEAD') rest.appendChild(child.cloneNode(true));
+    });
+    const restBody = body.cloneNode(false);
+    rows.slice(keep).forEach((tr) => restBody.appendChild(tr));
+    rest.appendChild(restBody);
+    return rest;
+  };
+
   [...root.querySelectorAll('.flow-page')].forEach((first) => {
     let cur = first;
     for (let guard = 0; guard < 40; guard++) {
@@ -87,6 +108,7 @@ export function paginateFlowPages(root) {
       if (!el.hasAttribute('data-keep')) {
         if (el.tagName === 'P') carry = splitParagraph(el, fits);
         else if (el.getAttribute('data-split') === 'items') carry = splitList(el, fits);
+        else if (el.getAttribute('data-split') === 'rows') carry = splitTable(el, fits);
       }
       let moveFrom = carry ? idx + 1 : idx;
       if (!carry) {
@@ -114,6 +136,29 @@ export function paginateFlowPages(root) {
   return doc;
 }
 
+// Hoja carta con membrete de fondo cuyo contenido se pagina automáticamente.
+// `inner` son los bloques del contenido (hijos directos de .flow-content).
+// `chrome` permite agregar elementos fijos en cada hoja (p. ej. barras o pie).
+export const flowPageHTML = ({
+  inner = '',
+  membreteUrl = '',
+  padding = '1.35in 0.75in 1.9in 0.9in',
+  continueTop = '1.75in',
+  color = '#333',
+  chrome = '',
+} = {}) => `<div class="flow-page" style="position:relative;width:8.5in;height:11in;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;color:${color};background:white;box-sizing:border-box;">${
+  membreteUrl ? `<img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/>` : ''
+}${chrome}<div class="flow-content"${continueTop ? ` data-continue-top="${continueTop}"` : ''} style="position:relative;z-index:1;padding:${padding};height:100%;box-sizing:border-box;">${inner}</div></div>`;
+
 // Script para la vista previa (ventana nueva): pagina al cargar las imágenes.
 export const flowPaginationScript = () =>
   `<script>(function(){var run=function(){(${paginateFlowPages.toString()})(document.body);};if(document.readyState==='complete')run();else window.addEventListener('load',run);})();</script>`;
+
+// Agrega el script de paginación a un documento con hojas .flow-page (solo
+// para la vista previa; la descarga PDF pagina directamente en downloadPDF).
+export const withFlowPagination = (html = '') => {
+  if (!html.includes('flow-page')) return html;
+  const css = '<style>.flow-page{break-after:page;page-break-after:always;}</style>';
+  const script = flowPaginationScript();
+  return html.includes('</body>') ? html.replace('</body>', `${css}${script}</body>`) : html + css + script;
+};
