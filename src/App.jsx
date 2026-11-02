@@ -23,7 +23,7 @@ import {
 } from './lib/pagoPonentes.js';
 import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
 import { generateInformeActividadHTML, informeFileName } from './lib/informesActividad.js';
-import { paginateFlowPages, flowPaginationScript } from './lib/flowPagination.js';
+import { paginateFlowPages, flowPageHTML, withFlowPagination } from './lib/flowPagination.js';
 import { generateInformeViaticosHTML, informeViaticosFileName } from './lib/informesViaticos.js';
 import { formatRegistroDate, generateActivityRegisterHTML, generateBoardActivitiesHTML } from './lib/registroActividadesReport.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, PageHeader, StatTile, EmptyState, Modal as UiModal, BackButton as UiBackButton, Card as UiCard } from './components/ui.jsx';
@@ -221,7 +221,9 @@ const downloadPDF = async (htmlContent, filename) => {
 // └─────────────────────────────────────────────────────────────────────────────┘
 
 
-const previewHTML = (html) => {
+const previewHTML = (rawHtml) => {
+  // Las hojas con membrete (.flow-page) se paginan al abrir la vista previa.
+  const html = withFlowPagination(rawHtml);
   // Blob URL en vez de window.open('','_blank')+document.write: este último
   // frecuentemente queda en blanco en Safari. Abrir una URL real es confiable.
   try {
@@ -260,193 +262,16 @@ const generateApprovalLetterHTML = (aval, settings = {}) => {
     return `${String(d.getDate()).padStart(2,'0')} de ${mo[d.getMonth()]} de ${d.getFullYear()}`;
   };
 
-  // ── HTML con layout 100% en px, sin position:absolute problemáticos ──
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Aprobación ${aval.correlativo || ''}</title>
-<style>
-  @page { size: letter; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Segoe UI', Arial, sans-serif;
-    color: #333;
-    background: white;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  .page {
-    width: 816px;
-    max-width: 816px;
-    min-height: 1056px;
-    margin: 0;
-    padding: 0;
-    background: white;
-    overflow: hidden;
-    display: flex;
-    flex-direction: row;
-    position: relative;
-  }
-  /* Barras decorativas: columna izquierda DENTRO del flex, no absolute */
-  .deco-col {
-    width: 18px;
-    min-width: 18px;
-    padding-top: 200px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    align-items: flex-start;
-    flex-shrink: 0;
-  }
-  .deco-col span {
-    display: block;
-    width: 8px;
-    height: 55px;
-    border-radius: 0 4px 4px 0;
-  }
-  .deco-col span:nth-child(1) { background: #E91E63; }
-  .deco-col span:nth-child(2) { background: #9C27B0; }
-  .deco-col span:nth-child(3) { background: #2196F3; }
-  .deco-col span:nth-child(4) { background: #4CAF50; }
-  /* Columna principal de contenido */
-  .main-col {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 50px 70px 0 52px;
-  }
-  .main-col .body-content { flex: 1; }
-  /* Footer */
-  .footer-area {
-    margin-top: auto;
-    border-top: 2px solid #eee;
-    padding: 12px 0 4px 0;
-    display: flex;
-    justify-content: space-between;
-  }
-  .footer-col {
-    text-align: center;
-    flex: 1;
-    padding: 0 5px;
-    font-size: 8.5px;
-    color: #777;
-  }
-  .footer-col strong {
-    display: block;
-    color: #1a5276;
-    font-size: 9px;
-    margin-bottom: 2px;
-  }
-  .footer-bottom {
-    text-align: center;
-    font-size: 9px;
-    color: #1a5276;
-    font-weight: 600;
-    padding: 6px 0 10px 0;
-  }
-</style>
-</head>
-<body>
-<div class="page">
-  <!-- Columna decorativa izquierda -->
-  <div class="deco-col">
-    <span></span><span></span><span></span><span></span>
-  </div>
-
-  <!-- Columna principal -->
-  <div class="main-col">
-    <div class="body-content">
-      ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="height:90px;width:auto;display:block;"/>` : ''}
-
-      <div style="text-align:center;font-size:24px;font-weight:800;color:#1a5276;letter-spacing:2px;margin:20px 0 30px 0;">
-        APROBACIÓN DE AVAL
-      </div>
-
-      <div style="text-align:right;color:#E91E63;font-weight:600;margin-bottom:25px;font-size:14px;">
-        Guatemala, ${fmtDate(aval.approval_date)}
-      </div>
-
-      <div style="margin-bottom:25px;font-size:14px;line-height:1.6;">
-        Estimado(a) <span style="color:#E91E63;font-weight:600;">${aval.applicant_name || '—'}</span><br>
-        <span style="color:#E91E63;font-weight:600;">${aval.institution || ''}</span>
-      </div>
-
-      <p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;">
-        Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.
-      </p>
-
-      <p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-bottom:15px;">
-        Por medio de la presente carta se extiende la aprobación a su solicitud recibida el
-        <span style="color:#E91E63;font-weight:700;">${fmtReq(aval.created_at)}</span>, con el Aval
-        <span style="color:#E91E63;font-weight:700;">${aval.correlativo || '—'}</span>.
-      </p>
-
-      <div style="margin:15px 0 20px 0;font-size:13.5px;line-height:2;">
-        <div><span style="font-weight:600;">Actividad:</span> <span style="color:#E91E63;font-weight:600;">${aval.activity_type || '—'}</span></div>
-        <div><span style="font-weight:600;">Duración:</span> <span style="color:#E91E63;font-weight:600;">${aval.duration || '—'}</span></div>
-        <div><span style="font-weight:600;">Modalidad:</span> <span style="color:#E91E63;font-weight:600;">${aval.modality || '—'}</span></div>
-        <div><span style="font-weight:600;">Fecha y hora:</span> <span style="color:#E91E63;font-weight:600;">${aval.schedule || aval.activity_date || '—'}</span></div>
-        <div><span style="font-weight:600;">Lugar/Plataforma:</span> <span style="color:#E91E63;font-weight:600;">${aval.platform || '—'}</span></div>
-        <div><span style="font-weight:600;">Tema:</span> <span style="color:#E91E63;font-weight:600;">${aval.topic || aval.activity_name || '—'}</span></div>
-      </div>
-
-      <p style="font-size:13.5px;line-height:1.8;text-align:justify;margin-top:15px;">
-        Agradecemos su trabajo y esfuerzo en la promoción del crecimiento continuo de los profesionales.
-        Solicitamos incluir el número de AVAL en el material correspondiente.
-      </p>
-
-      <!-- Firmas -->
-      <div style="margin-top:30px;display:flex;justify-content:space-between;align-items:flex-end;">
-        ${f1FirmaUrl ? `
-        <div style="text-align:center;">
-          <img src="${f1FirmaUrl}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/>
-          <div style="width:220px;border-top:1px solid #333;padding-top:5px;">
-            <div style="font-weight:700;font-size:13px;">${f1Name}</div>
-            <div style="font-size:12px;color:#555;">${f1Cargo} – CAEDUC</div>
-          </div>
-        </div>` : '<div></div>'}
-
-        <div>
-          ${selloUrl ? `<img src="${selloUrl}" alt="Sello" style="height:110px;width:auto;opacity:0.85;"/>` : ''}
-        </div>
-
-        ${f2FirmaUrl ? `
-        <div style="text-align:center;">
-          <img src="${f2FirmaUrl}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/>
-          <div style="width:220px;border-top:1px solid #333;padding-top:5px;">
-            <div style="font-weight:700;font-size:13px;">${f2Name}</div>
-            <div style="font-size:12px;color:#555;">${f2Cargo} – CAEDUC</div>
-          </div>
-        </div>` : '<div></div>'}
-      </div>
-    </div>
-
-    <!-- Footer dentro del flujo -->
-    <div class="footer-area">
-      <div class="footer-col">
-        <strong>Sede central</strong>
-        3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt
-      </div>
-      <div class="footer-col">
-        <strong>Sub Sede Cobán</strong>
-        Plaza Magdalena, 1er Nivel Of. 105<br>+(502) 7764-7109
-      </div>
-      <div class="footer-col">
-        <strong>Sub Sede Zacapa</strong>
-        4a. Calle 10-34 Zona 1<br>+(502) 7941-0587
-      </div>
-      <div class="footer-col">
-        <strong>Sub Sede Quetzaltenango</strong>
-        Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314
-      </div>
-    </div>
-    <div class="footer-bottom">colegiodepsicologos.org.gt • @colpsicogt</div>
-  </div>
-</div>
-</body>
-</html>`;
+  // Hoja carta paginable: las barras decorativas y el pie se repiten en cada
+  // hoja; si el contenido no cabe continúa en una hoja nueva (lib/flowPagination.js).
+  const decoBars = `<div style="position:absolute;left:0;top:200px;display:flex;flex-direction:column;gap:4px;z-index:0;">${['#E91E63','#9C27B0','#2196F3','#4CAF50'].map(c => `<span style="display:block;width:8px;height:55px;border-radius:0 4px 4px 0;background:${c};"></span>`).join('')}</div>`;
+  const footerCol = (titulo, texto) => `<div style="text-align:center;flex:1;padding:0 5px;font-size:8.5px;color:#777;"><strong style="display:block;color:#1a5276;font-size:9px;margin-bottom:2px;">${titulo}</strong>${texto}</div>`;
+  const footer = `<div style="position:absolute;left:70px;right:70px;bottom:0;z-index:1;"><div style="border-top:2px solid #eee;padding:12px 0 4px;display:flex;justify-content:space-between;">${footerCol('Sede central', '3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt')}${footerCol('Sub Sede Cobán', 'Plaza Magdalena, 1er Nivel Of. 105<br>+(502) 7764-7109')}${footerCol('Sub Sede Zacapa', '4a. Calle 10-34 Zona 1<br>+(502) 7941-0587')}${footerCol('Sub Sede Quetzaltenango', 'Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314')}</div><div style="text-align:center;font-size:9px;color:#1a5276;font-weight:600;padding:6px 0 10px;">colegiodepsicologos.org.gt • @colpsicogt</div></div>`;
+  const firma = (url, nombre, cargo) => url ? `<div style="text-align:center;"><img src="${url}" alt="Firma" style="height:70px;width:auto;display:block;margin:0 auto -8px;"/><div style="width:220px;border-top:1px solid #333;padding-top:5px;"><div style="font-weight:700;font-size:13px;">${nombre}</div><div style="font-size:12px;color:#555;">${cargo} – CAEDUC</div></div></div>` : '<div></div>';
+  const dato = (label, val) => `<div><span style="font-weight:600;">${label}:</span> <span style="color:#E91E63;font-weight:600;">${val || '—'}</span></div>`;
+  const inner = `${logoUrl ? `<div style="margin-bottom:20px;"><img src="${logoUrl}" alt="Logo" style="height:90px;width:auto;display:block;"/></div>` : ''}<div data-keep-next style="text-align:center;font-size:24px;font-weight:800;color:#1a5276;letter-spacing:2px;margin:0 0 30px 0;">APROBACIÓN DE AVAL</div><div style="text-align:right;color:#E91E63;font-weight:600;margin-bottom:25px;font-size:14px;">Guatemala, ${fmtDate(aval.approval_date)}</div><div style="margin-bottom:25px;font-size:14px;line-height:1.6;">Estimado(a) <span style="color:#E91E63;font-weight:600;">${aval.applicant_name || '—'}</span><br><span style="color:#E91E63;font-weight:600;">${aval.institution || ''}</span></div><p style="font-size:13.5px;line-height:1.8;text-align:justify;margin:0 0 15px;">Reciban un cordial saludo por parte de la Comisión de Acreditación y Educación Continua - CAEDUC-.</p><p style="font-size:13.5px;line-height:1.8;text-align:justify;margin:0 0 15px;">Por medio de la presente carta se extiende la aprobación a su solicitud recibida el <span style="color:#E91E63;font-weight:700;">${fmtReq(aval.created_at)}</span>, con el Aval <span style="color:#E91E63;font-weight:700;">${aval.correlativo || '—'}</span>.</p><div style="margin:15px 0 20px 0;font-size:13.5px;line-height:2;">${dato('Actividad', aval.activity_type)}${dato('Duración', aval.duration)}${dato('Modalidad', aval.modality)}${dato('Fecha y hora', aval.schedule || aval.activity_date)}${dato('Lugar/Plataforma', aval.platform)}${dato('Tema', aval.topic || aval.activity_name)}</div><p data-keep-next style="font-size:13.5px;line-height:1.8;text-align:justify;margin:15px 0 0;">Agradecemos su trabajo y esfuerzo en la promoción del crecimiento continuo de los profesionales. Solicitamos incluir el número de AVAL en el material correspondiente.</p><div data-keep style="padding-top:30px;display:flex;justify-content:space-between;align-items:flex-end;">${firma(f1FirmaUrl, f1Name, f1Cargo)}<div>${selloUrl ? `<img src="${selloUrl}" alt="Sello" style="height:110px;width:auto;opacity:0.85;"/>` : ''}</div>${firma(f2FirmaUrl, f2Name, f2Cargo)}</div>`;
+  const page = flowPageHTML({ inner, padding: '50px 70px 120px 70px', continueTop: '', chrome: `${decoBars}${footer}` });
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Aprobación ${aval.correlativo || ''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}</style></head><body>${page}</body></html>`;
 };
 
 const openApprovalLetter = async (aval, settings = {}, mode = 'download') => {
@@ -511,14 +336,14 @@ const generateOficioHTML = (oficio, settings = {}) => {
   let solHTML = oficio.solicitud_puntual ? `${tituloSeccion('Solicitud puntual')}<ul data-split="items" style="padding-left:16px;margin:0;">${oficio.solicitud_puntual.split('\n').filter(l=>l.trim()).map(p=>`<li style="font-size:11.5px;line-height:1.75;margin-bottom:3px;">${p}</li>`).join('')}</ul>` : '';
   const firmaBlock = `<div data-keep><p style="font-size:11.5px;margin-bottom:0;">Sin otro particular, me suscribo.</p><div style="margin-top:20px;"><p style="font-size:11.5px;margin-bottom:16px;text-align:left;">Cordialmente,</p><div style="text-align:center;"><div style="display:inline-flex;align-items:flex-end;gap:20px;">${f1FirmaUrl?`<div style="text-align:center;"><img src="${f1FirmaUrl}" alt="Firma" style="height:55px;width:auto;display:block;margin:0 auto -4px;"/><div style="width:200px;border-top:1.5px solid #333;padding-top:4px;"><div style="font-size:11.5px;font-weight:700;">${f1Name}</div><div style="font-size:10.5px;color:#555;">${f1Cargo}</div>${instLines.map(l=>`<div style="font-size:10px;color:#666;">${l}</div>`).join('')}</div></div>`:'<div></div>'}${selloUrl?`<div style="margin-bottom:10px;"><img src="${selloUrl}" alt="Sello" style="height:80px;width:auto;opacity:0.88;"/></div>`:''}</div></div></div><p style="font-size:10px;color:#888;margin-top:10px;">C.C: Archivo / CAEDUC</p></div>`;
   // Hoja carta con membrete; su contenido se pagina automáticamente (ver lib/flowPagination.js)
-  const flowPage = (inner) => `<div class="flow-page" style="position:relative;width:8.5in;height:11in;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;color:#333;background:white;box-sizing:border-box;"><img src="${membreteUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:1056px;object-fit:cover;z-index:0;pointer-events:none;"/><div class="flow-content" data-continue-top="1.75in" style="position:relative;z-index:1;padding:1.35in 0.75in 1.9in 0.9in;height:100%;box-sizing:border-box;">${inner}</div></div>`;
+  const flowPage = (inner) => flowPageHTML({ inner, membreteUrl });
   const footerHTML = `<div style="border-top:2px solid #E91E63;padding-top:10px;display:flex;justify-content:space-between;font-size:8px;color:#777;gap:8px;"><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sede central</strong>3ra Calle 6-63 Zona 9<br>+(502) 2218-3400<br>info@colegiodepsicologos.org.gt</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Cobán</strong>Plaza Magdalena, 1er Nivel<br>+(502) 7764-7109</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Zacapa</strong>4a. Calle 10-34 Zona 1<br>+(502) 7941-0587</div><div style="flex:1;text-align:center;"><strong style="display:block;color:#1a5276;font-size:8.5px;margin-bottom:2px;">Sub Sede Quetzaltenango</strong>Diagonal 15, 29-91 Zona 1<br>+(502) 7767-3314</div></div><p style="text-align:center;font-size:8.5px;color:white;background:#E91E63;padding:3px 0;margin:0;">colegiodepsicologos.org.gt • @colpsicogt</p>`;
   const mainPage = flowPage(`<div style="text-align:right;margin-bottom:18px;"><div style="font-size:12px;font-weight:700;color:#111;">${oficio.numero_oficio||'Of. ___.CAEDUC'}</div><div style="font-size:11.5px;color:#555;margin-top:1px;">Guatemala ${formatOficioDate(oficio.fecha)}</div></div><div style="margin-bottom:15px;font-size:11.5px;line-height:1.7;">${(oficio.dirigido_a||'').split(',').map(l=>l.trim()).filter(Boolean).join('<br>')}<br>Presente</div><div data-keep-next style="font-size:11.5px;font-weight:700;margin-bottom:12px;">Honorables miembros de la Junta Directiva:</div>${cuerpoHTML}${detallesHTML}<p data-keep-next style="font-size:11.5px;line-height:1.85;text-align:justify;margin:0 0 10px 0;">Agradeciendo su tiempo a la presente solicitud y quedando a su disposición para cualquier consulta adicional.</p>${firmaBlock}`);
   const pagoItems = lineasPago.map(linea => `<li style="margin:0 0 11px;padding:0 0 0 4px;font-size:11.5px;line-height:1.6;"><span style="font-weight:700;color:#173b63;">${linea.profesional || 'Profesional pendiente'}</span><br><span style="color:#374151;">${linea.actividad || 'Actividad sin nombre'}</span><br><span style="font-size:10.5px;color:#556579;">${linea.fecha ? `Fecha: ${formatRegistroDate(linea.fecha)} · ` : ''}Hora: ${formatHoraActividad(linea.hora) || 'Por confirmar'}${linea.grado ? ` · Grado académico: ${linea.grado}` : ''}</span><br><span style="font-weight:700;color:#1a5276;">Monto a pagar: ${formatoQuetzales(linea.monto)}</span></li>`).join('');
   const pagoPage = isPago ? flowPage(`<h2 data-keep-next style="font-size:14px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 5px;">Detalle de honorarios</h2><div data-keep-next style="font-size:9.5px;color:#888;text-align:center;margin:0 0 16px;">Profesional, actividad, hora y monto a pagar</div><ol data-split="items" style="padding-left:18px;margin:0;">${pagoItems}</ol><div style="margin:16px 0 0;padding-top:10px;border-top:1.5px solid #1a5276;font-size:12px;font-weight:800;color:#1a5276;text-align:right;">Total solicitado: ${totalPagoPonentesTexto(lineasPago)}</div>${parrafo('Se solicita respetuosamente la autorización y gestión del pago de los honorarios descritos, de conformidad con el tarifario vigente de la Comisión según el grado académico acreditado de cada profesional.')}`) : '';
   const hasExtra = oficio.justificacion || oficio.solicitud_puntual || (!isPago && oficio.monto);
   const extraPage = hasExtra ? flowPage(`<h2 data-keep-next style="font-size:14px;font-weight:800;color:#1a5276;text-align:center;margin:0 0 5px;">Informe Técnico</h2><div data-keep-next style="font-size:9.5px;color:#888;text-align:center;margin:0 0 5px;">Justificación técnica y aporte gremial</div>${oficio.actividad_nombre?`<h3 data-keep-next style="font-size:12px;font-weight:600;color:#374151;text-align:center;margin:0 0 16px;">${oficio.actividad_nombre}</h3>`:''}${seccionNaturaleza}${seccionJustificacion}${seccionPoblacion}${recursosHTML}${seccionCronograma}${seccionResultados}${solHTML}${parrafo('Agradecemos de antemano su atención y quedamos a su disposición para ampliar detalles técnicos, perfil del ponente y cronograma operativo.')}`) : '';
-  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media print{body{-webkit-print-color-adjust:exact;}}.flow-page{break-after:page;page-break-after:always;}</style></head><body>${mainPage}${pagoPage}${extraPage}${flowPaginationScript()}</body></html>`;
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Oficio ${oficio.numero_oficio||''}</title><style>@page{size:letter;margin:0;}*{margin:0;padding:0;box-sizing:border-box;}body{background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media print{body{-webkit-print-color-adjust:exact;}}.flow-page{break-after:page;page-break-after:always;}</style></head><body>${mainPage}${pagoPage}${extraPage}</body></html>`;
 };
 
 const openOficioLetter = async (oficio, settings = {}, mode = 'download') => {
