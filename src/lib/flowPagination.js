@@ -11,6 +11,7 @@
 //   - Las listas con data-split="items" se parten por elementos.
 //   - data-keep: bloque indivisible (p. ej. "Sin otro particular" + firma).
 //   - data-keep-next: título que debe ir en la misma hoja que el bloque siguiente.
+//   - data-continue-top (en .flow-content): margen superior de las hojas nuevas.
 //
 // IMPORTANTE: la función debe ser autocontenida (sin referencias externas)
 // porque también se inyecta como <script> en la vista previa vía toString().
@@ -98,6 +99,10 @@ export function paginateFlowPages(root) {
       const next = cur.cloneNode(true);
       const nextContent = next.querySelector('.flow-content');
       nextContent.innerHTML = '';
+      // En las hojas de continuación el texto inicia a la izquierda, justo bajo
+      // el logo del membrete: se baja el margen superior para no encimarse.
+      const contTop = content.getAttribute('data-continue-top');
+      if (contTop) nextContent.style.paddingTop = contTop;
       if (carry) nextContent.appendChild(carry);
       kids.slice(moveFrom).forEach((k) => nextContent.appendChild(k));
       const firstMoved = nextContent.firstElementChild;
