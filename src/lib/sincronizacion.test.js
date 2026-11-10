@@ -95,3 +95,56 @@ test('el saldo proyectado resta lo gastado y solo lo que falta por gastar', () =
   // ejecutado = 2000 + 4200 de actividades + 300 de rubros
   assert.equal(saldoProyectado({ disponible: 20000, ejecutado: 6500, actividades }), 10000);
 });
+
+import { buscarEventoAula, enlacesAulaPendientes } from './sincronizacion.js';
+
+test('reconoce en el aula la misma actividad aunque se haya publicado desde allá', () => {
+  const eventos = [
+    { id: 1, title: 'Ansiedad: una visión integral', date: '2026-08-26' },
+    { id: 2, title: 'Desafíos de la gestión del talento en entornos con inteligencia artificial', date: '2026-08-25' },
+    { id: 3, title: 'Taller', date: '2026-09-01' },
+    { id: 4, title: 'Taller', date: '2026-09-01' },
+  ];
+  assert.equal(buscarEventoAula({ titulo: 'ANSIEDAD una vision integral', fechaIso: '2026-08-26' }, eventos).id, 1);
+  // Mismo nombre pero otra fecha: no es la misma actividad
+  assert.equal(buscarEventoAula({ titulo: 'Ansiedad: una visión integral', fechaIso: '2026-09-26' }, eventos), null);
+  // Nombre abreviado del otro lado
+  assert.equal(buscarEventoAula({ titulo: 'Desafíos de la gestión del talento en entornos', fechaIso: '2026-08-25' }, eventos).id, 2);
+  // Ambiguo (dos iguales el mismo día) o sin fecha: no se adivina
+  assert.equal(buscarEventoAula({ titulo: 'Taller', fechaIso: '2026-09-01' }, eventos), null);
+  assert.equal(buscarEventoAula({ titulo: 'Ansiedad: una visión integral', fechaIso: '' }, eventos), null);
+  // No se reutiliza un evento ya enlazado
+  const enlaces = enlacesAulaPendientes([
+    { id: 'a', actividad: 'Ansiedad: una visión integral', fecha_iso: '2026-08-26' },
+    { id: 'b', actividad: 'Ansiedad una vision integral', fecha_iso: '2026-08-26' },
+    { id: 'c', actividad: 'Otra', fecha_iso: '2026-08-26', aula_event_id: '99' },
+  ], eventos);
+  assert.deepEqual(enlaces, [{ planId: 'a', eventId: '1' }]);
+});
+
+test('casos reales: prefijos de tipo y notas entre paréntesis no impiden reconocerla', () => {
+  const eventos = [
+    { id: 'p', title: 'Protocolo de atención a víctimas de abuso y maltrato', date: '2026-06-16' },
+    { id: 'j', title: 'Fundamentos de la atención psicobioconductual', date: '2026-05-16' },
+    { id: 'a', title: 'El autocuidado del profesional" T.2 (4 sedes – Capital/Xela/Zacapa/Cobán)', date: '2026-11-30' },
+    { id: 'n', title: 'Identificación del abuso y protección infantil en academias y clubes deportivos', date: '2026-05-14' },
+    { id: 'r', title: 'Protección y regulación laboral del psicólogo', date: '2026-06-12' },
+  ];
+  const ve = (titulo, fechaIso) => buscarEventoAula({ titulo, fechaIso }, eventos)?.id ?? null;
+  assert.equal(ve('Taller: Protocolo de atención a víctimas de abuso y maltrato (Legal)', '2026-06-16'), 'p');
+  assert.equal(ve('Fundamentos de la atención psicobioconductual (Jalapa)', '2026-05-16'), 'j');
+  assert.equal(ve('Jornada/Cine Foro: El autocuidado del profesional T.2 (4 sedes)', '2026-11-30'), 'a');
+  assert.equal(ve('Conferencia: Identificación del abuso y protección infantil en academias y clubes deportivos\n(Neurocenia, M.A. Raquel Custodio)', '2026-05-14'), 'n');
+  // Distinta fecha (13 vs 12 de junio): no se enlaza
+  assert.equal(ve('Conferencia: Protección y regulación laboral del psicólogo', '2026-06-13'), null);
+  // Reuniones internas no coinciden con nada del aula
+  assert.equal(ve('Reunión CAEDUC Presencial', '2026-11-24'), null);
+});
+
+test('al actualizar un evento del aula se conserva su Zoom si la publicación no tiene uno', () => {
+  const pubSinZoom = { actividad_nombre: 'Duelo', actividad_fecha: '20 de agosto de 2026', modalidad: 'Virtual', zoom_detalles: '' };
+  const existente = { id: 5, meetingLink: 'https://us02web.zoom.us/j/111', participants: '90' };
+  assert.equal(eventoAulaDesdePublicacion(pubSinZoom, existente).meetingLink, 'https://us02web.zoom.us/j/111');
+  assert.equal(eventoAulaDesdePublicacion(pubSinZoom).meetingLink, AULA_URL_DEFAULT);
+  assert.equal(eventoAulaDesdePublicacion({ ...pubSinZoom, zoom_detalles: 'https://zoom.us/j/2' }, existente).meetingLink, 'https://zoom.us/j/2');
+});

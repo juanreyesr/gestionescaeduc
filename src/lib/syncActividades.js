@@ -4,7 +4,7 @@
 // y escribe en Supabase. Todas las funciones reciben el cliente `supabase`.
 
 import {
-  buscarPlanParecido, difiere, eventoAulaDesdePublicacion, expedienteCamposDesdePublicacion,
+  buscarEventoAula, buscarPlanParecido, difiere, enlacesAulaPendientes, fechaISO, eventoAulaDesdePublicacion, expedienteCamposDesdePublicacion,
   faltaMigracion, faltantesPublicacion, MIGRACION_SINCRONIZACION, planDesdePublicacion, publicacionDesdePlan,
   fechaLarga,
 } from './sincronizacion.js';
@@ -48,10 +48,47 @@ export const actualizarEventoAula = async (supabase, eventId, pub) => {
   return { ok: ok !== false, existe: ok !== false };
 };
 
+const leerEventosAula = async (supabase) => {
+  const { data } = await supabase.from('cpg_content').select('activities').eq('id', 1).maybeSingle();
+  return Array.isArray(data?.activities) ? data.activities : [];
+};
+
+const guardarEventoEnPlan = (supabase, planId, eventId) => supabase.from(T_PLAN)
+  .update({ aula_event_id: String(eventId), updated_at: new Date().toISOString() }).eq('id', planId);
+
+// Enlaza con su evento las actividades que ya están en el calendario del aula
+// aunque se hayan publicado desde el panel del aula (mismo nombre y fecha).
+export const enlazarEventosAula = async (supabase) => {
+  const [{ data: planes, error }, eventos] = await Promise.all([
+    supabase.from(T_PLAN).select('id, actividad, fecha_iso, aula_event_id, estado_general'),
+    leerEventosAula(supabase),
+  ]);
+  if (error || !eventos.length) return { ok: !error, enlazadas: 0 };
+  const enlaces = enlacesAulaPendientes(planes || [], eventos);
+  let enlazadas = 0;
+  for (const { planId, eventId } of enlaces) {
+    // eslint-disable-next-line no-await-in-loop
+    const { error: e } = await guardarEventoEnPlan(supabase, planId, eventId);
+    if (!e) enlazadas += 1;
+  }
+  return { ok: true, enlazadas };
+};
+
 // Un solo botón: publica si no está en el aula, actualiza si ya está.
 export const publicarEnAula = async (supabase, pub, plan) => {
   const { bloqueantes } = faltantesPublicacion(pub);
   if (bloqueantes.length) return { ok: false, error: `Completa antes: ${bloqueantes.join(', ')}.` };
+  // Si ya estaba en el aula (publicada desde el panel del aula), se enlaza y se
+  // actualiza ese evento en vez de crear uno repetido.
+  if (!plan?.aula_event_id) {
+    const eventos = await leerEventosAula(supabase);
+    const existente = buscarEventoAula({ titulo: pub.actividad_nombre, fechaIso: fechaISO(pub.actividad_fecha) }, eventos);
+    if (existente) {
+      if (plan?.id) await guardarEventoEnPlan(supabase, plan.id, existente.id);
+      const res = await actualizarEventoAula(supabase, existente.id, pub);
+      if (res.ok) return { ...res, accion: 'actualizada', eventId: String(existente.id), aviso: 'Ya estaba en el calendario del aula: se enlazó y se actualizó (no se duplicó).' };
+    }
+  }
   if (plan?.aula_event_id) {
     const res = await actualizarEventoAula(supabase, plan.aula_event_id, pub);
     if (res.ok || res.existe) return { ...res, accion: 'actualizada' };
@@ -171,7 +208,10 @@ export const importarPublicaciones = async (supabase) => {
   if ((planes || []).length && !Object.prototype.hasOwnProperty.call(planes[0], 'publicacion_id')) return resultadoMigracion();
   const enlazadas = new Set((planes || []).map(p => p.publicacion_id).filter(Boolean));
   const pendientes = (pubs || []).filter(p => p.actividad_nombre && !enlazadas.has(p.id));
-  if (!pendientes.length) return { ok: true, creadas: 0, enlazadas: 0, avisos: [] };
+  if (!pendientes.length) {
+    const aula = await enlazarEventosAula(supabase);
+    return { ok: true, creadas: 0, enlazadas: 0, enAula: aula.enlazadas, avisos: [] };
+  }
   const tarifas = await leerTarifas(supabase);
   const libres = (planes || []).filter(p => !p.publicacion_id);
   let creadas = 0; let enlazadasN = 0; const avisos = [];
@@ -187,7 +227,8 @@ export const importarPublicaciones = async (supabase) => {
     }
     avisos.push(...(res.avisos || []));
   }
-  return { ok: true, creadas, enlazadas: enlazadasN, avisos };
+  const aula = await enlazarEventosAula(supabase);
+  return { ok: true, creadas, enlazadas: enlazadasN, enAula: aula.enlazadas, avisos };
 };
 
 // ── Planificación → nueva Solicitud de publicación ────────────────────────────
