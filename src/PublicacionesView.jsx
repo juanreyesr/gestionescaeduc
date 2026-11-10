@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Calendar, Check, Copy, Download, Edit3, ExternalLink, FileText,
-  History, Image, Loader2, MapPin, MessageCircle, Plus,
+  GraduationCap, History, Image, Link2, Loader2, MapPin, MessageCircle, Plus,
   Printer, RotateCcw, Save, Search, Send, Trash2, Upload, User, X,
 } from 'lucide-react';
 import { supabase } from './supabaseClient.js';
@@ -14,6 +14,14 @@ import {
 } from './lib/publicaciones.js';
 import { activitiesInDateRange, sortActivitiesByDateDesc } from './lib/registroActividadesReport.js';
 import { formatoQuetzales, gradosDeTarifario, montoPorGrado, parseTarifas } from './lib/tarifario.js';
+import {
+  AREAS_PLANIFICACION, GASTOS_EXTRA_SUGERIDOS, MODALIDADES, TIPOS_ACTIVIDAD, AULA_URL_DEFAULT,
+  enlaceReunion, faltaMigracion, faltantesPublicacion, normalizarGastosExtra, presupuestoDePublicacion, requiereGastosExtra,
+} from './lib/sincronizacion.js';
+import { AVISO_MIGRACION, importarPublicaciones, publicarEnAula, sincronizarPublicacion } from './lib/syncActividades.js';
+
+// Columnas agregadas por supabase/2026_sincronizacion_actividades.sql.
+const COLUMNAS_SINCRONIZACION = ['actividad_tipo', 'area', 'modalidad', 'duracion_horas', 'enlace_inscripcion', 'participantes_estimados', 'gastos_extra'];
 
 const SETTINGS_KEY = 'publicacion_responsables';
 const HISTORY_TABLE = 'caeduc_publicaciones';
@@ -28,6 +36,13 @@ const blankActivity = () => ({
   actividad_hora: '',
   actividad_lugar: '',
   zoom_detalles: '',
+  actividad_tipo: '',
+  area: '',
+  modalidad: '',
+  duracion_horas: '',
+  enlace_inscripcion: '',
+  participantes_estimados: '',
+  gastos_extra: [],
 });
 
 const Card = ({ children, className = '' }) => (
@@ -125,6 +140,10 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const [reportFrom, setReportFrom] = useState('');
   const [reportTo, setReportTo] = useState('');
   const [reportType, setReportType] = useState('detalle');
+  // Enlaces con Planificación / aula: publicacion_id → fila de planificación.
+  const [planes, setPlanes] = useState({});
+  const [avisoMigracion, setAvisoMigracion] = useState('');
+  const [publicandoAula, setPublicandoAula] = useState('');
 
   const activityOficios = useMemo(
     () => oficios.filter(item => item.actividad_nombre),
@@ -136,6 +155,9 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const tarifas = useMemo(() => parseTarifas(appSettings.honorarios_tarifario), [appSettings]);
   const grados = useMemo(() => gradosDeTarifario(tarifas), [tarifas]);
   const montoGrado = montoPorGrado(activity.ponente_grado || '', tarifas);
+  const presupuesto = presupuestoDePublicacion(activity, tarifas);
+  const faltantes = faltantesPublicacion(activity, tarifas);
+  const pideExtras = requiereGastosExtra(activity);
 
   // El formulario solo se muestra cuando hay algo que editar: al crear, al
   // buscar desde un oficio o al abrir un registro del historial.
@@ -203,7 +225,28 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     setHistoryLoading(false);
   };
 
-  useEffect(() => { loadHistory(); }, []);
+  const cargarPlanes = async () => {
+    const { data, error } = await supabase.from('planificacion_actividades')
+      .select('id, publicacion_id, aula_event_id, monto, estado_general')
+      .not('publicacion_id', 'is', null);
+    if (error) {
+      if (faltaMigracion(error)) setAvisoMigracion(AVISO_MIGRACION);
+      return;
+    }
+    setPlanes(Object.fromEntries((data || []).map(item => [item.publicacion_id, item])));
+  };
+
+  // Al entrar: toda publicación que aún no esté en la Planificación se carga ahí
+  // (con su honorario) y se le abre su expediente.
+  useEffect(() => {
+    (async () => {
+      await loadHistory();
+      const res = await importarPublicaciones(supabase);
+      if (res.migracion) setAvisoMigracion(AVISO_MIGRACION);
+      else if (res.creadas || res.enlazadas) setFeedback(`Planificación sincronizada: ${res.creadas} actividad(es) nueva(s) y ${res.enlazadas} enlazada(s) con las que ya estaban planificadas.`);
+      await cargarPlanes();
+    })();
+  }, []);
 
   const clearPhotoDraft = () => {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -255,6 +298,21 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
 
   const updateActivity = (field, value) => {
     setActivity(current => ({ ...current, [field]: value }));
+  };
+
+  const gastosEditables = Array.isArray(activity.gastos_extra) ? activity.gastos_extra : [];
+  const setGasto = (index, field, value) => updateActivity('gastos_extra', gastosEditables.map((g, i) => (i === index ? { ...g, [field]: value } : g)));
+  const addGasto = (concepto = '') => updateActivity('gastos_extra', [...gastosEditables, { concepto, monto: '' }]);
+  const removeGasto = (index) => updateActivity('gastos_extra', gastosEditables.filter((_, i) => i !== index));
+
+  const publicarAula = async (item) => {
+    setPublicandoAula(item.id);
+    const res = await publicarEnAula(supabase, item, planes[item.id]);
+    setPublicandoAula('');
+    if (!res.ok && !res.existe) { setFeedback(`No se pudo publicar en el aula: ${res.error || 'error desconocido'}`); return; }
+    await cargarPlanes();
+    const destino = enlaceReunion(item) ? 'el enlace de Zoom' : AULA_URL_DEFAULT.replace('https://', '');
+    setFeedback(`${res.accion === 'actualizada' ? 'Actividad actualizada' : 'Actividad publicada'} en el calendario del aula virtual (enlace: ${destino}).${res.aviso ? ` ${res.aviso}` : ''}`);
   };
 
   const handlePhoto = (event) => {
@@ -375,6 +433,13 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         mensaje_publicacion: message,
         ponente_foto_path: photoPath,
         ponente_foto_nombre: photoName,
+        actividad_tipo: activity.actividad_tipo || null,
+        area: activity.area || null,
+        modalidad: activity.modalidad || null,
+        duracion_horas: Number(activity.duracion_horas) > 0 ? Number(activity.duracion_horas) : null,
+        enlace_inscripcion: String(activity.enlace_inscripcion || '').trim() || null,
+        participantes_estimados: Number(activity.participantes_estimados) > 0 ? Math.round(Number(activity.participantes_estimados)) : null,
+        gastos_extra: normalizarGastosExtra(activity.gastos_extra),
         updated_at: new Date().toISOString(),
       };
 
@@ -387,12 +452,27 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         : supabase.from(HISTORY_TABLE).upsert([{ ...body, id: recordId }])).select().single();
       let { data, error } = await guardar(payload);
       let gradoOmitido = false;
+      let sincronizacionOmitida = false;
+      if (error && faltaMigracion(error)) {
+        // Sin la migración de sincronización se guarda lo de siempre y se avisa.
+        const basico = Object.fromEntries(Object.entries(payload).filter(([k]) => !COLUMNAS_SINCRONIZACION.includes(k)));
+        ({ data, error } = await guardar(basico));
+        sincronizacionOmitida = !error;
+      }
       if (error && /ponente_grado/.test(error.message || '')) {
-        const { ponente_grado: _omitido, ...sinGrado } = payload;
+        const { ponente_grado: _omitido, ...sinGrado } = Object.fromEntries(Object.entries(payload).filter(([k]) => !COLUMNAS_SINCRONIZACION.includes(k)));
         ({ data, error } = await guardar(sinGrado));
         gradoOmitido = !error;
       }
       if (error) throw error;
+
+      // Planificación (con presupuesto), expediente y aula se actualizan solos.
+      const sync = await sincronizarPublicacion(supabase, data, { tarifas });
+      if (sync.migracion) setAvisoMigracion(AVISO_MIGRACION);
+      await cargarPlanes();
+      const resumenSync = sync.ok
+        ? ` Planificación ${sync.accionPlan === 'creada' ? 'creada' : sync.accionPlan === 'enlazada' ? 'enlazada' : 'al día'}, expediente al día${sync.aula?.ok ? ' y aula virtual actualizada' : ''}.${sync.avisos.length ? ` ${sync.avisos.join(' ')}` : ''}`
+        : sync.avisos?.length ? ` ${sync.avisos.join(' ')}` : '';
 
       if (oldPath && oldPath !== photoPath) {
         await supabase.storage.from(PHOTO_BUCKET).remove([oldPath]);
@@ -405,9 +485,11 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       setPhotoFile(null);
       setPhotoPreview('');
       await loadHistory();
-      setFeedback(gradoOmitido
+      setFeedback((gradoOmitido
         ? 'Actividad guardada, pero el grado académico no pudo almacenarse: falta la columna "ponente_grado" en la tabla caeduc_publicaciones (ver supabase/2026_ponente_grado.sql).'
-        : editingHistoryId ? 'Actividad actualizada en el historial.' : 'Actividad guardada en el historial.');
+        : editingHistoryId ? 'Actividad actualizada en el historial.' : 'Actividad guardada en el historial.')
+        + (sincronizacionOmitida ? ` Tipo, área, modalidad, duración y gastos extra no se guardaron: ${AVISO_MIGRACION}` : '')
+        + resumenSync);
     } catch (error) {
       if (uploadedPath) await supabase.storage.from(PHOTO_BUCKET).remove([uploadedPath]);
       setFeedback(`No se pudo guardar la actividad: ${error.message}`);
@@ -420,6 +502,11 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
     if (!porBorrar) return;
     setBorrando(true);
     const { error } = await supabase.from(HISTORY_TABLE).delete().eq('id', porBorrar.id);
+    // La actividad de la Planificación se conserva (es el plan anual), solo se desenlaza.
+    if (!error && planes[porBorrar.id]) {
+      await supabase.from('planificacion_actividades').update({ publicacion_id: null }).eq('id', planes[porBorrar.id].id);
+      await cargarPlanes();
+    }
     if (error) {
       setFeedback(`No se pudo eliminar: ${error.message}`);
     } else {
@@ -452,6 +539,13 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       actividad_hora: item.actividad_hora || '',
       actividad_lugar: item.actividad_lugar || '',
       zoom_detalles: item.zoom_detalles || '',
+      actividad_tipo: item.actividad_tipo || '',
+      area: item.area || '',
+      modalidad: item.modalidad || '',
+      duracion_horas: item.duracion_horas ?? '',
+      enlace_inscripcion: item.enlace_inscripcion || '',
+      participantes_estimados: item.participantes_estimados ?? '',
+      gastos_extra: Array.isArray(item.gastos_extra) ? item.gastos_extra : [],
     });
     const matchingResponsible = responsibles.find(candidate => (
       candidate.phone.replace(/\D/g, '') === String(item.responsable_telefono || '').replace(/\D/g, '')
@@ -558,6 +652,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         </h1>
         <p className="mt-1 text-sm text-slate-500">Crea una actividad desde cero o recupera sus datos desde un oficio y conserva el material en el historial.</p>
       </header>
+      {avisoMigracion && <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{avisoMigracion}</p>}
 
       <div className={`grid gap-6 ${editorAbierto ? 'xl:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.75fr)]' : ''}`}>
         <div className="space-y-5">
@@ -695,6 +790,77 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                   />
                 </Field>
               </div>
+              <Field id="publication-modality" label="Modalidad *">
+                <select id="publication-modality" value={activity.modalidad} onChange={event => updateActivity('modalidad', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200">
+                  <option value="">Selecciona…</option>
+                  {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </Field>
+              <Field id="publication-hours" label="Duración (horas) *" helper="Se usa en los certificados del aula virtual.">
+                <input id="publication-hours" type="number" min="0.5" step="0.5" value={activity.duracion_horas} onChange={event => updateActivity('duracion_horas', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+              </Field>
+              <Field id="publication-type" label="Tipo de actividad *">
+                <select id="publication-type" value={activity.actividad_tipo} onChange={event => updateActivity('actividad_tipo', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200">
+                  <option value="">Selecciona…</option>
+                  {TIPOS_ACTIVIDAD.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field id="publication-area" label="Área (Planificación) *">
+                <select id="publication-area" value={activity.area} onChange={event => updateActivity('area', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200">
+                  <option value="">Selecciona…</option>
+                  {AREAS_PLANIFICACION.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </Field>
+              <Field id="publication-registration" label="Enlace de inscripción (opcional)" helper="Formulario o registro de Zoom; aparece en el calendario del aula.">
+                <input id="publication-registration" type="url" value={activity.enlace_inscripcion} onChange={event => updateActivity('enlace_inscripcion', event.target.value)} placeholder="https://…" className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+              </Field>
+              <Field id="publication-participants" label="Participantes esperados (opcional)">
+                <input id="publication-participants" type="number" min="0" value={activity.participantes_estimados} onChange={event => updateActivity('participantes_estimados', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"/>
+              </Field>
+              <p className="sm:col-span-2 flex items-start gap-2 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+                <Link2 size={14} className="mt-0.5 shrink-0"/>
+                {enlaceReunion(activity)
+                  ? <>Enlace que irá al calendario del aula: <span className="break-all font-semibold">{enlaceReunion(activity)}</span></>
+                  : <>Sin enlace de Zoom: el calendario del aula enlazará a <strong>www.aulavirtualcpg.org</strong> hasta que lo agregues.</>}
+              </p>
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-800"><Calendar size={18}/> Planificación y presupuesto</h2>
+            <p className="mt-1 text-xs text-slate-500">Al guardar, la actividad se carga sola en la Planificación general (con este presupuesto), en el Expediente del ponente y, si ya está publicada, en el calendario del aula virtual.</p>
+            <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+              <div className="rounded-xl bg-emerald-50 p-3"><span className="block text-xs font-bold uppercase text-emerald-700">Honorario ponente</span><span className="font-extrabold text-emerald-900">{presupuesto.honorario ? formatoQuetzales(presupuesto.honorario) : 'Define el grado académico'}</span></div>
+              <div className="rounded-xl bg-amber-50 p-3"><span className="block text-xs font-bold uppercase text-amber-700">Gastos extra</span><span className="font-extrabold text-amber-900">{formatoQuetzales(presupuesto.total_extras)}</span></div>
+              <div className="rounded-xl bg-blue-50 p-3"><span className="block text-xs font-bold uppercase text-blue-700">Total a planificar</span><span className="font-extrabold text-blue-900">{formatoQuetzales(presupuesto.total)}</span></div>
+            </div>
+            {(pideExtras || gastosEditables.length > 0) && (
+              <div className={`mt-4 rounded-xl border p-3 ${presupuesto.faltan_extras ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}>
+                <p className="text-sm font-bold text-slate-700">Gastos extra {pideExtras && <span className="font-normal text-amber-700">— actividad {activity.modalidad ? activity.modalidad.toLowerCase() : 'presencial'}: registra alimentación, souvenirs y demás</span>}</p>
+                <div className="mt-2 space-y-2">
+                  {gastosEditables.map((g, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input aria-label="Concepto" value={g.concepto} onChange={event => setGasto(i, 'concepto', event.target.value)} placeholder="Concepto" className="min-h-10 flex-1 rounded-lg border border-slate-300 px-2 text-sm"/>
+                      <input aria-label="Monto" type="number" min="0" value={g.monto} onChange={event => setGasto(i, 'monto', event.target.value)} placeholder="Q" className="min-h-10 w-28 rounded-lg border border-slate-300 px-2 text-sm"/>
+                      <button type="button" onClick={() => removeGasto(i)} aria-label="Quitar gasto" className="min-h-10 rounded-lg px-2 text-red-600 hover:bg-red-50"><Trash2 size={16}/></button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {GASTOS_EXTRA_SUGERIDOS.filter(c => !gastosEditables.some(g => g.concepto === c)).map(c => (
+                    <button key={c} type="button" onClick={() => addGasto(c)} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50">+ {c}</button>
+                  ))}
+                  <button type="button" onClick={() => addGasto('')} className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-200 hover:bg-blue-50">+ Otro</button>
+                </div>
+              </div>
+            )}
+            {!pideExtras && !gastosEditables.length && (
+              <button type="button" onClick={() => addGasto('')} className="mt-3 text-xs font-bold text-blue-700 underline">Agregar gastos extra</button>
+            )}
+            <div className={`mt-4 rounded-xl p-3 text-sm ${faltantes.completo ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
+              {faltantes.completo
+                ? <p className="flex items-center gap-2 font-bold"><Check size={16}/> Información completa para Planificación, Expediente y aula virtual.</p>
+                : <><p className="font-bold">Falta información para que todo quede sincronizado:</p><ul className="mt-1 list-disc pl-5 text-xs leading-5">{faltantes.faltan.map(f => <li key={f}>{f}</li>)}</ul></>}
             </div>
           </Card>
 
@@ -831,6 +997,8 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                   <span className="block truncate text-sm font-extrabold text-slate-800">{item.actividad_nombre}</span>
                   <span className="mt-0.5 block truncate text-xs text-slate-500">{item.actividad_fecha || 'Fecha pendiente'} · {item.responsable_nombre || 'Sin responsable'}</span>
                 </span>
+                {planes[item.id]?.aula_event_id && <span className="hidden rounded-full bg-indigo-100 px-2.5 py-1 text-[11px] font-bold text-indigo-700 sm:inline">En aula ✓</span>}
+                {planes[item.id] && <span className="hidden rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 sm:inline">Planificada ✓</span>}
                 <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">{item.origen === 'oficio' ? 'Desde oficio' : 'Creada aquí'}</span>
                 <Plus size={18} className="shrink-0 text-slate-400 transition-transform group-open:rotate-45" aria-hidden="true"/>
               </summary>
@@ -841,9 +1009,15 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Hora</span>{item.actividad_hora || 'Pendiente'}</p>
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Lugar</span>{item.actividad_lugar || 'Pendiente'}</p>
                   <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Actualizado</span>{new Date(item.updated_at).toLocaleDateString('es-GT')}</p>
+                  <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Modalidad · horas</span>{item.modalidad || 'Pendiente'}{item.duracion_horas ? ` · ${item.duracion_horas} h` : ''}</p>
+                  <p><span className="block text-xs font-bold uppercase tracking-wide text-slate-400">Presupuesto planificado</span>{planes[item.id]?.monto ? formatoQuetzales(planes[item.id].monto) : 'Sin planificar'}</p>
                 </div>
+                {!faltantesPublicacion(item, tarifas).completo && (
+                  <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900"><strong>Falta:</strong> {faltantesPublicacion(item, tarifas).faltan.join(' · ')}. Toca “Editar” para completarlo.</p>
+                )}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button type="button" onClick={() => editHistoryItem(item)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"><Edit3 size={16}/> Editar</button>
+                  <button type="button" onClick={() => publicarAula(item)} disabled={publicandoAula === item.id} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">{publicandoAula === item.id ? <Loader2 size={16} className="animate-spin"/> : <GraduationCap size={16}/>} {planes[item.id]?.aula_event_id ? 'Actualizar en aula' : 'Publicar en aula'}</button>
                   <button type="button" onClick={() => downloadMessage(item)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"><FileText size={16}/> Descargar mensaje</button>
                   {item.ponente_foto_path && <button type="button" onClick={() => downloadStoredPhoto(item)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"><Image size={16}/> Descargar foto</button>}
                   <button type="button" onClick={() => sharePublication({ text: item.mensaje_publicacion, phone: item.responsable_telefono, photoPath: item.ponente_foto_path, photoName: item.ponente_foto_nombre })} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700"><MessageCircle size={16}/> WhatsApp <ExternalLink size={13}/></button>
