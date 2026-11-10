@@ -217,7 +217,7 @@ export const eventoAulaDesdePublicacion = (pub = {}, existente = null) => {
   const lugar = texto(pub.actividad_lugar);
   const location = modalidad === 'Virtual'
     ? (lugar && normalizar(lugar) !== 'virtual' ? lugar : 'Zoom')
-    : (lugar || modalidad || 'Por confirmar');
+    : (lugar || modalidad || base.location || 'Por confirmar');
   const base = existente ? { ...existente } : {
     organizer: 'CAEDUC', cost: '', costType: 'free', isFull: false,
     participants: '', scholarshipAmt: '', scholarshipPct: '',
@@ -230,7 +230,9 @@ export const eventoAulaDesdePublicacion = (pub = {}, existente = null) => {
     horas: Number(pub.duracion_horas) > 0 ? String(pub.duracion_horas) : (base.horas || ''),
     location,
     organizer: base.organizer || 'CAEDUC',
-    meetingLink: enlaceReunion(pub) || AULA_URL_DEFAULT,
+    // Sin Zoom en la publicación se conserva el enlace que ya tenía el aula; solo
+    // si tampoco hay ninguno se usa la página del aula virtual.
+    meetingLink: enlaceReunion(pub) || base.meetingLink || AULA_URL_DEFAULT,
     registrationLink: texto(pub.enlace_inscripcion) || base.registrationLink || '',
   };
 };
@@ -263,3 +265,50 @@ export const comprometidoPendiente = (actividades = []) => actividades
 
 export const saldoProyectado = ({ disponible = 0, ejecutado = 0, actividades = [] } = {}) =>
   disponible - ejecutado - comprometidoPendiente(actividades);
+
+// ── Eventos ya publicados en el aula ──────────────────────────────────────────
+// Una actividad puede estar en el calendario del aula aunque no se publicó desde
+// gestiones (se agregó en el panel del aula). Se reconoce por la MISMA fecha y un
+// nombre equivalente (sin tildes, mayúsculas ni signos; uno puede contener al
+// otro). Sin fecha no se intenta, para no enlazar por error.
+// Se ignoran el tipo escrito al inicio ("Conferencia:", "Taller:", "Ponencia
+// Webinar:"...) y las notas entre paréntesis ("(Jalapa)", "(Legal)").
+const PREFIJO_TIPO = /^(conferencia|taller|seminario|ponencia webinar|ponencia|webinar|diplomado|curso|jornada\/cine foro|cine foro|jornada|foro|simposio|congreso|certificacion|especializacion)\s*:\s*/;
+const tituloComparable = (v) => normalizar(v)
+  .replace(PREFIJO_TIPO, '')
+  .replace(/\([^)]*\)?/g, ' ')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+export const buscarEventoAula = ({ titulo, fechaIso }, eventos = [], idsUsados = new Set()) => {
+  const t = tituloComparable(titulo);
+  if (!t || !fechaIso) return null;
+  const candidatos = (eventos || []).filter(ev => ev && ev.id != null
+    && !idsUsados.has(String(ev.id))
+    && String(ev.date || '').slice(0, 10) === fechaIso);
+  const iguales = candidatos.filter(ev => tituloComparable(ev.title) === t);
+  if (iguales.length === 1) return iguales[0];
+  if (iguales.length > 1) return null; // ambiguo: mejor no adivinar
+  const parecidos = candidatos.filter((ev) => {
+    const e = tituloComparable(ev.title);
+    const corto = e.length < t.length ? e : t;
+    const largo = e.length < t.length ? t : e;
+    return corto.length >= 15 && largo.includes(corto);
+  });
+  return parecidos.length === 1 ? parecidos[0] : null;
+};
+
+// Actividades de la Planificación sin evento del aula que ya tienen uno publicado.
+// Devuelve [{ planId, eventId }] sin repetir eventos.
+export const enlacesAulaPendientes = (planes = [], eventos = []) => {
+  const usados = new Set(planes.map(p => p.aula_event_id).filter(Boolean).map(String));
+  const enlaces = [];
+  planes.filter(p => !p.aula_event_id && p.estado_general !== 'Cancelado').forEach((p) => {
+    const ev = buscarEventoAula({ titulo: p.actividad, fechaIso: p.fecha_iso }, eventos, usados);
+    if (ev) {
+      usados.add(String(ev.id));
+      enlaces.push({ planId: p.id, eventId: String(ev.id) });
+    }
+  });
+  return enlaces;
+};

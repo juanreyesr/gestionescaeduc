@@ -171,7 +171,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
       importado.current = true;
       const res = await importarPublicaciones(supabase);
       if(res.migracion) setAvisoSync(AVISO_MIGRACION);
-      else if(res.creadas||res.enlazadas) setAvisoSync(`Se cargaron ${res.creadas} actividad(es) desde Solicitud de publicación y se enlazaron ${res.enlazadas} que ya estaban planificadas.`);
+      else if(res.creadas||res.enlazadas||res.enAula) setAvisoSync(`Se cargaron ${res.creadas} actividad(es) desde Solicitud de publicación, se enlazaron ${res.enlazadas} que ya estaban planificadas y se reconocieron ${res.enAula||0} en el calendario del aula.`);
       else if(res.avisos?.length) setAvisoSync(res.avisos.join(' '));
     }
     const [r1,r2,r3,r4,r5,r6,r7]=await Promise.all([
@@ -792,17 +792,17 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
                         <span className="text-xs text-gray-400">{act.trimestre}</span>
                         {act.responsable_nombre!=='Sin asignar'&&<span className="text-xs text-gray-500 flex items-center gap-1"><User size={10}/>{act.responsable_nombre}</span>}
                         {act.aula_event_id && (
-                          <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <span title="Está en el calendario del aula virtual. Los cambios que guardes aquí se actualizan solos en el aula." className="cursor-help text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
                             <GraduationCap size={11}/> Publicada en el aula ✓
                           </span>
                         )}
                         {act.publicacion_id && (
-                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <span title="Enlazada con su Solicitud de publicación: los cambios viajan en ambos sentidos y el presupuesto sale del honorario del ponente + gastos extra." className="cursor-help text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
                             <Link2 size={11}/> Desde publicación
                           </span>
                         )}
                         {act.presupuesto_detalle?.faltan_extras && (
-                          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-semibold" title="Actividad presencial: agrega alimentación, souvenirs, etc.">⚠ Faltan gastos extra</span>
+                          <span className="cursor-help text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-semibold" title="Actividad presencial o híbrida sin gastos extra planificados: agrégalos (alimentación, souvenirs, salón, equipo audiovisual) en la Solicitud de publicación.">⚠ Faltan gastos extra</span>
                         )}
                       </div>
                       <p className="text-sm font-semibold text-gray-800 leading-snug">{act.actividad}</p>

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { importarPublicaciones, publicarEnAula, sincronizarPlan, sincronizarPublicacion } from './syncActividades.js';
+import { enlazarEventosAula, importarPublicaciones, publicarEnAula, sincronizarPlan, sincronizarPublicacion } from './syncActividades.js';
 
 // Base de datos en memoria con la parte de la API de supabase-js que se usa.
 const crearDb = (inicial = {}) => {
@@ -96,4 +96,31 @@ test('enlaza con la actividad que ya estaba planificada en vez de duplicarla', a
   assert.equal(db.tablas.planificacion_actividades.length, 1);
   assert.equal(db.tablas.planificacion_actividades[0].publicacion_id, 'pub-1');
   assert.equal(db.tablas.planificacion_actividades[0].estado_general, 'Completado');
+});
+
+test('si la actividad ya estaba en el aula (publicada desde allá) se enlaza y no se duplica', async () => {
+  const db = crearDb({ caeduc_publicaciones: [{ ...pub }], planificacion_actividades: [], caeduc_expediente_ponentes: [] });
+  db.tablas.cpg_content[0].activities.push({ id: 555, title: 'DUELO', date: '2026-08-20', participants: '40' });
+  const imp = await importarPublicaciones(db);
+  assert.equal(imp.creadas, 1);
+  assert.equal(imp.enAula, 1);
+  const plan = db.tablas.planificacion_actividades[0];
+  assert.equal(plan.aula_event_id, '555');
+  // "Publicar en aula" actualiza ese mismo evento: sigue habiendo uno solo y conserva participantes
+  const res = await publicarEnAula(db, pub, plan);
+  assert.equal(res.ok, true);
+  assert.equal(db.tablas.cpg_content[0].activities.length, 1);
+  assert.equal(db.tablas.cpg_content[0].activities[0].participants, '40');
+  assert.equal(db.rpcLog.filter(r => r.nombre === 'aula_publicar_actividad').length, 0);
+});
+
+test('publicar sin enlace previo también reconoce el evento existente', async () => {
+  const db = crearDb({ caeduc_publicaciones: [{ ...pub }], planificacion_actividades: [{ id: 'x', actividad: 'Otra cosa', numero: 1 }], caeduc_expediente_ponentes: [] });
+  db.tablas.cpg_content[0].activities.push({ id: 777, title: 'Duelo', date: '2026-08-20' });
+  const plan = { id: 'x' };
+  const res = await publicarEnAula(db, pub, plan);
+  assert.equal(res.accion, 'actualizada');
+  assert.equal(db.tablas.cpg_content[0].activities.length, 1);
+  assert.equal(db.tablas.planificacion_actividades[0].aula_event_id, '777');
+  assert.equal((await enlazarEventosAula(db)).enlazadas, 0);
 });

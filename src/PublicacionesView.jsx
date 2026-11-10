@@ -244,7 +244,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
       await loadHistory();
       const res = await importarPublicaciones(supabase);
       if (res.migracion) setAvisoMigracion(AVISO_MIGRACION);
-      else if (res.creadas || res.enlazadas) setFeedback(`Planificación sincronizada: ${res.creadas} actividad(es) nueva(s) y ${res.enlazadas} enlazada(s) con las que ya estaban planificadas.`);
+      else if (res.creadas || res.enlazadas || res.enAula) setFeedback(`Sincronizado: ${res.creadas} actividad(es) nueva(s) en Planificación, ${res.enlazadas} enlazada(s) con las que ya estaban planificadas y ${res.enAula || 0} reconocida(s) en el calendario del aula.`);
       await cargarPlanes();
     })();
   }, []);
@@ -1001,9 +1001,9 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
                   <span className="block truncate text-sm font-extrabold text-slate-800">{item.actividad_nombre}</span>
                   <span className="mt-0.5 block truncate text-xs text-slate-500">{item.actividad_fecha || 'Fecha pendiente'} · {item.responsable_nombre || 'Sin responsable'}</span>
                 </span>
-                {planes[item.id]?.aula_event_id && <span className="hidden rounded-full bg-indigo-100 px-2.5 py-1 text-[11px] font-bold text-indigo-700 sm:inline">En aula ✓</span>}
-                {planes[item.id] && <span className="hidden rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 sm:inline">Planificada ✓</span>}
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">{item.origen === 'oficio' ? 'Desde oficio' : 'Creada aquí'}</span>
+                {planes[item.id]?.aula_event_id && <span title="Publicada en el calendario del aula virtual. Si la editas aquí, el cambio también se actualiza en el aula." className="hidden cursor-help rounded-full bg-indigo-100 px-2.5 py-1 text-[11px] font-bold text-indigo-700 sm:inline">En aula ✓</span>}
+                {planes[item.id] && <span title="Ya está en la Planificación general, con su presupuesto (honorario del ponente + gastos extra)." className="hidden cursor-help rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 sm:inline">Planificada ✓</span>}
+                <span title={item.origen === 'oficio' ? 'Solicitud armada con los datos de un oficio (nombre, fecha y ponente).' : 'Solicitud creada directamente en este módulo.'} className="cursor-help rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">{item.origen === 'oficio' ? 'Desde oficio' : 'Creada aquí'}</span>
                 <Plus size={18} className="shrink-0 text-slate-400 transition-transform group-open:rotate-45" aria-hidden="true"/>
               </summary>
               <div className="border-t border-slate-100 px-4 py-4">
