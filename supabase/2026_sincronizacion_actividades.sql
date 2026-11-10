@@ -2,6 +2,10 @@
 --
 -- Ejecutar UNA vez en el SQL Editor de Supabase (proyecto de producción).
 -- Es idempotente: si ya se ejecutó, no cambia nada.
+-- PROYECTO COMPARTIDO: este script solo AGREGA columnas nuevas a dos tablas de
+-- gestiones (caeduc_publicaciones y planificacion_actividades) y crea dos
+-- funciones si no existen. No borra ni modifica datos, tablas ni funciones de
+-- ningún otro sistema.
 --
 -- 1. caeduc_publicaciones gana los datos que la planificación y el calendario
 --    del aula virtual necesitan, para pedirlos una sola vez.
@@ -37,67 +41,75 @@ comment on column public.planificacion_actividades.publicacion_id is
 notify pgrst, 'reload schema';
 
 -- ── Personal de gestiones CAEDUC ─────────────────────────────────────────────
--- El aula virtual comparte este proyecto y permite que cualquier persona se
--- registre, así que "authenticated" NO basta para distinguir al personal.
--- Personal = tiene fila en public.profiles (usuarios creados en gestiones) o es
--- la cuenta de administración principal.
-create or replace function public.es_personal_caeduc()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select auth.uid() is not null and (
-    exists (select 1 from public.profiles p where p.id = auth.uid())
-    or lower(coalesce(auth.jwt() ->> 'email', '')) = 'lic.juanreyesr@gmail.com'
-  );
-$$;
-
-revoke all on function public.es_personal_caeduc() from public, anon;
-grant execute on function public.es_personal_caeduc() to authenticated;
+-- Este proyecto de Supabase es COMPARTIDO por varios sistemas. Las funciones
+-- siguientes solo se crean si no existen: nunca reemplazan algo de otro sistema.
+--
+-- El aula virtual permite que cualquiera se registre, así que "authenticated"
+-- NO basta para distinguir al personal. Personal = tiene fila en public.profiles
+-- (usuarios creados en gestiones) o es la cuenta de administración principal.
+do $$
+begin
+  if to_regprocedure('public.es_personal_caeduc()') is null then
+    execute $f$
+      create function public.es_personal_caeduc()
+      returns boolean language sql stable security definer set search_path = public as $b$
+        select auth.uid() is not null and (
+          exists (select 1 from public.profiles p where p.id = auth.uid())
+          or lower(coalesce(auth.jwt() ->> 'email', '')) = 'lic.juanreyesr@gmail.com'
+        );
+      $b$
+    $f$;
+    execute 'revoke all on function public.es_personal_caeduc() from public, anon';
+    execute 'grant execute on function public.es_personal_caeduc() to authenticated';
+  end if;
+end $$;
 
 -- ── Quitar una actividad del calendario del aula ─────────────────────────────
--- Se usa al eliminar una Solicitud de publicación o una actividad de la
--- Planificación: el evento desaparece del calendario (no queda "cancelado").
-create or replace function public.aula_eliminar_actividad(p_event_id text)
-returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_tipo text;
-  v_antes int;
-  v_despues int;
+-- Solo quita del arreglo cpg_content.activities el evento con ese id (el que
+-- gestiones publicó y cuyo id guarda en planificacion_actividades.aula_event_id).
+-- No toca videos, certificados ni ningún otro dato del aula.
+do $$
 begin
-  if not public.es_personal_caeduc() then
-    raise exception 'No autorizado para modificar el calendario del aula';
+  if to_regprocedure('public.aula_eliminar_actividad(text)') is not null then
+    raise notice 'aula_eliminar_actividad ya existe: no se modifica.';
+    return;
   end if;
+  execute $f$
+    create function public.aula_eliminar_actividad(p_event_id text)
+    returns boolean language plpgsql security definer set search_path = public as $b$
+    declare
+      v_tipo text;
+      v_antes int;
+      v_despues int;
+    begin
+      if not public.es_personal_caeduc() then
+        raise exception 'No autorizado para modificar el calendario del aula';
+      end if;
+      if coalesce(trim(p_event_id), '') = '' then
+        return false;
+      end if;
+      select data_type into v_tipo from information_schema.columns
+      where table_schema = 'public' and table_name = 'cpg_content' and column_name = 'activities';
 
-  select data_type into v_tipo
-  from information_schema.columns
-  where table_schema = 'public' and table_name = 'cpg_content' and column_name = 'activities';
+      select jsonb_array_length(coalesce(activities::jsonb, '[]'::jsonb)) into v_antes
+      from public.cpg_content where id = 1 for update;
 
-  select jsonb_array_length(coalesce(activities::jsonb, '[]'::jsonb)) into v_antes
-  from public.cpg_content where id = 1 for update;
+      execute format(
+        'update public.cpg_content set activities = (
+           select coalesce(jsonb_agg(a order by o), ''[]''::jsonb)
+           from jsonb_array_elements(coalesce(activities::jsonb, ''[]''::jsonb)) with ordinality as t(a, o)
+           where a ->> ''id'' is distinct from %L
+         )::%s where id = 1',
+        p_event_id, case when v_tipo = 'json' then 'json' else 'jsonb' end);
 
-  execute format(
-    'update public.cpg_content set activities = (
-       select coalesce(jsonb_agg(a), ''[]''::jsonb)
-       from jsonb_array_elements(coalesce(activities::jsonb, ''[]''::jsonb)) a
-       where a ->> ''id'' is distinct from %L
-     )::%s where id = 1',
-    p_event_id, case when v_tipo = 'json' then 'json' else 'jsonb' end);
-
-  select jsonb_array_length(coalesce(activities::jsonb, '[]'::jsonb)) into v_despues
-  from public.cpg_content where id = 1;
-
-  return coalesce(v_antes, 0) > coalesce(v_despues, 0);
-end;
-$$;
-
-revoke all on function public.aula_eliminar_actividad(text) from public, anon;
-grant execute on function public.aula_eliminar_actividad(text) to authenticated;
+      select jsonb_array_length(coalesce(activities::jsonb, '[]'::jsonb)) into v_despues
+      from public.cpg_content where id = 1;
+      return coalesce(v_antes, 0) > coalesce(v_despues, 0);
+    end;
+    $b$
+  $f$;
+  execute 'revoke all on function public.aula_eliminar_actividad(text) from public, anon';
+  execute 'grant execute on function public.aula_eliminar_actividad(text) to authenticated';
+end $$;
 
 notify pgrst, 'reload schema';
