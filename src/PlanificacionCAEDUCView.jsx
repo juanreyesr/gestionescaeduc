@@ -1,5 +1,5 @@
 // src/PlanificacionCAEDUCView.jsx — v3 (fuente única de gastos + ficha unificada + aula virtual)
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import {
   Calendar, Users, CheckCircle, Clock, AlertCircle, BarChart2,
@@ -11,6 +11,10 @@ import {
   ClipboardList, Video, CalendarPlus, CheckCircle2, Circle
 } from 'lucide-react';
 import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate } from './lib/oficioTemplates.js';
+import { AULA_URL_DEFAULT, comprometidoPendiente, saldoProyectado, fechaLarga } from './lib/sincronizacion.js';
+import { datosInformeAnual, htmlInformeAnual } from './lib/informeAnual.js';
+import { withFlowPagination } from './lib/flowPagination.js';
+import { AVISO_MIGRACION, crearPublicacionDesdePlan, eliminarDeAula, importarPublicaciones, publicarEnAula, sincronizarPlan } from './lib/syncActividades.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, EmptyState, inputCls, selectCls, textareaCls } from './components/ui.jsx';
 
 const supabase = createClient(
@@ -155,8 +159,21 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
   const [respForm,setRespForm]           = useState({responsable:'',email:'',telefono:''});
   const [filters,setFilters]             = useState({trimestre:'',area:'',estado:'activas',anio:String(new Date().getFullYear())});
 
+  // Sincronización con Solicitud de publicación / Expediente / aula virtual.
+  const [avisoSync,setAvisoSync] = useState('');
+  const importado = useRef(false);
+
   const fetchAll = useCallback(async()=>{
     setLoading(true);
+    // Una vez por visita: carga a la Planificación las actividades de
+    // "Solicitud de publicación" que todavía no estén aquí.
+    if(!importado.current){
+      importado.current = true;
+      const res = await importarPublicaciones(supabase);
+      if(res.migracion) setAvisoSync(AVISO_MIGRACION);
+      else if(res.creadas||res.enlazadas) setAvisoSync(`Se cargaron ${res.creadas} actividad(es) desde Solicitud de publicación y se enlazaron ${res.enlazadas} que ya estaban planificadas.`);
+      else if(res.avisos?.length) setAvisoSync(res.avisos.join(' '));
+    }
     const [r1,r2,r3,r4,r5,r6,r7]=await Promise.all([
       supabase.from('planificacion_responsables').select('*').order('area'),
       supabase.from('planificacion_actividades').select('*').order('numero',{nullsFirst:false}).order('created_at',{ascending:true}),
@@ -197,9 +214,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
 
   // PARTE 3.2 — resumen presupuestario honesto
   // Comprometido = suma de `monto` asignado de actividades NO finalizadas (Pendiente / En proceso)
-  const totalComprometido = actividades
-    .filter(a=>a.estado_general!=='Completado' && a.estado_general!=='Cancelado')
-    .reduce((s,a)=>s+Number(a.monto||0),0);
+  const totalComprometido = comprometidoPendiente(actividades); // lo que falta por gastar
 
   // Presupuesto base = monto fijo aprobado por año (NO suma de actividades)
   const anioActual     = new Date().getFullYear();
@@ -209,7 +224,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
   const totalDisp      = presBase + totalFondos;
   const saldoVsEjecutado    = totalDisp - totalGast;
   // Escenario pesimista: si además de lo ya ejecutado se gastara TODO lo comprometido en actividades pendientes
-  const saldoSiComprometido = totalDisp - totalRubGast - totalComprometido;
+  // Cada gasto registrado se resta del general; además se descuenta lo que falta por gastar.
+  const saldoSiComprometido = saldoProyectado({ disponible: totalDisp, ejecutado: totalGast, actividades });
 
   // Guardar/actualizar presupuesto anual
   const savePresAnual  = async(anio, monto, notas) => {
@@ -235,6 +251,13 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
       const {error} = await supabase.from('planificacion_actividades')
         .update({...cleanData, updated_at:new Date().toISOString()}).eq('id',id);
       if(error){ alert('Error al actualizar actividad: ' + error.message); return null; }
+      // Si viene de una Solicitud de publicación, el cambio regresa a ella, a su
+      // expediente y al calendario del aula.
+      const {data:fila} = await supabase.from('planificacion_actividades').select('*').eq('id',id).maybeSingle();
+      if(fila?.publicacion_id){
+        const res = await sincronizarPlan(supabase, fila);
+        setAvisoSync(res.avisos?.length ? res.avisos.join(' ') : 'Cambios sincronizados con la Solicitud de publicación, el expediente'+(fila.aula_event_id?' y el calendario del aula.':'.'));
+      }
     } else {
       const maxNum = actividades.reduce((m,a)=>Math.max(m,Number(a.numero||0)),0);
       const {data:inserted, error} = await supabase
@@ -248,7 +271,23 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
     return savedId;
   };
   const deleteActividad = async(id)=>{
+    const act = actividades.find(a=>a.id===id);
+    const avisos = [];
+    // Sale del calendario del aula (no queda como "cancelada").
+    if(act?.aula_event_id){
+      const res = await eliminarDeAula(supabase, act.aula_event_id);
+      if(!res.ok) avisos.push('Aula virtual: '+res.error);
+    }
     await supabase.from('planificacion_actividades').delete().eq('id',id);
+    // Si venía de una Solicitud de publicación, también se elimina para que no
+    // se vuelva a importar. El expediente del ponente se conserva.
+    if(act?.publicacion_id){
+      const {data:pub} = await supabase.from('caeduc_publicaciones').select('ponente_foto_path').eq('id',act.publicacion_id).maybeSingle();
+      const {error} = await supabase.from('caeduc_publicaciones').delete().eq('id',act.publicacion_id);
+      if(error) avisos.push('Solicitud de publicación: '+error.message);
+      else if(pub?.ponente_foto_path) await supabase.storage.from('caeduc-publicaciones').remove([pub.ponente_foto_path]);
+    }
+    setAvisoSync(avisos.length ? avisos.join(' ') : `Actividad eliminada${act?.aula_event_id?' (también del calendario del aula)':''}${act?.publicacion_id?' junto con su Solicitud de publicación; el expediente del ponente se conserva':''}.`);
     setDeleteActId(null); await fetchAll();
   };
   const updateEstado = async(id,estado_general)=>{
@@ -311,6 +350,61 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
     const { error: upErr } = await supabase.from('planificacion_actividades')
       .update({ aula_event_id: String(newId) }).eq('id', actividad.id);
     if (upErr) alert('Se publicó en el aula, pero no se pudo guardar la referencia localmente: ' + upErr.message);
+    await fetchAll();
+    return true;
+  };
+  // ── Informe anual (fin de año): cruza Planificación, presupuesto, publicaciones,
+  // expedientes y participantes del aula. Se abre listo para imprimir o guardar en PDF.
+  const [generandoInforme,setGenerandoInforme] = useState(false);
+  const generarInformeAnual = async () => {
+    const ventana = window.open('', '_blank');
+    if(!ventana){ alert('Permite las ventanas emergentes para generar el informe.'); return; }
+    ventana.document.write('<p style="font-family:sans-serif;padding:24px">Preparando el informe anual…</p>');
+    setGenerandoInforme(true);
+    try{
+      const anio = Number(filters.anio) || anioActual;
+      const [pubs, exps, docs, aula, ajustes] = await Promise.all([
+        supabase.from('caeduc_publicaciones').select('*'),
+        supabase.from('caeduc_expediente_ponentes').select('*'),
+        supabase.from('caeduc_expediente_documentos').select('expediente_id,tipo'),
+        supabase.from('cpg_content').select('activities').eq('id',1).maybeSingle(),
+        supabase.from('app_settings').select('key,value').in('key',['membrete_path','firmante1_nombre','firmante1_cargo','firmante1_firma_path']),
+      ]);
+      const cfg = Object.fromEntries((ajustes.data||[]).map(r=>[r.key,r.value]));
+      const url = (path) => !path ? '' : /^https?:\/\//.test(path) ? path : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/firmas-sellos/${path}`;
+      const datos = datosInformeAnual({
+        anio, hoy: todayStr(), actividades, rubros, gastosRubro, fondos, presAnual,
+        publicaciones: pubs.data||[], expedientes: exps.data||[], documentosExp: docs.data||[], eventosAula: aula.data?.activities||[],
+      });
+      const html = htmlInformeAnual(datos, {
+        membreteUrl: url(cfg.membrete_path) || '/fondo-oficios.jpg',
+        firmante: cfg.firmante1_nombre || 'M. A. Juan J. Reyes',
+        cargo: cfg.firmante1_cargo || 'Coordinador',
+        firmaUrl: url(cfg.firmante1_firma_path),
+        fecha: fechaLarga(todayStr()),
+      });
+      // Se pagina al cargar (hojas con membrete) y luego se abre el diálogo de impresión.
+      const listo = withFlowPagination(html).replace('</body>', '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},1200);});</script></body>');
+      ventana.document.open(); ventana.document.write(listo); ventana.document.close();
+    }catch(err){
+      ventana.document.body.innerHTML = '<p style="font-family:sans-serif;padding:24px;color:#b91c1c">No se pudo generar el informe: '+String(err?.message||err)+'</p>';
+    }finally{ setGenerandoInforme(false); }
+  };
+
+  // Un clic: publica o actualiza en el aula con los datos de la publicación enlazada.
+  const publicarDesdePublicacion = async (actividad) => {
+    const {data:pub,error} = await supabase.from('caeduc_publicaciones').select('*').eq('id',actividad.publicacion_id).maybeSingle();
+    if(error||!pub){ alert('No se encontró la Solicitud de publicación enlazada.'); return false; }
+    const res = await publicarEnAula(supabase, pub, actividad);
+    if(!res.ok && !res.existe){ alert('No se pudo publicar en el aula: ' + (res.error||'error desconocido')); return false; }
+    setAvisoSync(`Actividad ${res.accion==='actualizada'?'actualizada':'publicada'} en el calendario del aula virtual.`);
+    await fetchAll();
+    return true;
+  };
+  const crearPublicacion = async (actividad) => {
+    const res = await crearPublicacionDesdePlan(supabase, actividad);
+    if(!res.ok){ alert(res.avisos?.join(' ')||'No se pudo crear la solicitud de publicación.'); return false; }
+    setAvisoSync('Se creó la Solicitud de publicación y el expediente del ponente. Complétala en "Solicitud de publicación" (hora, grado, Zoom, gastos extra).');
     await fetchAll();
     return true;
   };
@@ -549,6 +643,12 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
 
   return (
     <div className="space-y-5">
+      {avisoSync && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          <Link2 size={16} className="mt-0.5 shrink-0"/><span className="flex-1">{avisoSync}</span>
+          <button onClick={()=>setAvisoSync('')} aria-label="Cerrar aviso"><X size={16}/></button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex justify-between items-start flex-wrap gap-3">
         <div>
@@ -559,6 +659,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
           <BlueButton onClick={generateReport} className="!px-4 !py-2 text-sm">
             <Printer size={16}/> Reporte PDF
           </BlueButton>
+          <PrimaryButton onClick={generarInformeAnual} disabled={generandoInforme} className="!px-4 !py-2 text-sm">
+            <FileText size={16}/> {generandoInforme ? 'Preparando…' : `Informe anual ${filters.anio || anioActual}`}
+          </PrimaryButton>
           <SecondaryButton onClick={fetchAll} className="!px-3 !py-2 text-sm">
             <RefreshCw size={15}/> Actualizar
           </SecondaryButton>
@@ -593,7 +696,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
         <div className="bg-amber-50 rounded-xl p-3 border flex flex-col gap-1">
           <div className="text-amber-700 flex items-center gap-1 text-xs font-semibold"><ClipboardList size={15}/><span>Comprometido</span></div>
           <div className="text-lg font-black text-amber-700">{fmtShort(totalComprometido)}</div>
-          <div className="text-xs text-amber-500">asignado a act. pendientes</div>
+          <div className="text-xs text-amber-500">por gastar en act. pendientes</div>
         </div>
 
         <div className="bg-red-50 rounded-xl p-3 border flex flex-col gap-1">
@@ -692,6 +795,14 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
                           <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
                             <GraduationCap size={11}/> Publicada en el aula ✓
                           </span>
+                        )}
+                        {act.publicacion_id && (
+                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                            <Link2 size={11}/> Desde publicación
+                          </span>
+                        )}
+                        {act.presupuesto_detalle?.faltan_extras && (
+                          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-semibold" title="Actividad presencial: agrega alimentación, souvenirs, etc.">⚠ Faltan gastos extra</span>
                         )}
                       </div>
                       <p className="text-sm font-semibold text-gray-800 leading-snug">{act.actividad}</p>
@@ -938,6 +1049,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
           onNavigateOficios={onNavigateOficios}
           onPublicarAula={publicarActividadAula}
           onActualizarAula={actualizarActividadAula}
+          onPublicarDesdePublicacion={publicarDesdePublicacion}
+          onCrearPublicacion={crearPublicacion}
         />
       )}
       {deleteActId&&(
@@ -946,6 +1059,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-700 font-bold">¿Eliminar esta actividad?</p>
               <p className="text-red-500 text-sm mt-1">Se eliminarán todos sus registros de gastos. Esta acción no se puede deshacer.</p>
+              {actividades.find(a=>a.id===deleteActId)?.aula_event_id && <p className="text-red-500 text-sm mt-1">También se quitará del calendario del aula virtual.</p>}
+              {actividades.find(a=>a.id===deleteActId)?.publicacion_id && <p className="text-red-500 text-sm mt-1">También se eliminará su Solicitud de publicación (el expediente del ponente se conserva).</p>}
             </div>
             <div className="flex gap-3">
               <button onClick={()=>setDeleteActId(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-200">Cancelar</button>
@@ -976,7 +1091,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
 // ── Ficha unificada de actividad (Parte 3.3) ────────────────────────────────
 // Sustituye a ActividadFormModal + TareasModal: Datos generales | Presupuesto y
 // gastos | Tareas/avance | Acciones, en una sola ficha con pestañas.
-function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGasto,gastosLines,getRespName,onNavigateOficios,onPublicarAula,onActualizarAula}){
+function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGasto,gastosLines,getRespName,onNavigateOficios,onPublicarAula,onActualizarAula,onPublicarDesdePublicacion,onCrearPublicacion}){
   const [ftab,setFtab] = useState('generales');
   const [fd,setFd]=useState({
     trimestre:initialData?.trimestre||TRIMESTRES[0],
@@ -1043,7 +1158,8 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
     cost: '',
     costType: 'free',
     isFull: false,
-    meetingLink: aulaMeetingLink || '',
+    // Sin enlace de Zoom, el calendario lleva al aula virtual.
+    meetingLink: aulaMeetingLink || AULA_URL_DEFAULT,
     participants: '',
     scholarshipAmt: 0,
     scholarshipPct: 0,
@@ -1117,6 +1233,11 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
                 <GraduationCap size={11}/> Publicada en el aula ✓
               </span>
             )}
+            {initialData?.publicacion_id && (
+              <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold mt-1 ml-1">
+                <Link2 size={11}/> Sincronizada con Solicitud de publicación
+              </span>
+            )}
           </div>
           <button onClick={onClose}><X size={22} className="text-gray-400 hover:text-red-500"/></button>
         </div>
@@ -1172,6 +1293,28 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
             <div className="space-y-4">
               <div className="bg-green-50 rounded-xl p-4 border border-green-200 space-y-3">
                 <h4 className="text-sm font-bold text-green-800 flex items-center gap-2"><DollarSign size={15}/>Presupuesto asignado</h4>
+                {initialData?.presupuesto_detalle && (
+                  <div className="bg-white rounded-lg border p-3 text-xs space-y-1">
+                    <p className="font-bold text-gray-700">Desglose desde la Solicitud de publicación</p>
+                    {[
+                      {desc:`Honorario ponente${fd.t2_ponente?` – ${fd.t2_ponente}`:''}${initialData.presupuesto_detalle.grado?` (${initialData.presupuesto_detalle.grado})`:''}`, monto:Number(initialData.presupuesto_detalle.honorario||0)},
+                      ...(initialData.presupuesto_detalle.extras||[]).map(g=>({desc:g.concepto||'Gasto extra', monto:Number(g.monto||0)})),
+                    ].filter(item=>item.monto>0).map((item,i)=>{
+                      const registrado = gastosLines.some(g=>g.descripcion===item.desc);
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-2">
+                          <span className="flex-1">{item.desc}</span><span>Q{fmt(item.monto)}</span>
+                          {registrado
+                            ? <span className="text-emerald-700 font-semibold whitespace-nowrap">✓ gastado</span>
+                            : <button type="button" disabled={!hasId||addingG} onClick={async()=>{setAddingG(true);await onAddGasto(fd.id,item.desc,item.monto,todayStr());setAddingG(false);}} className="text-blue-700 underline whitespace-nowrap disabled:opacity-50" title="Registra el pago como gasto: se resta del presupuesto general">Registrar gasto</button>}
+                        </div>
+                      );
+                    })}
+                    <p className="flex justify-between font-bold border-t pt-1"><span>Total</span><span>Q{fmt(initialData.presupuesto_detalle.total)}</span></p>
+                    {initialData.presupuesto_detalle.faltan_extras && <p className="text-amber-700 font-semibold">⚠ Actividad presencial: faltan los gastos extra (alimentación, souvenirs, etc.). Agrégalos en la Solicitud de publicación.</p>}
+                    <p className="text-gray-400">El monto asignado se recalcula solo si cambias el grado o los gastos en la publicación. Cuando pagues algo, toca "Registrar gasto": se resta del presupuesto general (Saldo vs ejecutado).</p>
+                  </div>
+                )}
                 <div><label className="text-xs font-bold text-gray-600 mb-1 block">Monto asignado (Q)</label>
                   <input type="number" min="0" step="0.01" className={inputCls + ' font-medium'} value={fd.monto} onChange={e=>setFd({...fd,monto:e.target.value})}/></div>
                 <div className="grid grid-cols-2 gap-3 text-center">
@@ -1286,6 +1429,15 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
                     </div>
                   </div>
 
+                  {!initialData?.publicacion_id && (
+                    <div className="border rounded-xl p-4 space-y-2">
+                      <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Link2 size={15}/>Solicitud de publicación y expediente</h4>
+                      <p className="text-xs text-gray-500">Crea la solicitud de publicación con estos datos: queda enlazada (los cambios viajan en ambos sentidos) y se abre el expediente del ponente.</p>
+                      <SecondaryButton className="w-full text-sm" onClick={()=>onCrearPublicacion(initialData)}>
+                        <Send size={15}/> Crear solicitud de publicación enlazada
+                      </SecondaryButton>
+                    </div>
+                  )}
                   <div className="border rounded-xl p-4 space-y-3">
                     <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><GraduationCap size={15}/>Calendario del aula virtual</h4>
                     {initialData?.aula_event_id ? (
@@ -1295,7 +1447,14 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
                     ) : (
                       <p className="text-xs text-gray-500">Publica esta actividad en el calendario público del aula virtual CPG.</p>
                     )}
-                    {!aulaOpen ? (
+                    {initialData?.publicacion_id ? (
+                      <>
+                        <p className="text-xs text-gray-500">Usa los datos de la Solicitud de publicación (hora, enlace de Zoom o www.aulavirtualcpg.org, duración). Cada cambio posterior se actualiza solo en el aula.</p>
+                        <PrimaryButton disabled={publishingAula} className="w-full text-sm" onClick={async()=>{setPublishingAula(true);await onPublicarDesdePublicacion(initialData);setPublishingAula(false);}}>
+                          <CalendarPlus size={15}/> {publishingAula ? 'Enviando...' : initialData?.aula_event_id ? 'Actualizar en el aula' : 'Publicar en el aula (1 clic)'}
+                        </PrimaryButton>
+                      </>
+                    ) : !aulaOpen ? (
                       <SecondaryButton onClick={()=>setAulaOpen(true)} className="w-full text-sm">
                         <CalendarPlus size={15}/> {initialData?.aula_event_id ? 'Actualizar en calendario' : 'Publicar en calendario del aula virtual'}
                       </SecondaryButton>

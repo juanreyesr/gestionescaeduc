@@ -114,3 +114,36 @@ export const computeSuggestedOficioNumero = (oficios, anio = new Date().getFullY
   });
   return `Of. ${String(max + 1).padStart(3, '0')}.${anio}.CPSG.CAEDUC`;
 };
+
+// ── Correlativo automático de avales ─────────────────────────────────────────
+// Formato vigente: CAEDUC-NN-AAAA (número de dos dígitos que reinicia cada año).
+// Tolera variantes históricas ("CAEDUC-2026-01", "CAEDUC-0002-2026",
+// "CAEDU-37-2026") y cuenta también los avales eliminados para no reutilizar
+// números ya emitidos.
+const parseCorrelativoAval = (correlativo = '') => {
+  const grupos = String(correlativo).match(/\d+/g) || [];
+  const anioIdx = grupos.findIndex(g => g.length === 4 && /^20\d\d$/.test(g));
+  if (anioIdx < 0) return null;
+  const numero = grupos.find((g, i) => i !== anioIdx);
+  if (!numero) return null;
+  return { numero: Number(numero), anio: Number(grupos[anioIdx]) };
+};
+
+export const computeSuggestedAvalCorrelativo = (avales, anio = new Date().getFullYear()) => {
+  let max = 0;
+  (avales || []).forEach(a => {
+    const p = parseCorrelativoAval(a?.correlativo);
+    if (p && p.anio === anio) max = Math.max(max, p.numero);
+  });
+  return `CAEDUC-${String(max + 1).padStart(2, '0')}-${anio}`;
+};
+
+// Avales vigentes (no eliminados, distintos de `exceptId`) que ya usan ese número.
+export const avalesConCorrelativo = (avales, correlativo, exceptId) => {
+  const p = parseCorrelativoAval(correlativo);
+  if (!p) return [];
+  return (avales || []).filter(a => a && !a.is_deleted && a.id !== exceptId && (() => {
+    const q = parseCorrelativoAval(a.correlativo);
+    return q && q.numero === p.numero && q.anio === p.anio;
+  })());
+};
