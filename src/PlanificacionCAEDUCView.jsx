@@ -11,8 +11,10 @@ import {
   ClipboardList, Video, CalendarPlus, CheckCircle2, Circle
 } from 'lucide-react';
 import { buildJustificacionTemplate, buildPoblacionObjetivoTemplate, buildResultadosEsperadosTemplate, buildCronogramaTemplate } from './lib/oficioTemplates.js';
-import { AULA_URL_DEFAULT } from './lib/sincronizacion.js';
-import { AVISO_MIGRACION, crearPublicacionDesdePlan, importarPublicaciones, publicarEnAula, sincronizarPlan } from './lib/syncActividades.js';
+import { AULA_URL_DEFAULT, comprometidoPendiente, saldoProyectado, fechaLarga } from './lib/sincronizacion.js';
+import { datosInformeAnual, htmlInformeAnual } from './lib/informeAnual.js';
+import { withFlowPagination } from './lib/flowPagination.js';
+import { AVISO_MIGRACION, crearPublicacionDesdePlan, eliminarDeAula, importarPublicaciones, publicarEnAula, sincronizarPlan } from './lib/syncActividades.js';
 import { PrimaryButton, SecondaryButton, BlueButton, Pill, SectionCard, EmptyState, inputCls, selectCls, textareaCls } from './components/ui.jsx';
 
 const supabase = createClient(
@@ -212,9 +214,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
 
   // PARTE 3.2 — resumen presupuestario honesto
   // Comprometido = suma de `monto` asignado de actividades NO finalizadas (Pendiente / En proceso)
-  const totalComprometido = actividades
-    .filter(a=>a.estado_general!=='Completado' && a.estado_general!=='Cancelado')
-    .reduce((s,a)=>s+Number(a.monto||0),0);
+  const totalComprometido = comprometidoPendiente(actividades); // lo que falta por gastar
 
   // Presupuesto base = monto fijo aprobado por año (NO suma de actividades)
   const anioActual     = new Date().getFullYear();
@@ -224,7 +224,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
   const totalDisp      = presBase + totalFondos;
   const saldoVsEjecutado    = totalDisp - totalGast;
   // Escenario pesimista: si además de lo ya ejecutado se gastara TODO lo comprometido en actividades pendientes
-  const saldoSiComprometido = totalDisp - totalRubGast - totalComprometido;
+  // Cada gasto registrado se resta del general; además se descuenta lo que falta por gastar.
+  const saldoSiComprometido = saldoProyectado({ disponible: totalDisp, ejecutado: totalGast, actividades });
 
   // Guardar/actualizar presupuesto anual
   const savePresAnual  = async(anio, monto, notas) => {
@@ -270,7 +271,23 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
     return savedId;
   };
   const deleteActividad = async(id)=>{
+    const act = actividades.find(a=>a.id===id);
+    const avisos = [];
+    // Sale del calendario del aula (no queda como "cancelada").
+    if(act?.aula_event_id){
+      const res = await eliminarDeAula(supabase, act.aula_event_id);
+      if(!res.ok) avisos.push('Aula virtual: '+res.error);
+    }
     await supabase.from('planificacion_actividades').delete().eq('id',id);
+    // Si venía de una Solicitud de publicación, también se elimina para que no
+    // se vuelva a importar. El expediente del ponente se conserva.
+    if(act?.publicacion_id){
+      const {data:pub} = await supabase.from('caeduc_publicaciones').select('ponente_foto_path').eq('id',act.publicacion_id).maybeSingle();
+      const {error} = await supabase.from('caeduc_publicaciones').delete().eq('id',act.publicacion_id);
+      if(error) avisos.push('Solicitud de publicación: '+error.message);
+      else if(pub?.ponente_foto_path) await supabase.storage.from('caeduc-publicaciones').remove([pub.ponente_foto_path]);
+    }
+    setAvisoSync(avisos.length ? avisos.join(' ') : `Actividad eliminada${act?.aula_event_id?' (también del calendario del aula)':''}${act?.publicacion_id?' junto con su Solicitud de publicación; el expediente del ponente se conserva':''}.`);
     setDeleteActId(null); await fetchAll();
   };
   const updateEstado = async(id,estado_general)=>{
@@ -336,6 +353,44 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
     await fetchAll();
     return true;
   };
+  // ── Informe anual (fin de año): cruza Planificación, presupuesto, publicaciones,
+  // expedientes y participantes del aula. Se abre listo para imprimir o guardar en PDF.
+  const [generandoInforme,setGenerandoInforme] = useState(false);
+  const generarInformeAnual = async () => {
+    const ventana = window.open('', '_blank');
+    if(!ventana){ alert('Permite las ventanas emergentes para generar el informe.'); return; }
+    ventana.document.write('<p style="font-family:sans-serif;padding:24px">Preparando el informe anual…</p>');
+    setGenerandoInforme(true);
+    try{
+      const anio = Number(filters.anio) || anioActual;
+      const [pubs, exps, docs, aula, ajustes] = await Promise.all([
+        supabase.from('caeduc_publicaciones').select('*'),
+        supabase.from('caeduc_expediente_ponentes').select('*'),
+        supabase.from('caeduc_expediente_documentos').select('expediente_id,tipo'),
+        supabase.from('cpg_content').select('activities').eq('id',1).maybeSingle(),
+        supabase.from('app_settings').select('key,value').in('key',['membrete_path','firmante1_nombre','firmante1_cargo','firmante1_firma_path']),
+      ]);
+      const cfg = Object.fromEntries((ajustes.data||[]).map(r=>[r.key,r.value]));
+      const url = (path) => !path ? '' : /^https?:\/\//.test(path) ? path : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/firmas-sellos/${path}`;
+      const datos = datosInformeAnual({
+        anio, hoy: todayStr(), actividades, rubros, gastosRubro, fondos, presAnual,
+        publicaciones: pubs.data||[], expedientes: exps.data||[], documentosExp: docs.data||[], eventosAula: aula.data?.activities||[],
+      });
+      const html = htmlInformeAnual(datos, {
+        membreteUrl: url(cfg.membrete_path) || '/fondo-oficios.jpg',
+        firmante: cfg.firmante1_nombre || 'M. A. Juan J. Reyes',
+        cargo: cfg.firmante1_cargo || 'Coordinador',
+        firmaUrl: url(cfg.firmante1_firma_path),
+        fecha: fechaLarga(todayStr()),
+      });
+      // Se pagina al cargar (hojas con membrete) y luego se abre el diálogo de impresión.
+      const listo = withFlowPagination(html).replace('</body>', '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},1200);});</script></body>');
+      ventana.document.open(); ventana.document.write(listo); ventana.document.close();
+    }catch(err){
+      ventana.document.body.innerHTML = '<p style="font-family:sans-serif;padding:24px;color:#b91c1c">No se pudo generar el informe: '+String(err?.message||err)+'</p>';
+    }finally{ setGenerandoInforme(false); }
+  };
+
   // Un clic: publica o actualiza en el aula con los datos de la publicación enlazada.
   const publicarDesdePublicacion = async (actividad) => {
     const {data:pub,error} = await supabase.from('caeduc_publicaciones').select('*').eq('id',actividad.publicacion_id).maybeSingle();
@@ -604,6 +659,9 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
           <BlueButton onClick={generateReport} className="!px-4 !py-2 text-sm">
             <Printer size={16}/> Reporte PDF
           </BlueButton>
+          <PrimaryButton onClick={generarInformeAnual} disabled={generandoInforme} className="!px-4 !py-2 text-sm">
+            <FileText size={16}/> {generandoInforme ? 'Preparando…' : `Informe anual ${filters.anio || anioActual}`}
+          </PrimaryButton>
           <SecondaryButton onClick={fetchAll} className="!px-3 !py-2 text-sm">
             <RefreshCw size={15}/> Actualizar
           </SecondaryButton>
@@ -638,7 +696,7 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
         <div className="bg-amber-50 rounded-xl p-3 border flex flex-col gap-1">
           <div className="text-amber-700 flex items-center gap-1 text-xs font-semibold"><ClipboardList size={15}/><span>Comprometido</span></div>
           <div className="text-lg font-black text-amber-700">{fmtShort(totalComprometido)}</div>
-          <div className="text-xs text-amber-500">asignado a act. pendientes</div>
+          <div className="text-xs text-amber-500">por gastar en act. pendientes</div>
         </div>
 
         <div className="bg-red-50 rounded-xl p-3 border flex flex-col gap-1">
@@ -1001,6 +1059,8 @@ export default function PlanificacionCAEDUCView({onNavigateOficios, abrirActivid
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-700 font-bold">¿Eliminar esta actividad?</p>
               <p className="text-red-500 text-sm mt-1">Se eliminarán todos sus registros de gastos. Esta acción no se puede deshacer.</p>
+              {actividades.find(a=>a.id===deleteActId)?.aula_event_id && <p className="text-red-500 text-sm mt-1">También se quitará del calendario del aula virtual.</p>}
+              {actividades.find(a=>a.id===deleteActId)?.publicacion_id && <p className="text-red-500 text-sm mt-1">También se eliminará su Solicitud de publicación (el expediente del ponente se conserva).</p>}
             </div>
             <div className="flex gap-3">
               <button onClick={()=>setDeleteActId(null)} className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl font-bold hover:bg-gray-200">Cancelar</button>
@@ -1236,11 +1296,23 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
                 {initialData?.presupuesto_detalle && (
                   <div className="bg-white rounded-lg border p-3 text-xs space-y-1">
                     <p className="font-bold text-gray-700">Desglose desde la Solicitud de publicación</p>
-                    <p className="flex justify-between"><span>Honorario ponente{initialData.presupuesto_detalle.grado?` (${initialData.presupuesto_detalle.grado})`:''}</span><span>Q{fmt(initialData.presupuesto_detalle.honorario)}</span></p>
-                    {(initialData.presupuesto_detalle.extras||[]).map((g,i)=>(<p key={i} className="flex justify-between"><span>{g.concepto||'Gasto extra'}</span><span>Q{fmt(g.monto)}</span></p>))}
+                    {[
+                      {desc:`Honorario ponente${fd.t2_ponente?` – ${fd.t2_ponente}`:''}${initialData.presupuesto_detalle.grado?` (${initialData.presupuesto_detalle.grado})`:''}`, monto:Number(initialData.presupuesto_detalle.honorario||0)},
+                      ...(initialData.presupuesto_detalle.extras||[]).map(g=>({desc:g.concepto||'Gasto extra', monto:Number(g.monto||0)})),
+                    ].filter(item=>item.monto>0).map((item,i)=>{
+                      const registrado = gastosLines.some(g=>g.descripcion===item.desc);
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-2">
+                          <span className="flex-1">{item.desc}</span><span>Q{fmt(item.monto)}</span>
+                          {registrado
+                            ? <span className="text-emerald-700 font-semibold whitespace-nowrap">✓ gastado</span>
+                            : <button type="button" disabled={!hasId||addingG} onClick={async()=>{setAddingG(true);await onAddGasto(fd.id,item.desc,item.monto,todayStr());setAddingG(false);}} className="text-blue-700 underline whitespace-nowrap disabled:opacity-50" title="Registra el pago como gasto: se resta del presupuesto general">Registrar gasto</button>}
+                        </div>
+                      );
+                    })}
                     <p className="flex justify-between font-bold border-t pt-1"><span>Total</span><span>Q{fmt(initialData.presupuesto_detalle.total)}</span></p>
                     {initialData.presupuesto_detalle.faltan_extras && <p className="text-amber-700 font-semibold">⚠ Actividad presencial: faltan los gastos extra (alimentación, souvenirs, etc.). Agrégalos en la Solicitud de publicación.</p>}
-                    <p className="text-gray-400">Si cambias el grado o los gastos en la publicación, este monto se recalcula solo.</p>
+                    <p className="text-gray-400">El monto asignado se recalcula solo si cambias el grado o los gastos en la publicación. Cuando pagues algo, toca "Registrar gasto": se resta del presupuesto general (Saldo vs ejecutado).</p>
                   </div>
                 )}
                 <div><label className="text-xs font-bold text-gray-600 mb-1 block">Monto asignado (Q)</label>

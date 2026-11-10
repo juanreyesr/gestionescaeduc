@@ -34,10 +34,9 @@ export const AULA_URL_DEFAULT = 'https://www.aulavirtualcpg.org';
 // Gastos que suele llevar una actividad presencial además del honorario.
 export const GASTOS_EXTRA_SUGERIDOS = [
   'Alimentación',
-  'Souvenirs / reconocimientos',
-  'Salón y equipo audiovisual',
-  'Materiales impresos',
-  'Transporte o viáticos del ponente',
+  'Souvenirs',
+  'Salón',
+  'Equipo audiovisual',
 ];
 
 const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -252,3 +251,15 @@ export const faltaMigracion = (error) => /publicacion_id|presupuesto_detalle|gas
   .test(String(error?.message || error || ''));
 
 export const MIGRACION_SINCRONIZACION = 'supabase/2026_sincronizacion_actividades.sql';
+
+// ── Presupuesto general ───────────────────────────────────────────────────────
+// Cada gasto registrado (líneas de gasto de actividades y de rubros) se resta
+// del presupuesto general. Lo "comprometido" es solo lo que falta por gastar de
+// las actividades pendientes o en proceso: asignado menos lo ya gastado, para
+// no contar dos veces un honorario que ya se registró como gasto.
+export const comprometidoPendiente = (actividades = []) => actividades
+  .filter(a => a.estado_general !== 'Completado' && a.estado_general !== 'Cancelado')
+  .reduce((s, a) => s + Math.max(Number(a.monto || 0) - Number(a.monto_gastado || 0), 0), 0);
+
+export const saldoProyectado = ({ disponible = 0, ejecutado = 0, actividades = [] } = {}) =>
+  disponible - ejecutado - comprometidoPendiente(actividades);

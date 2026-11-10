@@ -18,7 +18,7 @@ import {
   AREAS_PLANIFICACION, GASTOS_EXTRA_SUGERIDOS, MODALIDADES, TIPOS_ACTIVIDAD, AULA_URL_DEFAULT,
   enlaceReunion, faltaMigracion, faltantesPublicacion, normalizarGastosExtra, presupuestoDePublicacion, requiereGastosExtra,
 } from './lib/sincronizacion.js';
-import { AVISO_MIGRACION, importarPublicaciones, publicarEnAula, sincronizarPublicacion } from './lib/syncActividades.js';
+import { AVISO_MIGRACION, importarPublicaciones, limpiarAlEliminarPublicacion, publicarEnAula, sincronizarPublicacion } from './lib/syncActividades.js';
 
 // Columnas agregadas por supabase/2026_sincronizacion_actividades.sql.
 const COLUMNAS_SINCRONIZACION = ['actividad_tipo', 'area', 'modalidad', 'duracion_horas', 'enlace_inscripcion', 'participantes_estimados', 'gastos_extra'];
@@ -135,6 +135,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const [savingActivity, setSavingActivity] = useState(false);
   const [porBorrar, setPorBorrar] = useState(null);
   const [borrando, setBorrando] = useState(false);
+  const [borrarDePlan, setBorrarDePlan] = useState(true);
   const [messageOverride, setMessageOverride] = useState(null);
   const [reportDialog, setReportDialog] = useState(false);
   const [reportFrom, setReportFrom] = useState('');
@@ -501,12 +502,15 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
   const deleteHistoryItem = async () => {
     if (!porBorrar) return;
     setBorrando(true);
-    const { error } = await supabase.from(HISTORY_TABLE).delete().eq('id', porBorrar.id);
-    // La actividad de la Planificación se conserva (es el plan anual), solo se desenlaza.
-    if (!error && planes[porBorrar.id]) {
-      await supabase.from('planificacion_actividades').update({ publicacion_id: null }).eq('id', planes[porBorrar.id].id);
-      await cargarPlanes();
+    // Primero se limpia lo enlazado (mientras la publicación todavía existe):
+    // sale del calendario del aula y de la Planificación (o queda sin enlace).
+    let avisosLimpieza = [];
+    if (planes[porBorrar.id]) {
+      const res = await limpiarAlEliminarPublicacion(supabase, planes[porBorrar.id], { borrarDePlanificacion: borrarDePlan });
+      avisosLimpieza = res.avisos || [];
     }
+    const { error } = await supabase.from(HISTORY_TABLE).delete().eq('id', porBorrar.id);
+    if (planes[porBorrar.id]) await cargarPlanes();
     if (error) {
       setFeedback(`No se pudo eliminar: ${error.message}`);
     } else {
@@ -521,7 +525,7 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
         clearPhotoDraft();
       }
       await loadHistory();
-      setFeedback('Actividad eliminada del historial.');
+      setFeedback(`Actividad eliminada del historial${planes[porBorrar.id]?.aula_event_id ? ' y del calendario del aula' : ''}${planes[porBorrar.id] ? (borrarDePlan ? ' y de la Planificación' : '; en la Planificación quedó sin enlace') : ''}.${avisosLimpieza.length ? ` ${avisosLimpieza.join(' ')}` : ''}`);
     }
     setPorBorrar(null);
     setBorrando(false);
@@ -1053,6 +1057,14 @@ export default function PublicacionesView({ oficios = [], appSettings = {}, onUp
             <p className="mt-3 rounded-xl bg-red-50 p-4 text-sm leading-6 text-red-700">
               Se eliminará <strong>{porBorrar.actividad_nombre || 'esta actividad'}</strong>{porBorrar.actividad_fecha ? ` (${porBorrar.actividad_fecha})` : ''}{porBorrar.ponente_foto_path ? ', junto con la fotografía del ponente' : ''}. No se puede deshacer.
             </p>
+            {planes[porBorrar.id]?.aula_event_id && <p className="mt-3 text-sm text-slate-600">También se quitará del calendario del aula virtual.</p>}
+            {planes[porBorrar.id] && (
+              <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={borrarDePlan} onChange={event => setBorrarDePlan(event.target.checked)} className="mt-1 h-4 w-4 accent-red-600"/>
+                <span>Eliminarla también de la Planificación (si ya no se realizará). Desmarca para conservarla en el plan anual sin enlace.</span>
+              </label>
+            )}
+            <p className="mt-3 text-xs text-slate-500">El expediente del ponente se conserva con sus documentos.</p>
             <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setPorBorrar(null)} className="min-h-11 rounded-xl bg-slate-100 px-5 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">Cancelar</button>
               <button type="button" onClick={deleteHistoryItem} disabled={borrando} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">

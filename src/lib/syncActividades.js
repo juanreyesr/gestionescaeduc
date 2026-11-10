@@ -222,3 +222,32 @@ export const crearPublicacionDesdePlan = async (supabase, plan) => {
   const avisoExp = await sincronizarExpediente(supabase, data);
   return { ok: true, publicacion: data, avisos: avisoExp ? [avisoExp] : [] };
 };
+
+// ── Eliminar ──────────────────────────────────────────────────────────────────
+// Quita el evento del calendario del aula (no queda como "cancelado").
+export const eliminarDeAula = async (supabase, eventId) => {
+  if (!eventId) return { ok: true, quitada: false };
+  const { data, error } = await supabase.rpc('aula_eliminar_actividad', { p_event_id: String(eventId) });
+  if (error) {
+    const falta = /aula_eliminar_actividad|function .* does not exist|schema cache/i.test(error.message || '');
+    return { ok: false, error: falta ? `Para quitar actividades del aula falta ejecutar ${MIGRACION_SINCRONIZACION} en Supabase.` : error.message };
+  }
+  return { ok: true, quitada: data !== false };
+};
+
+// Al eliminar una Solicitud de publicación: sale del aula y, si se pide, también
+// de la Planificación; si no, la actividad planificada queda sin enlace.
+// (El expediente se conserva porque puede tener documentos ya cargados.)
+export const limpiarAlEliminarPublicacion = async (supabase, plan, { borrarDePlanificacion = false } = {}) => {
+  if (!plan?.id) return { ok: true, avisos: [] };
+  const avisos = [];
+  if (plan.aula_event_id) {
+    const res = await eliminarDeAula(supabase, plan.aula_event_id);
+    if (!res.ok) avisos.push(`Aula virtual: ${res.error}`);
+  }
+  const { error } = borrarDePlanificacion
+    ? await supabase.from(T_PLAN).delete().eq('id', plan.id)
+    : await supabase.from(T_PLAN).update({ publicacion_id: null, aula_event_id: null, updated_at: new Date().toISOString() }).eq('id', plan.id);
+  if (error) avisos.push(`Planificación: ${error.message}`);
+  return { ok: !avisos.length, avisos };
+};

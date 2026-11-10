@@ -81,3 +81,17 @@ test('enlaza publicaciones existentes con actividades ya planificadas del mismo 
   assert.equal(buscarPlanParecido(virtual, planes).id, 'a');
   assert.equal(buscarPlanParecido(virtual, [{ ...planes[0], publicacion_id: 'x' }]), null);
 });
+
+import { comprometidoPendiente, saldoProyectado } from './sincronizacion.js';
+
+test('el saldo proyectado resta lo gastado y solo lo que falta por gastar', () => {
+  const actividades = [
+    { monto: 2500, monto_gastado: 2000, estado_general: 'En proceso' }, // faltan 500
+    { monto: 3000, monto_gastado: 0, estado_general: 'Pendiente' },     // faltan 3000
+    { monto: 4000, monto_gastado: 4200, estado_general: 'Completado' }, // ya ejecutado
+    { monto: 1000, monto_gastado: 0, estado_general: 'Cancelado' },
+  ];
+  assert.equal(comprometidoPendiente(actividades), 3500);
+  // ejecutado = 2000 + 4200 de actividades + 300 de rubros
+  assert.equal(saldoProyectado({ disponible: 20000, ejecutado: 6500, actividades }), 10000);
+});

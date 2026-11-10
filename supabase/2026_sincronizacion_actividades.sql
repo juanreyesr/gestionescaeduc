@@ -35,3 +35,69 @@ comment on column public.planificacion_actividades.publicacion_id is
   'Solicitud de publicación (caeduc_publicaciones.id) con la que se sincroniza esta actividad.';
 
 notify pgrst, 'reload schema';
+
+-- ── Personal de gestiones CAEDUC ─────────────────────────────────────────────
+-- El aula virtual comparte este proyecto y permite que cualquier persona se
+-- registre, así que "authenticated" NO basta para distinguir al personal.
+-- Personal = tiene fila en public.profiles (usuarios creados en gestiones) o es
+-- la cuenta de administración principal.
+create or replace function public.es_personal_caeduc()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null and (
+    exists (select 1 from public.profiles p where p.id = auth.uid())
+    or lower(coalesce(auth.jwt() ->> 'email', '')) = 'lic.juanreyesr@gmail.com'
+  );
+$$;
+
+revoke all on function public.es_personal_caeduc() from public, anon;
+grant execute on function public.es_personal_caeduc() to authenticated;
+
+-- ── Quitar una actividad del calendario del aula ─────────────────────────────
+-- Se usa al eliminar una Solicitud de publicación o una actividad de la
+-- Planificación: el evento desaparece del calendario (no queda "cancelado").
+create or replace function public.aula_eliminar_actividad(p_event_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_tipo text;
+  v_antes int;
+  v_despues int;
+begin
+  if not public.es_personal_caeduc() then
+    raise exception 'No autorizado para modificar el calendario del aula';
+  end if;
+
+  select data_type into v_tipo
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'cpg_content' and column_name = 'activities';
+
+  select jsonb_array_length(coalesce(activities::jsonb, '[]'::jsonb)) into v_antes
+  from public.cpg_content where id = 1 for update;
+
+  execute format(
+    'update public.cpg_content set activities = (
+       select coalesce(jsonb_agg(a), ''[]''::jsonb)
+       from jsonb_array_elements(coalesce(activities::jsonb, ''[]''::jsonb)) a
+       where a ->> ''id'' is distinct from %L
+     )::%s where id = 1',
+    p_event_id, case when v_tipo = 'json' then 'json' else 'jsonb' end);
+
+  select jsonb_array_length(coalesce(activities::jsonb, '[]'::jsonb)) into v_despues
+  from public.cpg_content where id = 1;
+
+  return coalesce(v_antes, 0) > coalesce(v_despues, 0);
+end;
+$$;
+
+revoke all on function public.aula_eliminar_actividad(text) from public, anon;
+grant execute on function public.aula_eliminar_actividad(text) to authenticated;
+
+notify pgrst, 'reload schema';
