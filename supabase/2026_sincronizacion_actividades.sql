@@ -47,8 +47,12 @@ begin
         );
       $b$
     $f$;
-    execute 'revoke all on function public.es_personal_caeduc() from public, anon';
-    execute 'grant execute on function public.es_personal_caeduc() to authenticated';
+    execute 'revoke all on function public.es_personal_caeduc() from public';
+    -- anon TAMBIÉN debe poder ejecutarla: las reglas restrictivas que la usan se
+    -- evalúan para usuarios sin sesión y, sin este permiso, fallaba cualquier
+    -- acceso anónimo a archivos (p. ej. subir el PDF del formulario de avales).
+    -- Sin sesión devuelve false, así que no abre ningún acceso.
+    execute 'grant execute on function public.es_personal_caeduc() to anon, authenticated';
   end if;
 end $$;
 

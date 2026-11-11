@@ -28,6 +28,9 @@
 -- Ver el bloque REVERTIR al final.
 
 -- Requiere public.es_personal_caeduc() (creada en 2026_sincronizacion_actividades.sql).
+-- IMPORTANTE: anon debe tener EXECUTE sobre esa función (ver
+-- 2026_es_personal_ejecutable_anon.sql); si no, las reglas restrictivas hacen
+-- fallar cualquier acceso anónimo a archivos.
 
 do $$
 declare
