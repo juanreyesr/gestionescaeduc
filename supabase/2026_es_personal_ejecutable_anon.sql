@@ -1,0 +1,16 @@
+-- Corrección (aplicada en producción el 2026-11-11, migración "gestiones_es_personal_ejecutable_anon")
+--
+-- Síntoma: el formulario público de avales mostraba "Error al subir el archivo:
+-- permission denied for function es_personal_caeduc". También fallaba cualquier
+-- lectura anónima de archivos (plantillas, reglamento, firmas, configuración de
+-- créditos, certificados del aula).
+--
+-- Causa: la regla restrictiva caeduc_personal_archivos (storage.objects) y las de
+-- las tablas de gestiones se evalúan también para anon, y PostgreSQL exige
+-- permiso de ejecución sobre es_personal_caeduc() aunque el archivo sea de otro
+-- bucket. Se había revocado ese permiso a anon.
+--
+-- Solución: anon puede ejecutarla. Sin sesión devuelve false, así que no abre
+-- ningún acceso. Verificado con rollback: anon sube a avales-files/forms/, crea
+-- la solicitud y lee los 125 archivos públicos; sigue sin acceso a lo privado.
+grant execute on function public.es_personal_caeduc() to anon;
