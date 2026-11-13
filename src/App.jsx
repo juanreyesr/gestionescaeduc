@@ -1272,7 +1272,24 @@ const AdminUsersTab = ({ members, onUpdateMember, onRefreshMembers, isSuperAdmin
   const saveCustomRoles = async (roles) => {setCustomRoles(roles);const val = JSON.stringify(roles);const {error} = await supabase.from('app_settings').update({value:val}).eq('key','custom_roles');if(error) await supabase.from('app_settings').insert([{key:'custom_roles',value:val}]);};
   const addCustomRole = () => {const r = newRole.trim();if(!r || allRoles.includes(r)) return;saveCustomRoles([...customRoles, r]);setNewRole('');};
   const removeCustomRole = (r) => saveCustomRoles(customRoles.filter(x=>x!==r));
-  const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}if(ad.user){const{error:pe}=await supabase.from('profiles').insert([{id:ad.user.id,name:newUser.name,role:newUser.role,email:newUser.email}]);if(pe)setMsg({type:'warning',text:'Auth OK pero error perfil: '+pe.message});else{setMsg({type:'success',text:`"${newUser.name}" creado.`});setNewUser({email:'',password:'',name:'',role:allRoles[0]});setShowModal(false);if(onRefreshMembers)onRefreshMembers();}}}catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
+  const handleCreate=async(e)=>{e.preventDefault();setCreating(true);setMsg(null);try{
+    const{data:ad,error:ae}=await supabase.auth.signUp({email:newUser.email,password:newUser.password});
+    if(ae){setMsg({type:'error',text:ae.message});setCreating(false);return;}
+    if(!ad.user){setMsg({type:'error',text:'No se pudo crear la cuenta.'});setCreating(false);return;}
+    // Gestiones y el aula virtual comparten las cuentas. Si el correo ya existía,
+    // Supabase no crea nada y devuelve un usuario con id inventado (identities vacío):
+    // hay que ligar el perfil a la cuenta real (ver supabase/2026_vincular_cuenta_existente.sql).
+    let userId=ad.user.id;let aviso='';
+    if(Array.isArray(ad.user.identities)&&ad.user.identities.length===0){
+      const{data:vc,error:ve}=await supabase.rpc('caeduc_vincular_cuenta_existente',{p_email:newUser.email,p_password:newUser.password});
+      if(ve||!vc?.encontrada){setMsg({type:'error',text:'El correo ya tiene cuenta, pero no se pudo vincular: '+(ve?.message||'cuenta no encontrada')});setCreating(false);return;}
+      userId=vc.id;
+      aviso=vc.password_asignada?' El correo ya tenía cuenta (creada con Google en el aula); se le asignó la contraseña que escribiste.':' El correo ya tenía cuenta con contraseña propia; debe ingresar con esa contraseña.';
+    }
+    const{error:pe}=await supabase.from('profiles').insert([{id:userId,name:newUser.name,role:newUser.role,email:newUser.email}]);
+    if(pe)setMsg({type:'warning',text:'Cuenta OK pero error en el perfil: '+pe.message});
+    else{setMsg({type:aviso?'warning':'success',text:`"${newUser.name}" creado.`+aviso});setNewUser({email:'',password:'',name:'',role:allRoles[0]});setShowModal(false);if(onRefreshMembers)onRefreshMembers();}
+  }catch(err){setMsg({type:'error',text:err.message});}setCreating(false);};
   const openEdit=(m)=>{setEditData({id:m.id,name:m.name||'',role:m.role||allRoles[0],email:m.email||'',permissions:m.permissions||null});setEditModal(true);setMsg(null);};
   const handleEdit=async(e)=>{e.preventDefault();setSaving(true);setMsg(null);try{await onUpdateMember(editData.id,{name:editData.name,role:editData.role,email:editData.email,permissions:editData.permissions});setMsg({type:'success',text:'Actualizado.'});setEditModal(null);}catch(err){setMsg({type:'error',text:err.message});}setSaving(false);};
   const handleDelete=async()=>{setDeleting(true);try{await supabase.from('profiles').delete().eq('id',deleteModal.id);setMsg({type:'success',text:`${deleteModal.name} eliminado del sistema.`});setDeleteModal(null);if(onRefreshMembers)onRefreshMembers();}catch(err){setMsg({type:'error',text:err.message});}setDeleting(false);};
