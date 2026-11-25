@@ -1151,6 +1151,7 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
 
   const buildEvento = () => ({
     title: fd.actividad || '',
+    type: fd.tipo || '',
     date: fd.fecha || '',
     time: aulaTime || '18:00',
     location: fd.sede_modalidad || '',
@@ -1167,12 +1168,14 @@ function ActividadFicha({mode,initialData,onSave,onClose,onAddGasto,onDeleteGast
   });
   const handlePublicarAula = async () => {
     if(!fd.fecha){ alert('Define la fecha de la actividad antes de publicar en el aula.'); return; }
+    if(!fd.tipo){ alert('Elige el tipo de actividad (taller, conferencia...) antes de publicar en el aula.'); return; }
     setPublishingAula(true);
     await onPublicarAula(initialData, buildEvento());
     setPublishingAula(false);
     setAulaOpen(false);
   };
   const handleActualizarAula = async () => {
+    if(!fd.tipo){ alert('Elige el tipo de actividad (taller, conferencia...) antes de actualizar el aula.'); return; }
     setPublishingAula(true);
     const res = await onActualizarAula(initialData, buildEvento());
     setPublishingAula(false);

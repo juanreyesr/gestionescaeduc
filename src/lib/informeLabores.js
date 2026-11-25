@@ -15,6 +15,8 @@
 
 import { activityDateKey, escapeRegistroHTML as esc, sinAcentos } from './registroActividadesReport.js';
 import { TIPOS_ACTIVIDAD } from './sincronizacion.js';
+import { barraHorizontal, COLORES, graficaBarras } from './graficasInforme.js';
+import { REFERENCIAS } from './historico2025.js';
 
 export const MESES = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -340,6 +342,107 @@ export const resumirPorMes = ({ actividades = [], certificados = [], desde = '',
   return { meses, totales };
 };
 
+// ── Comparativa con el año anterior ─────────────────────────────────────────
+
+const desplazarAnio = (fecha = '', anios = 0) => (fecha ? `${Number(fecha.slice(0, 4)) + anios}${fecha.slice(4)}` : '');
+
+// Datos del año anterior que se tienen para el período (o null).
+export const referenciaAnterior = (hasta = '', referencias = REFERENCIAS) => referencias[Number(hasta.slice(0, 4)) - 1] || null;
+
+// Período que se puede comparar: el elegido, un año antes, recortado a lo que
+// cubre el informe del año anterior. Se compara contra las mismas fechas.
+export const ventanaComparable = ({ desde = '', hasta = '', referencia = null } = {}) => {
+  if (!referencia || !desde || !hasta || desde > hasta) return null;
+  const desdeAnterior = desplazarAnio(desde, -1) > referencia.desde ? desplazarAnio(desde, -1) : referencia.desde;
+  const hastaAnterior = desplazarAnio(hasta, -1) < referencia.hasta ? desplazarAnio(hasta, -1) : referencia.hasta;
+  if (desdeAnterior > hastaAnterior) return null;
+  return {
+    anterior: { desde: desdeAnterior, hasta: hastaAnterior },
+    actual: { desde: desplazarAnio(desdeAnterior, 1), hasta: desplazarAnio(hastaAnterior, 1) },
+  };
+};
+
+const sumarCertificados = (certificados, desde, hasta) => (certificados || [])
+  .filter(item => item.mes >= desde.slice(0, 7) && item.mes <= hasta.slice(0, 7))
+  .reduce((suma, item) => suma + (Number(item.total) || 0), 0);
+
+// Variación porcentual redondeada; null si no hay base para compararla.
+export const variacion = (anterior, actual) => {
+  if (anterior === null || anterior === undefined || actual === null || actual === undefined) return null;
+  if (!anterior) return actual ? Infinity : 0;
+  return Math.round(((actual - anterior) / anterior) * 100);
+};
+
+export const textoVariacion = (valor) => {
+  if (valor === null) return '—';
+  if (valor === Infinity) return 'nuevo';
+  if (valor === 0) return 'sin cambio';
+  return `${valor > 0 ? '+' : '−'}${numero(Math.abs(valor))} %`;
+};
+
+// Compara el período elegido con las mismas fechas del año anterior.
+// - Actividades y participantes del año anterior: informe de referencia.
+// - Certificados del Aula Virtual: los del año anterior se leen del aula con las
+//   mismas fechas (`certificadosAnterior`); si no se pudieron leer, quedan sin comparar.
+// - Avales: de la tabla de avales del sistema, con las mismas reglas ambos años.
+export const compararConAnterior = ({
+  actividades = [],
+  certificados = [],
+  certificadosAnterior = null,
+  avales = [],
+  desde = '',
+  hasta = '',
+  referencia = referenciaAnterior(hasta),
+} = {}) => {
+  const ventana = ventanaComparable({ desde, hasta, referencia });
+  if (!ventana) return null;
+  const { anterior, actual } = ventana;
+  const actuales = actividades.filter(item => item.incluir !== false && dentroDelRango(item.fecha, actual.desde, actual.hasta));
+  const previas = referencia.actividades.filter(item => dentroDelRango(item.fecha, anterior.desde, anterior.hasta));
+  const enVivo = lista => lista.reduce((suma, item) => suma + (item.asistentes || 0), 0);
+
+  const certActual = sumarCertificados(certificados, actual.desde, actual.hasta);
+  const certAnterior = certificadosAnterior ? sumarCertificados(certificadosAnterior, anterior.desde, anterior.hasta) : null;
+  const avalesActual = resumirAvales({ avales, desde: actual.desde, hasta: actual.hasta });
+  const avalesAnterior = resumirAvales({ avales, desde: anterior.desde, hasta: anterior.hasta });
+
+  const indicadores = [
+    { clave: 'actividades', etiqueta: 'Actividades realizadas', anterior: previas.length, actual: actuales.length },
+    { clave: 'enVivo', etiqueta: 'Participantes en vivo', anterior: enVivo(previas), actual: enVivo(actuales) },
+    { clave: 'aula', etiqueta: 'Certificados en Aula Virtual', anterior: certAnterior, actual: certActual },
+    { clave: 'total', etiqueta: 'Total de beneficiados', anterior: certAnterior === null ? null : enVivo(previas) + certAnterior, actual: enVivo(actuales) + certActual },
+    { clave: 'avalesSolicitados', etiqueta: 'Avales solicitados', anterior: avalesAnterior.solicitados, actual: avalesActual.solicitados },
+    { clave: 'avalesAprobados', etiqueta: 'Avales aprobados', anterior: avalesAnterior.aprobados, actual: avalesActual.aprobados },
+  ].map(item => ({ ...item, variacion: variacion(item.anterior, item.actual) }));
+
+  const tiposAnterior = Object.fromEntries(contarTipos(previas).map(item => [item.tipo, item.actividades]));
+  const tiposActual = Object.fromEntries(contarTipos(actuales).map(item => [item.tipo, item.actividades]));
+  const tipos = [...new Set([...Object.keys(tiposActual), ...Object.keys(tiposAnterior)])]
+    .map(tipo => ({ tipo, anterior: tiposAnterior[tipo] || 0, actual: tiposActual[tipo] || 0 }))
+    .sort((a, b) => (a.tipo === SIN_TIPO) - (b.tipo === SIN_TIPO) || (b.actual + b.anterior) - (a.actual + a.anterior) || a.tipo.localeCompare(b.tipo, 'es'));
+
+  const meses = mesesDelPeriodo(actual.desde, actual.hasta).map((mes) => {
+    const mesAnterior = desplazarAnio(mes, -1);
+    return {
+      mes,
+      anterior: enVivo(previas.filter(item => mesDe(item.fecha) === mesAnterior)),
+      actual: enVivo(actuales.filter(item => mesDe(item.fecha) === mes)),
+      actividadesAnterior: previas.filter(item => mesDe(item.fecha) === mesAnterior).length,
+      actividadesActual: actuales.filter(item => mesDe(item.fecha) === mes).length,
+    };
+  });
+
+  return {
+    ventana,
+    anioActual: actual.desde.slice(0, 4),
+    anioAnterior: anterior.desde.slice(0, 4),
+    indicadores,
+    tipos,
+    meses,
+    fuente: referencia.fuente,
+  };
+};
+
 // ── Redacción ────────────────────────────────────────────────────────────────
 
 const numero = (valor) => new Intl.NumberFormat('es-GT').format(valor || 0);
@@ -446,6 +549,7 @@ export const construirBloques = ({
   fechaInforme,
   firmante = {},
   avales = null,
+  comparativa = null,
 } = {}) => {
   const { meses, totales } = resumen;
   const tiposTotales = totales.tipos || [];
@@ -478,9 +582,20 @@ export const construirBloques = ({
   const filasResumen = meses.map((mes, indice) => `<tr style="background:${indice % 2 ? '#f6f9fc' : '#fff'};"><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};">${esc(capitalizar(nombreMes(mes.mes)))}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:center;">${numero(mes.modalidades.Presencial)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:center;">${numero(mes.modalidades.Virtual)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:center;">${numero(mes.modalidades['Híbrida'])}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:right;">${numero(mes.enVivo)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:right;">${numero(mes.aula)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:right;font-weight:700;">${numero(mes.total)}</td></tr>`).join('');
   bloques.push(bloque(`<h2 style="margin:0;padding:4px 0 10px;font-size:14px;color:${AZUL_OSCURO};border-bottom:2px solid ${ROSA};">Resumen general</h2><div style="height:10px;"></div><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};"><colgroup><col style="width:22%"><col style="width:12%"><col style="width:11%"><col style="width:11%"><col style="width:14%"><col style="width:14%"><col style="width:16%"></colgroup><tr style="background:${AZUL};color:#fff;font-size:8px;text-transform:uppercase;letter-spacing:.3px;"><th style="padding:5px 7px;text-align:left;">Mes</th><th style="padding:5px 4px;text-align:center;">Presencial</th><th style="padding:5px 4px;text-align:center;">Virtual</th><th style="padding:5px 4px;text-align:center;">Híbrida</th><th style="padding:5px 7px;text-align:right;">En vivo</th><th style="padding:5px 7px;text-align:right;">Aula virtual</th><th style="padding:5px 7px;text-align:right;">Beneficiados</th></tr>${filasResumen}<tr style="background:#eaf1f8;font-weight:800;"><td style="padding:6px 7px;border-top:2px solid ${AZUL};">Total</td><td style="padding:6px 4px;border-top:2px solid ${AZUL};text-align:center;">${numero(totales.modalidades.Presencial)}</td><td style="padding:6px 4px;border-top:2px solid ${AZUL};text-align:center;">${numero(totales.modalidades.Virtual)}</td><td style="padding:6px 4px;border-top:2px solid ${AZUL};text-align:center;">${numero(totales.modalidades['Híbrida'])}</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:right;">${numero(totales.enVivo)}</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:right;">${numero(totales.aula)}</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:right;">${numero(totales.total)}</td></tr></table><p style="margin:0;padding:6px 0 16px;font-size:8.5px;line-height:1.5;color:${GRIS};">Las cifras cuentan participaciones: un mismo agremiado puede haber participado en varias actividades. «En vivo» incluye la asistencia presencial y virtual de cada actividad; «Aula virtual» son los certificados emitidos por contenido grabado en el mes correspondiente.</p>`));
 
+  if (meses.some(mes => mes.total > 0)) {
+    const grafica = graficaBarras({
+      titulo: 'Beneficiados por mes',
+      modo: 'apilada',
+      series: [{ nombre: 'Participantes en vivo', color: COLORES.enVivo }, { nombre: 'Certificados en Aula Virtual', color: COLORES.aula }],
+      categorias: meses.map(mes => ({ etiqueta: capitalizar(MESES[Number(mes.mes.slice(5, 7)) - 1].slice(0, 3)), valores: [mes.enVivo, mes.aula] })),
+    });
+    bloques.push(bloque(grafica));
+  }
+
   if (tiposTotales.length) {
-    const filasTipos = tiposTotales.map((item, indice) => `<tr style="background:${indice % 2 ? '#f6f9fc' : '#fff'};"><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};">${esc(item.tipo)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:center;">${numero(item.actividades)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:right;">${numero(item.enVivo)}</td></tr>`).join('');
-    bloques.push(bloque(`${tituloSeccion('Actividades por tipo')}<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};margin-bottom:18px;"><colgroup><col style="width:50%"><col style="width:22%"><col style="width:28%"></colgroup><tr style="background:${AZUL};color:#fff;font-size:8px;text-transform:uppercase;letter-spacing:.3px;"><th style="padding:5px 7px;text-align:left;">Tipo de actividad</th><th style="padding:5px 7px;text-align:center;">Actividades</th><th style="padding:5px 7px;text-align:right;">Participantes en vivo</th></tr>${filasTipos}<tr style="background:#eaf1f8;font-weight:800;"><td style="padding:6px 7px;border-top:2px solid ${AZUL};">Total</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:center;">${numero(totales.actividades)}</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:right;">${numero(totales.enVivo)}</td></tr></table>`));
+    const maximoTipo = Math.max(...tiposTotales.map(item => item.actividades));
+    const filasTipos = tiposTotales.map((item, indice) => `<tr style="background:${indice % 2 ? '#f6f9fc' : '#fff'};"><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};">${esc(item.tipo)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:center;">${numero(item.actividades)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};vertical-align:middle;">${barraHorizontal(item.actividades, maximoTipo)}</td><td style="padding:5px 7px;border-bottom:1px solid ${BORDE};text-align:right;">${numero(item.enVivo)}</td></tr>`).join('');
+    bloques.push(bloque(`${tituloSeccion('Actividades por tipo')}<table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};margin-bottom:18px;"><colgroup><col style="width:30%"><col style="width:14%"><col style="width:34%"><col style="width:22%"></colgroup><tr style="background:${AZUL};color:#fff;font-size:8px;text-transform:uppercase;letter-spacing:.3px;"><th style="padding:5px 7px;text-align:left;">Tipo de actividad</th><th style="padding:5px 7px;text-align:center;">Actividades</th><th style="padding:5px 7px;text-align:left;"></th><th style="padding:5px 7px;text-align:right;">Participantes en vivo</th></tr>${filasTipos}<tr style="background:#eaf1f8;font-weight:800;"><td style="padding:6px 7px;border-top:2px solid ${AZUL};">Total</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:center;">${numero(totales.actividades)}</td><td style="padding:6px 7px;border-top:2px solid ${AZUL};"></td><td style="padding:6px 7px;border-top:2px solid ${AZUL};text-align:right;">${numero(totales.enVivo)}</td></tr></table>`));
   }
 
   if (avales) {
@@ -509,6 +624,46 @@ export const construirBloques = ({
         bloques.push(bloque(filaAval(aval, indice), { repetir: encabezadoAvales }));
       });
       bloques.push(bloque('<div style="height:16px;"></div>', { espacio: true }));
+    }
+  }
+
+  if (comparativa) {
+    const { anioAnterior: previo, anioActual: actualAnio, indicadores, ventana } = comparativa;
+    const ind = Object.fromEntries(indicadores.map(item => [item.clave, item]));
+    const rango = `del ${fechaLarga(ventana.actual.desde).replace(/ de \d{4}$/, '')} al ${fechaLarga(ventana.actual.hasta).replace(/ de \d{4}$/, '')}`;
+    const frase = (item, singular, pluralTexto) => {
+      const cambio = item.variacion === null || item.variacion === Infinity || item.variacion === 0 ? '' : ` (${textoVariacion(item.variacion)})`;
+      return `${plural(item.actual, singular, pluralTexto)} frente a ${numero(item.anterior)} en ${previo}${cambio}`;
+    };
+    const partes = [
+      `Para dimensionar el avance, se comparan las mismas fechas de ambos años (${rango}). En ${actualAnio} se realizaron ${frase(ind.actividades, 'actividad', 'actividades')}, con ${frase(ind.enVivo, 'participante en vivo', 'participantes en vivo')}.`,
+      ind.aula.anterior !== null ? `Los certificados obtenidos en el Aula Virtual fueron ${numero(ind.aula.actual)} frente a ${numero(ind.aula.anterior)}${ind.aula.variacion !== null && ind.aula.variacion !== Infinity && ind.aula.variacion !== 0 ? ` (${textoVariacion(ind.aula.variacion)})` : ''}.` : '',
+      ind.avalesAprobados.actual || ind.avalesAprobados.anterior
+        ? `En avales se ${ind.avalesAprobados.actual === 1 ? 'aprobó' : 'aprobaron'} ${frase(ind.avalesAprobados, 'aval', 'avales')}.`
+        : '',
+    ].filter(Boolean).join(' ');
+    const celda = `padding:5px 7px;border-bottom:1px solid ${BORDE};`;
+    const valor = v => (v === null || v === undefined ? '—' : numero(v));
+    const colorVariacion = v => (v === null || v === 0 ? GRIS : v > 0 ? '#15803d' : '#b91c1c');
+    const filasIndicadores = indicadores.map((item, indice) => `<tr style="background:${indice % 2 ? '#f6f9fc' : '#fff'};"><td style="${celda}">${esc(item.etiqueta)}</td><td style="${celda}text-align:right;">${valor(item.anterior)}</td><td style="${celda}text-align:right;font-weight:700;">${valor(item.actual)}</td><td style="${celda}text-align:right;font-weight:700;color:${colorVariacion(item.variacion)};">${esc(textoVariacion(item.variacion))}</td></tr>`).join('');
+    const encabezadoAnios = (primera) => `<tr style="background:${AZUL};color:#fff;font-size:8px;text-transform:uppercase;letter-spacing:.3px;"><th style="padding:5px 7px;text-align:left;">${primera}</th><th style="padding:5px 7px;text-align:right;">${previo}</th><th style="padding:5px 7px;text-align:right;">${actualAnio}</th><th style="padding:5px 7px;text-align:right;">Variación</th></tr>`;
+    bloques.push(bloque(`${tituloSeccion(`Comparativo con ${previo}`)}<p style="${P}">${esc(partes)}</p><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};margin-bottom:16px;"><colgroup><col style="width:43%"><col style="width:19%"><col style="width:19%"><col style="width:19%"></colgroup>${encabezadoAnios('Indicador')}${filasIndicadores}</table>`, { conSiguiente: true }));
+
+    if (comparativa.meses.some(mes => mes.anterior || mes.actual)) {
+      bloques.push(bloque(graficaBarras({
+        titulo: `Participantes en vivo por mes: ${previo} y ${actualAnio}`,
+        modo: 'agrupada',
+        series: [{ nombre: previo, color: COLORES.anioAnterior }, { nombre: actualAnio, color: COLORES.anioActual }],
+        categorias: comparativa.meses.map(mes => ({ etiqueta: capitalizar(MESES[Number(mes.mes.slice(5, 7)) - 1].slice(0, 3)), valores: [mes.anterior, mes.actual] })),
+      })));
+    }
+
+    if (comparativa.tipos.length) {
+      const filasTipos = comparativa.tipos.map((item, indice) => {
+        const cambio = variacion(item.anterior, item.actual);
+        return `<tr style="background:${indice % 2 ? '#f6f9fc' : '#fff'};"><td style="${celda}">${esc(item.tipo)}</td><td style="${celda}text-align:right;">${numero(item.anterior)}</td><td style="${celda}text-align:right;font-weight:700;">${numero(item.actual)}</td><td style="${celda}text-align:right;font-weight:700;color:${colorVariacion(cambio)};">${esc(textoVariacion(cambio))}</td></tr>`;
+      }).join('');
+      bloques.push(bloque(`<div style="font-size:10.5px;font-weight:700;color:${TEXTO};padding-bottom:8px;">Actividades por tipo: ${previo} y ${actualAnio}</div><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};"><colgroup><col style="width:43%"><col style="width:19%"><col style="width:19%"><col style="width:19%"></colgroup>${encabezadoAnios('Tipo de actividad')}${filasTipos}</table><p style="margin:0;padding:6px 0 16px;font-size:8.5px;line-height:1.5;color:${GRIS};">Datos de ${previo}: actividades y participantes tomados del «${esc(comparativa.fuente)}» (los diplomados se cuentan en su mes de inicio); certificados del Aula Virtual y avales tomados de los registros del sistema con las mismas fechas. «Nuevo» indica que no hubo actividades de ese tipo en ${previo}.</p>`));
     }
   }
 
