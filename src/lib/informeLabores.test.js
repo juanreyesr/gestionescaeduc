@@ -208,3 +208,28 @@ test('los datos de 2025 suman lo reportado en su informe', async () => {
   assert.equal(INFORME_2025.actividades.length, 21);
   assert.equal(total, INFORME_2025.totalReportado);
 });
+
+test('los avales aprobados del año anterior salen del total de su informe', async () => {
+  const { avalesAprobadosComparados, compararConAnterior, construirBloques, resumirPorMes } = await import('./informeLabores.js');
+  const referencia = { fuente: 'Informe 2025', desde: '2025-06-01', hasta: '2025-12-31', actividades: [], avalesOtorgados: { desde: '2025-02-01', hasta: '2025-12-31', total: 32 } };
+  const avales = [
+    { created_at: '2026-01-10T15:00:00Z', status: 'Aprobado', approval_date: '2026-01-20' }, // antes de febrero: no cuenta
+    { created_at: '2026-03-01T15:00:00Z', status: 'Aprobado', approval_date: '2026-03-05' },
+    { created_at: '2026-10-01T15:00:00Z', status: 'Aprobado', approval_date: '2026-10-05' },
+    { created_at: '2026-12-01T15:00:00Z', status: 'Aprobado', approval_date: '2026-12-10' },
+  ];
+  const parcial = avalesAprobadosComparados({ avales, desde: '2026-01-01', hasta: '2026-11-25', referencia });
+  assert.deepEqual([parcial.anterior, parcial.actual, parcial.completo], [32, 2, false]);
+  assert.equal(parcial.etiqueta, 'Avales aprobados (feb–dic; 2026 al 25 de noviembre)');
+  const completo = avalesAprobadosComparados({ avales, desde: '2026-01-01', hasta: '2026-12-31', referencia });
+  assert.deepEqual([completo.actual, completo.completo, completo.etiqueta], [3, true, 'Avales aprobados (feb–dic)']);
+
+  const c = compararConAnterior({ avales, referencia, desde: '2026-01-01', hasta: '2026-11-25' });
+  const ind = Object.fromEntries(c.indicadores.map(i => [i.clave, i]));
+  assert.equal(ind.avalesAprobados.anterior, 32);
+  assert.equal(ind.avalesAprobados.variacion, -94);
+  assert.equal(ind.avalesSolicitados.anterior, null);
+  const resumen = resumirPorMes({ actividades: [], desde: '2026-01-01', hasta: '2026-11-25' });
+  const html = construirBloques({ resumen, comparativa: c, desde: '2026-01-01', hasta: '2026-11-25', fechaInforme: '2026-11-25' }).map(b => b.html).join('');
+  assert.match(html, /frente a los 32 otorgados de febrero a diciembre de 2025/);
+});

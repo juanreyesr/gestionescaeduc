@@ -294,7 +294,7 @@ export default function InformeLaboresView({ publicaciones = [], avales = [], me
                   </tbody>
                 </table>
               </div>
-              <p className="mt-2 text-xs text-slate-500">Actividades y participantes de {comparativa.anioAnterior}: tomados del informe «{comparativa.fuente}». Certificados y avales: registros del sistema con las mismas fechas.{certificadosAnterior === null ? ' No se pudieron leer los certificados del año anterior; aparecen como «—».' : ''}</p>
+              <p className="mt-2 text-xs text-slate-500">Actividades y participantes de {comparativa.anioAnterior}: tomados del informe «{comparativa.fuente}». Avales aprobados de {comparativa.anioAnterior}: total del mismo informe. Certificados y avales solicitados: registros del sistema con las mismas fechas.{certificadosAnterior === null ? ' No se pudieron leer los certificados del año anterior; aparecen como «—».' : ''}</p>
             </section>
           )}
 
