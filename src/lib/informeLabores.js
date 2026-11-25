@@ -380,6 +380,34 @@ export const textoVariacion = (valor) => {
   return `${valor > 0 ? '+' : '−'}${numero(Math.abs(valor))} %`;
 };
 
+const mesCorto = (fecha = '') => MESES[Number(fecha.slice(5, 7)) - 1]?.slice(0, 3) || '';
+
+// Avales aprobados: si el informe del año anterior trae su total (p. ej. 32 de
+// febrero a diciembre de 2025), se usa ese número y se compara con los avales
+// aprobados del año actual en esas mismas fechas, dentro del período elegido.
+// Sin ese dato, se comparan los registros del sistema.
+export const avalesAprobadosComparados = ({ avales = [], desde = '', hasta = '', referencia = null, sistema = null } = {}) => {
+  const ref = referencia?.avalesOtorgados;
+  if (!ref) return { clave: 'avalesAprobados', etiqueta: 'Avales aprobados', anterior: sistema?.anterior ?? null, actual: sistema?.actual ?? 0 };
+  const desdeRef = desplazarAnio(ref.desde, 1);
+  const hastaRef = desplazarAnio(ref.hasta, 1);
+  const desdeActual = desdeRef > desde ? desdeRef : desde;
+  const hastaActual = hastaRef < hasta ? hastaRef : hasta;
+  const actual = desdeActual <= hastaActual ? resumirAvales({ avales, desde: desdeActual, hasta: hastaActual }).aprobados : 0;
+  const completo = desdeActual === desdeRef && hastaActual === hastaRef;
+  const rango = `${mesCorto(ref.desde)}–${mesCorto(ref.hasta)}`;
+  return {
+    clave: 'avalesAprobados',
+    etiqueta: completo ? `Avales aprobados (${rango})` : `Avales aprobados (${rango}; ${hastaActual.slice(0, 4)} al ${fechaLarga(hastaActual).replace(/ de \d{4}$/, '')})`,
+    anterior: ref.total,
+    actual,
+    deInforme: true,
+    periodoAnterior: { desde: ref.desde, hasta: ref.hasta },
+    periodoActual: { desde: desdeActual, hasta: hastaActual },
+    completo,
+  };
+};
+
 // Compara el período elegido con las mismas fechas del año anterior.
 // - Actividades y participantes del año anterior: informe de referencia.
 // - Certificados del Aula Virtual: los del año anterior se leen del aula con las
@@ -411,8 +439,10 @@ export const compararConAnterior = ({
     { clave: 'enVivo', etiqueta: 'Participantes en vivo', anterior: enVivo(previas), actual: enVivo(actuales) },
     { clave: 'aula', etiqueta: 'Certificados en Aula Virtual', anterior: certAnterior, actual: certActual },
     { clave: 'total', etiqueta: 'Total de beneficiados', anterior: certAnterior === null ? null : enVivo(previas) + certAnterior, actual: enVivo(actuales) + certActual },
-    { clave: 'avalesSolicitados', etiqueta: 'Avales solicitados', anterior: avalesAnterior.solicitados, actual: avalesActual.solicitados },
-    { clave: 'avalesAprobados', etiqueta: 'Avales aprobados', anterior: avalesAnterior.aprobados, actual: avalesActual.aprobados },
+    // El informe del año anterior no trae avales solicitados: se usa el sistema
+    // si tiene registros de esas fechas; si no, queda sin comparar.
+    { clave: 'avalesSolicitados', etiqueta: 'Avales solicitados', anterior: avalesAnterior.solicitados || null, actual: avalesActual.solicitados },
+    avalesAprobadosComparados({ avales, desde, hasta, referencia, sistema: { anterior: avalesAnterior.aprobados, actual: avalesActual.aprobados } }),
   ].map(item => ({ ...item, variacion: variacion(item.anterior, item.actual) }));
 
   const tiposAnterior = Object.fromEntries(contarTipos(previas).map(item => [item.tipo, item.actividades]));
@@ -638,9 +668,16 @@ export const construirBloques = ({
     const partes = [
       `Para dimensionar el avance, se comparan las mismas fechas de ambos años (${rango}). En ${actualAnio} se realizaron ${frase(ind.actividades, 'actividad', 'actividades')}, con ${frase(ind.enVivo, 'participante en vivo', 'participantes en vivo')}.`,
       ind.aula.anterior !== null ? `Los certificados obtenidos en el Aula Virtual fueron ${numero(ind.aula.actual)} frente a ${numero(ind.aula.anterior)}${ind.aula.variacion !== null && ind.aula.variacion !== Infinity && ind.aula.variacion !== 0 ? ` (${textoVariacion(ind.aula.variacion)})` : ''}.` : '',
-      ind.avalesAprobados.actual || ind.avalesAprobados.anterior
-        ? `En avales se ${ind.avalesAprobados.actual === 1 ? 'aprobó' : 'aprobaron'} ${frase(ind.avalesAprobados, 'aval', 'avales')}.`
-        : '',
+      ind.avalesAprobados.deInforme
+        ? (() => {
+          const aval = ind.avalesAprobados;
+          const cambio = aval.variacion === null || aval.variacion === Infinity || aval.variacion === 0 ? '' : ` (${textoVariacion(aval.variacion)})`;
+          const pAnterior = `de ${MESES[Number(aval.periodoAnterior.desde.slice(5, 7)) - 1]} a ${MESES[Number(aval.periodoAnterior.hasta.slice(5, 7)) - 1]}`;
+          return `En avales, del ${fechaLarga(aval.periodoActual.desde)} al ${fechaLarga(aval.periodoActual.hasta)} se ${aval.actual === 1 ? 'aprobó' : 'aprobaron'} ${plural(aval.actual, 'aval', 'avales')}, frente a los ${numero(aval.anterior)} otorgados ${pAnterior} de ${previo}${cambio}${aval.completo ? '' : `; el año en curso aún no cierra ese período`}.`;
+        })()
+        : ind.avalesAprobados.actual || ind.avalesAprobados.anterior
+          ? `En avales se ${ind.avalesAprobados.actual === 1 ? 'aprobó' : 'aprobaron'} ${frase(ind.avalesAprobados, 'aval', 'avales')}.`
+          : '',
     ].filter(Boolean).join(' ');
     const celda = `padding:5px 7px;border-bottom:1px solid ${BORDE};`;
     const valor = v => (v === null || v === undefined ? '—' : numero(v));
@@ -663,7 +700,7 @@ export const construirBloques = ({
         const cambio = variacion(item.anterior, item.actual);
         return `<tr style="background:${indice % 2 ? '#f6f9fc' : '#fff'};"><td style="${celda}">${esc(item.tipo)}</td><td style="${celda}text-align:right;">${numero(item.anterior)}</td><td style="${celda}text-align:right;font-weight:700;">${numero(item.actual)}</td><td style="${celda}text-align:right;font-weight:700;color:${colorVariacion(cambio)};">${esc(textoVariacion(cambio))}</td></tr>`;
       }).join('');
-      bloques.push(bloque(`<div style="font-size:10.5px;font-weight:700;color:${TEXTO};padding-bottom:8px;">Actividades por tipo: ${previo} y ${actualAnio}</div><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};"><colgroup><col style="width:43%"><col style="width:19%"><col style="width:19%"><col style="width:19%"></colgroup>${encabezadoAnios('Tipo de actividad')}${filasTipos}</table><p style="margin:0;padding:6px 0 16px;font-size:8.5px;line-height:1.5;color:${GRIS};">Datos de ${previo}: actividades y participantes tomados del «${esc(comparativa.fuente)}» (los diplomados se cuentan en su mes de inicio); certificados del Aula Virtual y avales tomados de los registros del sistema con las mismas fechas. «Nuevo» indica que no hubo actividades de ese tipo en ${previo}.</p>`));
+      bloques.push(bloque(`<div style="font-size:10.5px;font-weight:700;color:${TEXTO};padding-bottom:8px;">Actividades por tipo: ${previo} y ${actualAnio}</div><table style="width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px;color:${TEXTO};"><colgroup><col style="width:43%"><col style="width:19%"><col style="width:19%"><col style="width:19%"></colgroup>${encabezadoAnios('Tipo de actividad')}${filasTipos}</table><p style="margin:0;padding:6px 0 16px;font-size:8.5px;line-height:1.5;color:${GRIS};">Datos de ${previo}: actividades y participantes tomados del «${esc(comparativa.fuente)}» (los diplomados se cuentan en su mes de inicio); avales aprobados de ${previo}: total reportado en ese mismo informe, comparado con los aprobados del año en curso en esas fechas; certificados del Aula Virtual y avales solicitados tomados de los registros del sistema con las mismas fechas («—» cuando no hay registro). «Nuevo» indica que no hubo actividades de ese tipo en ${previo}.</p>`));
     }
   }
 
