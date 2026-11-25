@@ -8,7 +8,7 @@
 --    no depender de las políticas RLS del aula, y solo la pueden usar personas
 --    con sesión iniciada en Gestiones. No modifica nada del aula.
 -- 2. caeduc_informe_labores_ajustes: guarda lo que se corrige en pantalla por
---    actividad (participantes, modalidad o excluirla del informe) para no
+--    actividad (participantes, tipo, modalidad o excluirla del informe) para no
 --    volver a escribirlo cada vez que se genera.
 
 create or replace function public.caeduc_informe_labores_datos(p_desde date, p_hasta date)
@@ -70,8 +70,12 @@ create table if not exists public.caeduc_informe_labores_ajustes (
   asistentes integer check (asistentes is null or asistentes >= 0),
   modalidad text check (modalidad is null or modalidad in ('Presencial', 'Virtual', 'Híbrida')),
   incluir boolean not null default true,
+  tipo text,
   updated_at timestamptz not null default now()
 );
+
+-- Para bases donde la tabla ya existía (ver también 2026_informe_labores_tipo.sql).
+alter table public.caeduc_informe_labores_ajustes add column if not exists tipo text;
 
 alter table public.caeduc_informe_labores_ajustes enable row level security;
 

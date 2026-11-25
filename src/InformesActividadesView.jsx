@@ -51,6 +51,7 @@ export default function InformesActividadesView({
   appSettings = {},
   oficios = [],
   publicaciones = [],
+  avales = [],
   informes = [],
   onSaveInforme,
   onDownloadInforme,
@@ -205,7 +206,7 @@ export default function InformesActividadesView({
       </div>
 
       {tab === 'labores' ? (
-        <InformeLaboresView publicaciones={publicaciones} {...informeLabores} />
+        <InformeLaboresView publicaciones={publicaciones} avales={avales} {...informeLabores} />
       ) : tab === 'viaticos' ? (
         <InformesViaticosView appSettings={appSettings} onDownload={onDownloadInformeViaticos} />
       ) : (

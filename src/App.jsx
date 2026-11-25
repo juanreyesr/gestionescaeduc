@@ -1737,7 +1737,7 @@ export default function CAEDUCApp() {
             {currentModule==='oficios' && <OficiosAdminView oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onCreateOficio={createOficio} onUpdateOficio={updateOficio} onDeleteOficio={deleteOficio} appSettings={appSettings} preFillData={oficioPreFill} onClearPreFill={()=>setOficioPreFill(null)}/>}
             {currentModule==='publicaciones' && <PublicacionesView oficios={oficios} appSettings={appSettings} onUpdateSetting={updateSetting} onGenerateActivityReport={(activities, options) => openActivityRegisterReport(activities, options, appSettings)}/>}
             {currentModule==='informes_actividades' && (
-              <InformesActividadesView appSettings={appSettings} oficios={oficios} publicaciones={publicaciones} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onDownloadInformeViaticos={(informe,opts)=>openInformeViaticos(informe,opts,appSettings)} informeLabores={informeLaboresProps(appSettings)}/>
+              <InformesActividadesView appSettings={appSettings} oficios={oficios} publicaciones={publicaciones} avales={avales} informes={informesActividades} onSaveInforme={saveInformeActividad} onDownloadInforme={(informe)=>openInformeActividad(informe,appSettings,'download')} onDownloadInformeViaticos={(informe,opts)=>openInformeViaticos(informe,opts,appSettings)} informeLabores={informeLaboresProps(appSettings)}/>
             )}
             {currentModule==='agendas' && <AgendasView/>}
             {currentModule==='directorio' && <DirectorioView/>}
