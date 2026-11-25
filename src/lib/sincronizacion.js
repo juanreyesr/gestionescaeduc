@@ -121,7 +121,8 @@ export const faltantesPublicacion = (pub = {}, tarifas) => {
   if (!fechaISO(pub.actividad_fecha)) add('Fecha válida (ej. 20 de agosto de 2026)', true);
   if (!texto(pub.actividad_hora)) add('Hora');
   if (!modalidadDe(pub)) add('Modalidad (virtual, presencial o híbrida)');
-  if (!texto(pub.actividad_tipo)) add('Tipo de actividad');
+  // El tipo es obligatorio para publicar en el aula: lo usa el informe de labores.
+  if (!texto(pub.actividad_tipo)) add('Tipo de actividad (taller, conferencia...)', true);
   if (!texto(pub.area)) add('Área de la planificación');
   if (!texto(pub.ponente_nombre)) add('Nombre del ponente');
   if (!montoPorGrado(pub.ponente_grado || '', tarifas)) add('Grado académico del ponente (define el honorario)');
@@ -225,6 +226,9 @@ export const eventoAulaDesdePublicacion = (pub = {}, existente = null) => {
   return {
     ...base,
     title: texto(pub.actividad_nombre),
+    // Tipo de actividad (misma lista que el aula); se conserva el del aula si
+    // la publicación no lo trae.
+    type: texto(pub.actividad_tipo) || base.type || '',
     date: fechaISO(pub.actividad_fecha),
     time: texto(pub.actividad_hora).slice(0, 5) || base.time || '18:00',
     horas: Number(pub.duracion_horas) > 0 ? String(pub.duracion_horas) : (base.horas || ''),

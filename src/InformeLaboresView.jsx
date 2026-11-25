@@ -10,12 +10,13 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Award, CalendarRange, CheckCircle2, Download, Eye, Loader, RefreshCw,
+  AlertCircle, Award, BarChart3, CalendarRange, CheckCircle2, Download, Eye, Loader, RefreshCw,
 } from 'lucide-react';
 import { supabase } from './supabaseClient.js';
 import {
   ALTO_CONTENIDO,
   ANCHO_CONTENIDO,
+  compararConAnterior,
   componerPaginas,
   construirBloques,
   etiquetaPeriodo,
@@ -24,11 +25,14 @@ import {
   nombreArchivoLabores,
   nombreMes,
   paginarBloques,
+  referenciaAnterior,
   resumirAvales,
   resumirPorMes,
   reunirActividades,
   SIN_TIPO,
+  textoVariacion,
   TIPOS,
+  ventanaComparable,
 } from './lib/informeLabores.js';
 
 const TABLA_AJUSTES = 'caeduc_informe_labores_ajustes';
@@ -87,6 +91,8 @@ export default function InformeLaboresView({ publicaciones = [], avales = [], me
   const [cargando, setCargando] = useState(false);
   const [aviso, setAviso] = useState(null);
   const [datosAula, setDatosAula] = useState(null);
+  // Certificados del aula en las mismas fechas del año anterior (comparativa).
+  const [certificadosAnterior, setCertificadosAnterior] = useState(null);
   const [ajustes, setAjustes] = useState({});
   const [generando, setGenerando] = useState('');
 
@@ -97,10 +103,15 @@ export default function InformeLaboresView({ publicaciones = [], avales = [], me
     }
     setCargando(true);
     setAviso(null);
-    const [{ data, error }, ajustesResp] = await Promise.all([
+    const ventana = ventanaComparable({ desde, hasta, referencia: referenciaAnterior(hasta) });
+    const [{ data, error }, ajustesResp, anteriorResp] = await Promise.all([
       supabase.rpc('caeduc_informe_labores_datos', { p_desde: desde, p_hasta: hasta }),
       supabase.from(TABLA_AJUSTES).select('*'),
+      ventana
+        ? supabase.rpc('caeduc_informe_labores_datos', { p_desde: ventana.anterior.desde, p_hasta: ventana.anterior.hasta })
+        : Promise.resolve({ data: null, error: null }),
     ]);
+    setCertificadosAnterior(ventana && !anteriorResp.error ? (anteriorResp.data?.certificados || []) : null);
     setCargando(false);
     if (error) {
       setDatosAula({ actividades: [], certificados: [] });
@@ -131,6 +142,15 @@ export default function InformeLaboresView({ publicaciones = [], avales = [], me
 
   const resumenAvales = useMemo(() => resumirAvales({ avales, desde, hasta }), [avales, desde, hasta]);
 
+  const comparativa = useMemo(() => (datosAula ? compararConAnterior({
+    actividades,
+    certificados: datosAula.certificados,
+    certificadosAnterior,
+    avales,
+    desde,
+    hasta,
+  }) : null), [datosAula, actividades, certificadosAnterior, avales, desde, hasta]);
+
   const guardarAjuste = async (clave, cambios) => {
     const siguiente = { ...(ajustes[clave] || { clave, incluir: true }), ...cambios, clave };
     setAjustes(actual => ({ ...actual, [clave]: siguiente }));
@@ -158,7 +178,7 @@ export default function InformeLaboresView({ publicaciones = [], avales = [], me
   const generar = async (modo) => {
     setGenerando(modo);
     try {
-      const bloques = construirBloques({ resumen, avales: resumenAvales, desde, hasta, fechaInforme, firmante });
+      const bloques = construirBloques({ resumen, avales: resumenAvales, comparativa, desde, hasta, fechaInforme, firmante });
       const paginas = paginarEnNavegador(bloques);
       const html = componerPaginas(paginas, { membreteUrl, titulo: `Informe de labores CAEDUC ${etiquetaPeriodo(desde, hasta)}` });
       if (modo === 'vista') onPreview(html);
@@ -250,6 +270,33 @@ export default function InformeLaboresView({ publicaciones = [], avales = [], me
               </details>
             )}
           </section>
+
+          {comparativa && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-base font-black text-slate-800"><BarChart3 size={19} className="text-caeduc-blue"/> Comparativo con {comparativa.anioAnterior}</h2>
+                <p className="text-xs text-slate-500">Mismas fechas en ambos años: {fechaLarga(comparativa.ventana.actual.desde).replace(/ de \d{4}$/, '')} al {fechaLarga(comparativa.ventana.actual.hasta).replace(/ de \d{4}$/, '')}.</p>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[480px] text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr><th className="px-2 py-2">Indicador</th><th className="px-2 py-2 text-right">{comparativa.anioAnterior}</th><th className="px-2 py-2 text-right">{comparativa.anioActual}</th><th className="px-2 py-2 text-right">Variación</th></tr>
+                  </thead>
+                  <tbody>
+                    {comparativa.indicadores.map(item => (
+                      <tr key={item.clave} className="border-t border-slate-100">
+                        <td className="px-2 py-2 text-slate-700">{item.etiqueta}</td>
+                        <td className="px-2 py-2 text-right tabular-nums text-slate-600">{item.anterior === null ? '—' : new Intl.NumberFormat('es-GT').format(item.anterior)}</td>
+                        <td className="px-2 py-2 text-right font-bold tabular-nums text-slate-800">{new Intl.NumberFormat('es-GT').format(item.actual)}</td>
+                        <td className={`px-2 py-2 text-right font-bold tabular-nums ${item.variacion === null || item.variacion === 0 ? 'text-slate-400' : item.variacion > 0 ? 'text-emerald-700' : 'text-red-700'}`}>{textoVariacion(item.variacion)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Actividades y participantes de {comparativa.anioAnterior}: tomados del informe «{comparativa.fuente}». Certificados y avales: registros del sistema con las mismas fechas.{certificadosAnterior === null ? ' No se pudieron leer los certificados del año anterior; aparecen como «—».' : ''}</p>
+            </section>
+          )}
 
           {sinTipo > 0 && (
             <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">

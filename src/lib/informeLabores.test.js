@@ -157,3 +157,54 @@ test('el informe incluye tipo de actividad y la sección de avales', () => {
   assert.match(html, /CAEDUC-010/);
   assert.match(html, /10\/02\/2026/);
 });
+
+test('la comparativa usa las mismas fechas del año anterior y lo que cubre su informe', async () => {
+  const { compararConAnterior, ventanaComparable, textoVariacion } = await import('./informeLabores.js');
+  const referencia = {
+    fuente: 'Informe 2025', desde: '2025-06-01', hasta: '2025-12-31',
+    actividades: [
+      { fecha: '2025-08-09', tipo: 'Webinar', asistentes: 100 },
+      { fecha: '2025-09-10', tipo: 'Taller', asistentes: 50 },
+      { fecha: '2025-12-06', tipo: 'Seminario', asistentes: 245 }, // fuera: después del 25 nov
+    ],
+  };
+  assert.equal(ventanaComparable({ desde: '2026-01-01', hasta: '2026-05-31', referencia }), null);
+  const v = ventanaComparable({ desde: '2026-01-01', hasta: '2026-11-25', referencia });
+  assert.deepEqual(v, { anterior: { desde: '2025-06-01', hasta: '2025-11-25' }, actual: { desde: '2026-06-01', hasta: '2026-11-25' } });
+
+  const actividades = [
+    { fecha: '2026-03-01', tipo: 'Taller', asistentes: 999, incluir: true }, // antes de la ventana
+    { fecha: '2026-08-15', tipo: 'Taller', asistentes: 80, incluir: true },
+    { fecha: '2026-09-15', tipo: 'Taller', asistentes: 40, incluir: true },
+    { fecha: '2026-09-20', tipo: 'Webinar', asistentes: 70, incluir: false },
+  ];
+  const avales = [
+    { created_at: '2025-07-01T15:00:00Z', status: 'Aprobado', approval_date: '2025-07-05' },
+    { created_at: '2026-07-01T15:00:00Z', status: 'Aprobado', approval_date: '2026-07-05' },
+    { created_at: '2026-08-01T15:00:00Z', status: 'Aprobado', approval_date: '2026-08-05' },
+  ];
+  const c = compararConAnterior({
+    actividades, avales, referencia, desde: '2026-01-01', hasta: '2026-11-25',
+    certificados: [{ mes: '2026-05', total: 500 }, { mes: '2026-10', total: 30 }],
+    certificadosAnterior: [{ mes: '2025-10', total: 20 }],
+  });
+  const ind = Object.fromEntries(c.indicadores.map(i => [i.clave, i]));
+  assert.deepEqual([ind.actividades.anterior, ind.actividades.actual, ind.actividades.variacion], [2, 2, 0]);
+  assert.deepEqual([ind.enVivo.anterior, ind.enVivo.actual, ind.enVivo.variacion], [150, 120, -20]);
+  assert.deepEqual([ind.aula.anterior, ind.aula.actual], [20, 30]);
+  assert.deepEqual([ind.avalesAprobados.anterior, ind.avalesAprobados.actual], [1, 2]);
+  assert.equal(textoVariacion(ind.avalesAprobados.variacion), '+100 %');
+  assert.deepEqual(c.tipos.map(t => [t.tipo, t.anterior, t.actual]), [['Taller', 1, 2], ['Webinar', 1, 0]]);
+  assert.equal(c.meses.length, 6);
+
+  const sinCert = compararConAnterior({ actividades, referencia, desde: '2026-01-01', hasta: '2026-11-25' });
+  assert.equal(sinCert.indicadores.find(i => i.clave === 'aula').anterior, null);
+  assert.equal(textoVariacion(sinCert.indicadores.find(i => i.clave === 'aula').variacion), '—');
+});
+
+test('los datos de 2025 suman lo reportado en su informe', async () => {
+  const { INFORME_2025 } = await import('./historico2025.js');
+  const total = INFORME_2025.actividades.reduce((suma, item) => suma + item.asistentes, 0);
+  assert.equal(INFORME_2025.actividades.length, 21);
+  assert.equal(total, INFORME_2025.totalReportado);
+});

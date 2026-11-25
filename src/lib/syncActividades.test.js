@@ -67,6 +67,7 @@ test('flujo completo: publicación → planificación + expediente → aula → 
   const res = await publicarEnAula(db, pub, plan);
   assert.equal(res.ok, true);
   assert.equal(db.tablas.cpg_content[0].activities[0].meetingLink, 'https://www.aulavirtualcpg.org');
+  assert.equal(db.tablas.cpg_content[0].activities[0].type, 'Conferencia');
   assert.equal(plan.aula_event_id, '1000');
   // El aula registra participantes; luego se agrega el Zoom en la publicación
   db.tablas.cpg_content[0].activities[0].participants = '80';
@@ -123,4 +124,12 @@ test('publicar sin enlace previo también reconoce el evento existente', async (
   assert.equal(db.tablas.cpg_content[0].activities.length, 1);
   assert.equal(db.tablas.planificacion_actividades[0].aula_event_id, '777');
   assert.equal((await enlazarEventosAula(db)).enlazadas, 0);
+});
+
+test('no se publica en el aula sin tipo de actividad', async () => {
+  const db = crearDb({ caeduc_publicaciones: [], planificacion_actividades: [], caeduc_expediente_ponentes: [] });
+  const res = await publicarEnAula(db, { ...pub, actividad_tipo: '' }, null);
+  assert.equal(res.ok, false);
+  assert.match(res.error, /Tipo de actividad/);
+  assert.equal(db.rpcLog.filter(r => r.nombre === 'aula_publicar_actividad').length, 0);
 });
