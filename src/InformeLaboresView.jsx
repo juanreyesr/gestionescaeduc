@@ -3,12 +3,14 @@
 // Se eligen las fechas, el sistema trae las actividades del calendario del
 // Aula Virtual y las solicitudes de publicación que aún no están en él, y la
 // persona revisa cada una: participantes (presencial y virtual en un solo
-// número), modalidad, o si se excluye. Esas correcciones se guardan. Al final
-// se genera el informe paginado con el membrete y la firma del Coordinador.
+// número), tipo de actividad (taller, conferencia...), modalidad, o si se
+// excluye. Esas correcciones se guardan. También se resumen los avales
+// solicitados y aprobados del período. Al final se genera el informe paginado
+// con el membrete y la firma del Coordinador.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, CalendarRange, CheckCircle2, Download, Eye, Loader, RefreshCw,
+  AlertCircle, Award, CalendarRange, CheckCircle2, Download, Eye, Loader, RefreshCw,
 } from 'lucide-react';
 import { supabase } from './supabaseClient.js';
 import {
@@ -22,12 +24,16 @@ import {
   nombreArchivoLabores,
   nombreMes,
   paginarBloques,
+  resumirAvales,
   resumirPorMes,
   reunirActividades,
+  SIN_TIPO,
+  TIPOS,
 } from './lib/informeLabores.js';
 
 const TABLA_AJUSTES = 'caeduc_informe_labores_ajustes';
 const SQL = 'supabase/2026_informe_labores.sql';
+const SQL_TIPO = 'supabase/2026_informe_labores_tipo.sql';
 
 const hoyISO = () => new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -68,7 +74,12 @@ const Tarjeta = ({ valor, etiqueta, tono }) => (
   </div>
 );
 
-export default function InformeLaboresView({ publicaciones = [], membreteUrl, firmante, onPreview, onDownload }) {
+const fechaCorta = (fecha = '') => {
+  const [anio, mes, dia] = String(fecha || '').split('-');
+  return anio && mes && dia ? `${dia}/${mes}/${anio}` : '—';
+};
+
+export default function InformeLaboresView({ publicaciones = [], avales = [], membreteUrl, firmante, onPreview, onDownload }) {
   const anio = hoyISO().slice(0, 4);
   const [desde, setDesde] = useState(`${anio}-01-01`);
   const [hasta, setHasta] = useState(hoyISO());
@@ -118,21 +129,27 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
     [actividades, datosAula, desde, hasta],
   );
 
+  const resumenAvales = useMemo(() => resumirAvales({ avales, desde, hasta }), [avales, desde, hasta]);
+
   const guardarAjuste = async (clave, cambios) => {
     const siguiente = { ...(ajustes[clave] || { clave, incluir: true }), ...cambios, clave };
     setAjustes(actual => ({ ...actual, [clave]: siguiente }));
-    const { error } = await supabase.from(TABLA_AJUSTES).upsert({
+    const fila = {
       clave,
       asistentes: siguiente.asistentes === '' || siguiente.asistentes === undefined ? null : siguiente.asistentes,
       modalidad: siguiente.modalidad || null,
       incluir: siguiente.incluir !== false,
       updated_at: new Date().toISOString(),
-    });
+    };
+    // La columna `tipo` se agregó después: solo se envía cuando se usa, para que
+    // los demás ajustes se sigan guardando aunque falte ejecutar su SQL.
+    if (Object.prototype.hasOwnProperty.call(siguiente, 'tipo')) fila.tipo = siguiente.tipo || null;
+    const { error } = await supabase.from(TABLA_AJUSTES).upsert(fila);
     if (error) {
       setAviso({
         tipo: 'error',
         texto: faltaSQL(error.message)
-          ? `El cambio se usará en este informe, pero no se guardó: falta ejecutar ${SQL} en Supabase.`
+          ? `El cambio se usará en este informe, pero no se guardó: falta ejecutar ${/tipo/i.test(error.message) ? SQL_TIPO : SQL} en Supabase.`
           : `El cambio se usará en este informe, pero no se guardó: ${error.message}`,
       });
     }
@@ -141,7 +158,7 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
   const generar = async (modo) => {
     setGenerando(modo);
     try {
-      const bloques = construirBloques({ resumen, desde, hasta, fechaInforme, firmante });
+      const bloques = construirBloques({ resumen, avales: resumenAvales, desde, hasta, fechaInforme, firmante });
       const paginas = paginarEnNavegador(bloques);
       const html = componerPaginas(paginas, { membreteUrl, titulo: `Informe de labores CAEDUC ${etiquetaPeriodo(desde, hasta)}` });
       if (modo === 'vista') onPreview(html);
@@ -153,13 +170,14 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
 
   const incluidas = actividades.filter(item => item.incluir);
   const sinDato = incluidas.filter(item => item.asistentes === null).length;
+  const sinTipo = incluidas.filter(item => !item.origenTipo).length;
 
   return (
     <div className="space-y-6">
       <header>
         <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-caeduc-pink">Cierre del período</p>
         <h1 className="mt-1 flex items-center gap-2 text-2xl font-black text-slate-800"><CalendarRange className="text-caeduc-blue" size={25}/> Informe de labores a Junta Directiva</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Elige el período. Se toman las actividades del calendario del Aula Virtual y las solicitudes de publicación que todavía no están en el calendario. Revisa los participantes de cada una; lo que corrijas aquí se guarda para la próxima vez.</p>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">Elige el período. Se toman las actividades del calendario del Aula Virtual y las solicitudes de publicación que todavía no están en el calendario. Revisa los participantes y el tipo de cada una (taller, conferencia...); lo que corrijas aquí se guarda para la próxima vez. El informe también incluye los avales solicitados y aprobados en el período.</p>
       </header>
 
       <section className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -197,6 +215,48 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
             <Tarjeta valor={resumen.totales.total} etiqueta="Beneficiados" tono="border-blue-200 text-caeduc-blue"/>
           </section>
 
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-base font-black text-slate-800"><Award size={19} className="text-caeduc-blue"/> Avales del período</h2>
+              <p className="text-xs text-slate-500">Solicitudes por fecha de recepción; aprobados por fecha de aprobación.</p>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Tarjeta valor={resumenAvales.solicitados} etiqueta="Avales solicitados" tono="border-slate-200 text-caeduc-blueDark"/>
+              <Tarjeta valor={resumenAvales.aprobados} etiqueta="Avales aprobados" tono="border-emerald-200 text-emerald-700"/>
+              <Tarjeta valor={resumenAvales.rechazados} etiqueta="Rechazados" tono="border-red-200 text-red-700"/>
+              <Tarjeta valor={resumenAvales.enProceso} etiqueta="En proceso" tono="border-amber-200 text-amber-700"/>
+            </div>
+            {resumenAvales.listaAprobados.length > 0 && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm font-bold text-caeduc-blue">Ver los {resumenAvales.listaAprobados.length} avales aprobados que irán en el informe</summary>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr><th className="px-2 py-2">Aval</th><th className="px-2 py-2">Actividad</th><th className="px-2 py-2">Tipo</th><th className="px-2 py-2">Modalidad</th><th className="px-2 py-2 text-right">Aprobado</th></tr>
+                    </thead>
+                    <tbody>
+                      {resumenAvales.listaAprobados.map(aval => (
+                        <tr key={aval.id} className="border-t border-slate-100">
+                          <td className="whitespace-nowrap px-2 py-2 font-bold text-slate-700">{aval.correlativo || '—'}</td>
+                          <td className="px-2 py-2"><p className="font-bold text-slate-800">{aval.activity_name || aval.topic || 'Actividad sin nombre'}</p><p className="text-xs text-slate-500">{aval.institution || aval.applicant_name}</p></td>
+                          <td className="px-2 py-2 text-slate-600">{aval.activity_type || '—'}</td>
+                          <td className="px-2 py-2 text-slate-600">{aval.modality || '—'}</td>
+                          <td className="whitespace-nowrap px-2 py-2 text-right text-slate-600">{fechaCorta(aval.fechaAprobacion)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </section>
+
+          {sinTipo > 0 && (
+            <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <AlertCircle size={17} className="mt-0.5 shrink-0"/> {sinTipo === 1 ? 'Hay 1 actividad' : `Hay ${sinTipo} actividades`} sin tipo (taller, conferencia, diplomado...). Elígelo en la columna «Tipo»; si lo dejas así aparecerá como «—» en el informe.
+            </p>
+          )}
+
           {sinDato > 0 && (
             <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               <AlertCircle size={17} className="mt-0.5 shrink-0"/> {sinDato === 1 ? 'Hay 1 actividad' : `Hay ${sinDato} actividades`} sin número de participantes. Escríbelo en la tabla; si lo dejas vacío aparecerá como «Sin registro» y contará 0.
@@ -218,12 +278,13 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
                     <p className="px-4 py-3 text-sm text-slate-400">Sin actividades en vivo este mes.</p>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[640px] text-sm">
+                      <table className="w-full min-w-[800px] text-sm">
                         <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
                           <tr>
                             <th className="px-4 py-2">Incluir</th>
                             <th className="px-2 py-2">Fecha</th>
                             <th className="px-2 py-2">Actividad</th>
+                            <th className="px-2 py-2">Tipo</th>
                             <th className="px-2 py-2">Modalidad</th>
                             <th className="px-4 py-2 text-right">Participantes</th>
                           </tr>
@@ -241,6 +302,19 @@ export default function InformeLaboresView({ publicaciones = [], membreteUrl, fi
                                   <span className={`mr-1.5 rounded px-1.5 py-0.5 font-bold ${item.origen === 'aula' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>{item.origen === 'aula' ? 'Aula Virtual' : 'Solicitud (no está en el aula)'}</span>
                                   {item.lugar}
                                 </p>
+                              </td>
+                              <td className="px-2 py-2">
+                                <select
+                                  aria-label={`Tipo de ${item.nombre}`}
+                                  value={item.origenTipo ? item.tipo : ''}
+                                  onChange={e => guardarAjuste(item.clave, { tipo: e.target.value || null })}
+                                  className={`max-w-[11rem] rounded-lg border px-2 py-1.5 text-sm ${item.origenTipo ? 'border-slate-300' : 'border-amber-300 bg-amber-50 text-amber-800'}`}
+                                >
+                                  <option value="">{SIN_TIPO} — agregar</option>
+                                  {TIPOS.map(opcion => <option key={opcion} value={opcion}>{opcion}</option>)}
+                                  {item.origenTipo && !TIPOS.includes(item.tipo) && <option value={item.tipo}>{item.tipo}</option>}
+                                </select>
+                                {item.origenTipo === 'deducido' && <p className="mt-0.5 text-[11px] text-slate-400">Sugerido por el nombre</p>}
                               </td>
                               <td className="px-2 py-2">
                                 <select aria-label={`Modalidad de ${item.nombre}`} value={item.modalidad} onChange={e => guardarAjuste(item.clave, { modalidad: e.target.value })} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm">
